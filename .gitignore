@@ -1,0 +1,15 @@
+# Virtualenv
+venv/
+.env
+
+# Django
+db.sqlite3
+__pycache__/
+*.pyc
+
+# Secrets
+serviceAccountKey.json
+*.json
+
+# IDE
+.vscode/
