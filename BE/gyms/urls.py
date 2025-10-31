@@ -1,10 +1,14 @@
+# gyms/urls.py
+
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import EquipmentViewSet
+from .views import GymViewSet, GymMembershipViewSet
 
-# ViewSet은 일반 View와 달리 router를 사용해 URL을 자동으로 생성합니다.
 router = DefaultRouter()
-router.register(r'equipments', EquipmentViewSet)
+# 'gyms' 경로에 GymViewSet을 등록
+router.register(r'gyms', GymViewSet)
+# 'memberships' 경로에 GymMembershipViewSet을 등록
+router.register(r'memberships', GymMembershipViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),

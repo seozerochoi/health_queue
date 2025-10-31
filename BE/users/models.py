@@ -1,25 +1,34 @@
-from django.contrib.auth.models import AbstractUser
+# users/models.py
+
 from django.db import models
+from django.contrib.auth.models import User
 
-class User(AbstractUser):
-    fcm_token = models.CharField(max_length=255, null=True, blank=True) # FCM 기기 토큰
-    # 기획서에 있는 사용자 역할을 선택지로 만듭니다.
-    class Role(models.TextChoices):
-        USER = "USER", "일반 사용자"
-        TRAINER = "TRAINER", "트레이너"
-        ADMIN = "ADMIN", "관리자"
+class UserProfile(models.Model):
+    # Django의 기본 User 모델과 1:1로 연결합니다.
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
 
-    # 기본 username 대신 email을 ID로 사용하도록 설정합니다.
-    email = models.EmailField(unique=True)
-    role = models.CharField(max_length=10, choices=Role.choices, default=Role.USER)
-    manner_score = models.IntegerField(default=50) # 매너온도 점수 [cite: 70]
+    # 역할(MEMBER: 일반 회원, OPERATOR: 운영자)을 선택할 수 있게 합니다.
+    ROLE_CHOICES = [
+        ('MEMBER', 'Member'),
+        ('OPERATOR', 'Operator'),
+    ]
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='MEMBER')
     
-    # 추가적인 사용자 프로필 정보 (AI 추천에 필요)
-    # 예: birth_date, gender, weight, height, career_level 등
-    # 이 부분은 나중에 AI 기능을 만들 때 추가하겠습니다.
-
-    USERNAME_FIELD = 'email' # 로그인 ID로 email을 사용
-    REQUIRED_FIELDS = ['username'] # createsuperuser 시 필요
+    manner_score = models.IntegerField(default=100)
+    
+    # AI 추천에 사용될 선택적 정보들
+    gender = models.CharField(max_length=10, blank=True, null=True)
+    age = models.IntegerField(blank=True, null=True)
+    weight_kg = models.FloatField(blank=True, null=True)
+    height_cm = models.FloatField(blank=True, null=True)
+    fitness_goal = models.TextField(blank=True, null=True)
+    
+    EXPERIENCE_CHOICES = [
+        ('BEGINNER', 'Beginner'),
+        ('INTERMEDIATE', 'Intermediate'),
+        ('ADVANCED', 'Advanced'),
+    ]
+    experience_level = models.CharField(max_length=20, choices=EXPERIENCE_CHOICES, blank=True, null=True)
 
     def __str__(self):
-        return self.email
+        return self.user.username

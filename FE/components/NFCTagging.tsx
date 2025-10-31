@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { ArrowLeft, Wifi } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
+import React from "react";
 
 interface NFCTaggingProps {
   equipmentName: string;
@@ -9,7 +10,11 @@ interface NFCTaggingProps {
   onTaggingComplete: () => void;
 }
 
-export function NFCTagging({ equipmentName, onBack, onTaggingComplete }: NFCTaggingProps) {
+export function NFCTagging({
+  equipmentName,
+  onBack,
+  onTaggingComplete,
+}: NFCTaggingProps) {
   const [isTagging, setIsTagging] = useState(false);
   const [countdown, setCountdown] = useState(0);
 
@@ -76,30 +81,56 @@ export function NFCTagging({ equipmentName, onBack, onTaggingComplete }: NFCTagg
             <Card className="border-gray-600 bg-card w-full max-w-sm">
               <CardContent className="p-8 text-center">
                 <div className="relative mb-6">
-                  <div className={`w-24 h-24 mx-auto rounded-full border-4 ${isTagging ? 'border-blue-400 animate-pulse' : 'border-gray-600'} flex items-center justify-center`}>
-                    <Wifi className={`w-12 h-12 ${isTagging ? 'text-blue-400 animate-bounce' : 'text-gray-400'}`} />
+                  <div
+                    className={`w-24 h-24 mx-auto rounded-full border-4 ${
+                      isTagging
+                        ? "border-blue-400 animate-pulse"
+                        : "border-gray-600"
+                    } flex items-center justify-center`}
+                  >
+                    <Wifi
+                      className={`w-12 h-12 ${
+                        isTagging
+                          ? "text-blue-400 animate-bounce"
+                          : "text-gray-400"
+                      }`}
+                    />
                   </div>
-                  
+
                   {/* WiFi 신호 애니메이션 */}
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <div className={`w-32 h-32 rounded-full border-2 border-blue-400/30 animate-ping ${isTagging ? 'block' : 'hidden'}`}></div>
-                    <div className={`w-40 h-40 rounded-full border-2 border-blue-400/20 animate-ping ${isTagging ? 'block' : 'hidden'}`} style={{ animationDelay: '0.5s' }}></div>
-                    <div className={`w-48 h-48 rounded-full border-2 border-blue-400/10 animate-ping ${isTagging ? 'block' : 'hidden'}`} style={{ animationDelay: '1s' }}></div>
+                    <div
+                      className={`w-32 h-32 rounded-full border-2 border-blue-400/30 animate-ping ${
+                        isTagging ? "block" : "hidden"
+                      }`}
+                    ></div>
+                    <div
+                      className={`w-40 h-40 rounded-full border-2 border-blue-400/20 animate-ping ${
+                        isTagging ? "block" : "hidden"
+                      }`}
+                      style={{ animationDelay: "0.5s" }}
+                    ></div>
+                    <div
+                      className={`w-48 h-48 rounded-full border-2 border-blue-400/10 animate-ping ${
+                        isTagging ? "block" : "hidden"
+                      }`}
+                      style={{ animationDelay: "1s" }}
+                    ></div>
                   </div>
                 </div>
 
                 <h2 className="text-xl font-semibold text-white mb-4">
-                  {isTagging ? 'NFC 태깅 중...' : 'NFC를 태깅해주세요'}
+                  {isTagging ? "NFC 태깅 중..." : "NFC를 태깅해주세요"}
                 </h2>
-                
+
                 <p className="text-gray-300 mb-6">
-                  {isTagging 
-                    ? '기구와 연결하고 있습니다' 
-                    : '스마트폰을 기구의 NFC 태그에 가까이 대어주세요'}
+                  {isTagging
+                    ? "기구와 연결하고 있습니다"
+                    : "스마트폰을 기구의 NFC 태그에 가까이 대어주세요"}
                 </p>
 
                 {!isTagging && (
-                  <Button 
+                  <Button
                     onClick={handleManualComplete}
                     className="w-full bg-blue-500 hover:bg-blue-600 text-white"
                   >
@@ -110,8 +141,14 @@ export function NFCTagging({ equipmentName, onBack, onTaggingComplete }: NFCTagg
                 {isTagging && (
                   <div className="flex items-center justify-center space-x-2">
                     <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                    <div
+                      className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"
+                      style={{ animationDelay: "0.2s" }}
+                    ></div>
+                    <div
+                      className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"
+                      style={{ animationDelay: "0.4s" }}
+                    ></div>
                   </div>
                 )}
               </CardContent>

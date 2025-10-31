@@ -1,12 +1,16 @@
 import { Calendar, User, Zap, Dumbbell } from "lucide-react";
 import { Button } from "./ui/button";
+import React from "react";
 
 interface BottomNavigationProps {
   currentView: string;
   onNavigate: (view: string) => void;
 }
 
-export function BottomNavigation({ currentView, onNavigate }: BottomNavigationProps) {
+export function BottomNavigation({
+  currentView,
+  onNavigate,
+}: BottomNavigationProps) {
   const navItems = [
     {
       id: "equipment-list",
@@ -14,7 +18,7 @@ export function BottomNavigation({ currentView, onNavigate }: BottomNavigationPr
       icon: Dumbbell,
     },
     {
-      id: "reservation-status", 
+      id: "reservation-status",
       label: "예약현황",
       icon: Calendar,
     },
@@ -25,7 +29,7 @@ export function BottomNavigation({ currentView, onNavigate }: BottomNavigationPr
     },
     {
       id: "my-page",
-      label: "마이페이지", 
+      label: "마이페이지",
       icon: User,
     },
   ];
@@ -36,15 +40,15 @@ export function BottomNavigation({ currentView, onNavigate }: BottomNavigationPr
         {navItems.map((item) => {
           const isActive = currentView === item.id;
           const Icon = item.icon;
-          
+
           return (
             <Button
               key={item.id}
               variant="ghost"
               onClick={() => onNavigate(item.id)}
               className={`flex flex-col items-center space-y-1 h-full px-2 rounded-none ${
-                isActive 
-                  ? "text-primary bg-primary/10" 
+                isActive
+                  ? "text-primary bg-primary/10"
                   : "text-muted-foreground hover:text-foreground hover:bg-secondary"
               }`}
             >

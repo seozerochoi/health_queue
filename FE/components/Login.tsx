@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
+import React from "react";
 
 interface LoginProps {
   onBack: () => void;
@@ -11,11 +12,15 @@ interface LoginProps {
     password: string;
     name: string;
     nickname: string;
-    role: 'user' | 'admin';
+    role: "user" | "admin";
   }>;
 }
 
-export function Login({ onBack, onLoginComplete, registeredUsers }: LoginProps) {
+export function Login({
+  onBack,
+  onLoginComplete,
+  registeredUsers,
+}: LoginProps) {
   const [userId, setUserId] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -96,11 +101,17 @@ export function Login({ onBack, onLoginComplete, registeredUsers }: LoginProps) 
                 className="absolute right-3 top-3"
                 onClick={() => setShowPassword(!showPassword)}
               >
-                {showPassword ? <EyeOff className="h-5 w-5 text-gray-400" /> : <Eye className="h-5 w-5 text-gray-400" />}
+                {showPassword ? (
+                  <EyeOff className="h-5 w-5 text-gray-400" />
+                ) : (
+                  <Eye className="h-5 w-5 text-gray-400" />
+                )}
               </button>
             </div>
             {showError && (
-              <p className="text-red-500 text-sm">* 아이디 및 비밀번호를 다시 입력해주세요</p>
+              <p className="text-red-500 text-sm">
+                * 아이디 및 비밀번호를 다시 입력해주세요
+              </p>
             )}
           </div>
 
@@ -109,8 +120,8 @@ export function Login({ onBack, onLoginComplete, registeredUsers }: LoginProps) 
             onClick={handleLogin}
             disabled={!isValid}
             className={`w-full h-14 mt-8 transition-all ${
-              isValid 
-                ? "bg-white text-black hover:bg-gray-200" 
+              isValid
+                ? "bg-white text-black hover:bg-gray-200"
                 : "bg-transparent border border-gray-600 text-gray-600 cursor-not-allowed"
             }`}
           >

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
+import React from "react";
 
 interface SignUpProps {
   onBack: () => void;
@@ -26,7 +27,7 @@ export function SignUp({ onBack, onSignUpComplete }: SignUpProps) {
     // 실제로는 서버에 중복 확인 요청
     // 예시: "admin", "user", "test" 등의 아이디는 이미 사용 중이라고 가정
     const existingUsernames = ["admin", "user", "test", "hong", "kim"];
-    
+
     if (existingUsernames.includes(username.toLowerCase())) {
       setIsDuplicate(true);
       setIsUsernameChecked(false);
@@ -37,7 +38,8 @@ export function SignUp({ onBack, onSignUpComplete }: SignUpProps) {
     setShowUsernameWarning(false);
   };
 
-  const isPasswordMatch = password !== "" && confirmPassword !== "" && password === confirmPassword;
+  const isPasswordMatch =
+    password !== "" && confirmPassword !== "" && password === confirmPassword;
   const canSubmit = isUsernameChecked && isPasswordMatch;
 
   const handleSignUp = () => {
@@ -86,13 +88,19 @@ export function SignUp({ onBack, onSignUpComplete }: SignUpProps) {
               </Button>
             </div>
             {isUsernameChecked && !isDuplicate && (
-              <p className="text-blue-500 text-sm">* 사용 가능한 아이디 입니다.</p>
+              <p className="text-blue-500 text-sm">
+                * 사용 가능한 아이디 입니다.
+              </p>
             )}
             {isDuplicate && (
-              <p className="text-red-500 text-sm">* 사용 불가능한 아이디 입니다. 다시 입력해주세요.</p>
+              <p className="text-red-500 text-sm">
+                * 사용 불가능한 아이디 입니다. 다시 입력해주세요.
+              </p>
             )}
             {showUsernameWarning && !isUsernameChecked && (
-              <p className="text-red-500 text-sm">* 중복 인증을 완료해주세요.</p>
+              <p className="text-red-500 text-sm">
+                * 중복 인증을 완료해주세요.
+              </p>
             )}
           </div>
 
@@ -112,7 +120,11 @@ export function SignUp({ onBack, onSignUpComplete }: SignUpProps) {
                 className="absolute right-3 top-3"
                 onClick={() => setShowPassword(!showPassword)}
               >
-                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                {showPassword ? (
+                  <EyeOff className="h-5 w-5" />
+                ) : (
+                  <Eye className="h-5 w-5" />
+                )}
               </button>
             </div>
           </div>
@@ -133,11 +145,17 @@ export function SignUp({ onBack, onSignUpComplete }: SignUpProps) {
                 className="absolute right-3 top-3"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
               >
-                {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                {showConfirmPassword ? (
+                  <EyeOff className="h-5 w-5" />
+                ) : (
+                  <Eye className="h-5 w-5" />
+                )}
               </button>
             </div>
             {confirmPassword !== "" && !isPasswordMatch && (
-              <p className="text-red-500 text-sm">비밀번호가 일치하지 않습니다.</p>
+              <p className="text-red-500 text-sm">
+                비밀번호가 일치하지 않습니다.
+              </p>
             )}
             {isPasswordMatch && (
               <p className="text-green-500 text-sm">비밀번호가 일치합니다.</p>
@@ -148,8 +166,8 @@ export function SignUp({ onBack, onSignUpComplete }: SignUpProps) {
           <Button
             onClick={handleSignUp}
             className={`w-full h-14 mt-8 transition-all ${
-              canSubmit 
-                ? "bg-white text-black hover:bg-gray-200" 
+              canSubmit
+                ? "bg-white text-black hover:bg-gray-200"
                 : "bg-transparent border border-gray-600 text-gray-600"
             }`}
           >

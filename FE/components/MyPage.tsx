@@ -1,8 +1,17 @@
-import { ArrowLeft, User, Calendar, BarChart3, Settings, Trophy, Clock } from "lucide-react";
+import {
+  ArrowLeft,
+  User,
+  Calendar,
+  BarChart3,
+  Settings,
+  Trophy,
+  Clock,
+} from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Badge } from "./ui/badge";
+import React from "react";
 
 interface MyPageProps {
   onBack: () => void;
@@ -17,7 +26,7 @@ export function MyPage({ onBack, userName, userNickname }: MyPageProps) {
     totalWorkouts: 42,
     thisMonthWorkouts: 12,
     avgWorkoutTime: 75,
-    favoriteEquipment: "런닝머신"
+    favoriteEquipment: "런닝머신",
   };
 
   // 아바타 이니셜 - 사용자 이름의 첫 글자
@@ -28,20 +37,20 @@ export function MyPage({ onBack, userName, userNickname }: MyPageProps) {
       date: "2024-01-15",
       duration: "80분",
       equipment: "런닝머신, 벤치프레스",
-      satisfaction: 4.5
+      satisfaction: 4.5,
     },
     {
-      date: "2024-01-13", 
+      date: "2024-01-13",
       duration: "65분",
       equipment: "덤벨, 레그프레스",
-      satisfaction: 4.0
+      satisfaction: 4.0,
     },
     {
       date: "2024-01-11",
-      duration: "90분", 
+      duration: "90분",
       equipment: "런닝머신, 풀다운",
-      satisfaction: 5.0
-    }
+      satisfaction: 5.0,
+    },
   ];
 
   return (
@@ -70,12 +79,18 @@ export function MyPage({ onBack, userName, userNickname }: MyPageProps) {
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1">
-                <h2 className="text-xl font-bold text-foreground">{userStats.name}</h2>
+                <h2 className="text-xl font-bold text-foreground">
+                  {userStats.name}
+                </h2>
                 <Badge className="bg-blue-100 text-blue-700 mt-1">
                   {userStats.membershipType} 회원
                 </Badge>
               </div>
-              <Button variant="outline" size="sm" className="border-gray-600 text-gray-300 hover:bg-gray-700">
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-gray-600 text-gray-300 hover:bg-gray-700"
+              >
                 <Settings className="h-4 w-4 mr-2" />
                 설정
               </Button>
@@ -88,31 +103,39 @@ export function MyPage({ onBack, userName, userNickname }: MyPageProps) {
           <Card className="bg-card border-border">
             <CardContent className="p-4 text-center">
               <Trophy className="h-8 w-8 mx-auto mb-2 text-yellow-500" />
-              <p className="text-2xl font-bold text-foreground">{userStats.totalWorkouts}</p>
+              <p className="text-2xl font-bold text-foreground">
+                {userStats.totalWorkouts}
+              </p>
               <p className="text-sm text-muted-foreground">총 운동횟수</p>
             </CardContent>
           </Card>
-          
+
           <Card className="bg-card border-border">
             <CardContent className="p-4 text-center">
               <Calendar className="h-8 w-8 mx-auto mb-2 text-blue-500" />
-              <p className="text-2xl font-bold text-foreground">{userStats.thisMonthWorkouts}</p>
+              <p className="text-2xl font-bold text-foreground">
+                {userStats.thisMonthWorkouts}
+              </p>
               <p className="text-sm text-muted-foreground">이달 운동</p>
             </CardContent>
           </Card>
-          
+
           <Card className="bg-card border-border">
             <CardContent className="p-4 text-center">
               <Clock className="h-8 w-8 mx-auto mb-2 text-green-500" />
-              <p className="text-2xl font-bold text-foreground">{userStats.avgWorkoutTime}분</p>
+              <p className="text-2xl font-bold text-foreground">
+                {userStats.avgWorkoutTime}분
+              </p>
               <p className="text-sm text-muted-foreground">평균 운동시간</p>
             </CardContent>
           </Card>
-          
+
           <Card className="bg-card border-border">
             <CardContent className="p-4 text-center">
               <BarChart3 className="h-8 w-8 mx-auto mb-2 text-purple-500" />
-              <p className="text-lg font-bold text-foreground">{userStats.favoriteEquipment}</p>
+              <p className="text-lg font-bold text-foreground">
+                {userStats.favoriteEquipment}
+              </p>
               <p className="text-sm text-muted-foreground">선호 기구</p>
             </CardContent>
           </Card>
@@ -125,16 +148,25 @@ export function MyPage({ onBack, userName, userNickname }: MyPageProps) {
           </CardHeader>
           <CardContent className="space-y-4">
             {recentWorkouts.map((workout, index) => (
-              <div key={index} className="flex justify-between items-center p-4 bg-secondary rounded-lg">
+              <div
+                key={index}
+                className="flex justify-between items-center p-4 bg-secondary rounded-lg"
+              >
                 <div>
                   <p className="font-medium text-foreground">{workout.date}</p>
-                  <p className="text-sm text-muted-foreground">{workout.equipment}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {workout.equipment}
+                  </p>
                 </div>
                 <div className="text-right">
-                  <p className="font-medium text-foreground">{workout.duration}</p>
+                  <p className="font-medium text-foreground">
+                    {workout.duration}
+                  </p>
                   <div className="flex items-center space-x-1">
                     <span className="text-yellow-500">★</span>
-                    <span className="text-sm text-muted-foreground">{workout.satisfaction}</span>
+                    <span className="text-sm text-muted-foreground">
+                      {workout.satisfaction}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -144,13 +176,19 @@ export function MyPage({ onBack, userName, userNickname }: MyPageProps) {
 
         {/* 빠른 액션 */}
         <div className="grid grid-cols-2 gap-4">
-          <Button variant="outline" className="h-20 border-gray-600 text-gray-300 hover:bg-gray-700">
+          <Button
+            variant="outline"
+            className="h-20 border-gray-600 text-gray-300 hover:bg-gray-700"
+          >
             <div className="text-center">
               <BarChart3 className="h-6 w-6 mx-auto mb-1" />
               <span className="text-sm">운동 분석</span>
             </div>
           </Button>
-          <Button variant="outline" className="h-20 border-gray-600 text-gray-300 hover:bg-gray-700">
+          <Button
+            variant="outline"
+            className="h-20 border-gray-600 text-gray-300 hover:bg-gray-700"
+          >
             <div className="text-center">
               <Trophy className="h-6 w-6 mx-auto mb-1" />
               <span className="text-sm">운동 목표</span>

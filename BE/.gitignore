@@ -1,14 +1,4 @@
-# Python virtual environment
-venv/
+# .gitignore
 
-# Secret files
+# ... 다른 내용들 ...
 .env
-serviceAccountKey.json
-
-# Django specific files
-db.sqlite3
-__pycache__/
-*.pyc
-
-# IDE settings folder
-.vscode/

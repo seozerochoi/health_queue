@@ -5,6 +5,7 @@ import { Input } from "./ui/input";
 import { Badge } from "./ui/badge";
 import { Search, MapPin, Clock, Users, ArrowLeft, Star } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
+import React from "react";
 
 interface Gym {
   id: string;
@@ -22,10 +23,13 @@ interface SignUpGymFavoritesProps {
   onComplete: (favoriteGymIds: string[]) => void;
 }
 
-export function SignUpGymFavorites({ onBack, onComplete }: SignUpGymFavoritesProps) {
+export function SignUpGymFavorites({
+  onBack,
+  onComplete,
+}: SignUpGymFavoritesProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [favoriteGyms, setFavoriteGyms] = useState<Set<string>>(new Set());
-  
+
   const nearbyGyms: Gym[] = [
     {
       id: "1",
@@ -35,37 +39,38 @@ export function SignUpGymFavorites({ onBack, onComplete }: SignUpGymFavoritesPro
       hours: "06:00-24:00",
       currentUsers: 45,
       maxUsers: 80,
-      rating: 4.8
+      rating: 4.8,
     },
     {
-      id: "2", 
+      id: "2",
       name: "헬스 클럽 역삼점",
       address: "서울시 강남구 역삼동 456",
       distance: "0.5km",
       hours: "05:00-23:00",
       currentUsers: 32,
       maxUsers: 60,
-      rating: 4.6
+      rating: 4.6,
     },
     {
       id: "3",
       name: "스포츠 센터 선릉점",
       address: "서울시 강남구 선릉로 789",
-      distance: "0.8km", 
+      distance: "0.8km",
       hours: "06:30-22:30",
       currentUsers: 28,
       maxUsers: 70,
-      rating: 4.5
-    }
+      rating: 4.5,
+    },
   ];
 
-  const filteredGyms = nearbyGyms.filter(gym => 
-    gym.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    gym.address.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredGyms = nearbyGyms.filter(
+    (gym) =>
+      gym.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      gym.address.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const toggleFavorite = (gymId: string) => {
-    setFavoriteGyms(prev => {
+    setFavoriteGyms((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(gymId)) {
         newSet.delete(gymId);
@@ -84,7 +89,12 @@ export function SignUpGymFavorites({ onBack, onComplete }: SignUpGymFavoritesPro
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-2xl mx-auto space-y-6">
         <div className="flex items-center space-x-4">
-          <Button variant="ghost" size="icon" onClick={onBack} className="text-white hover:bg-gray-700">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onBack}
+            className="text-white hover:bg-gray-700"
+          >
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <h1 className="text-2xl text-white">헬스장 즐겨찾기</h1>
@@ -103,7 +113,10 @@ export function SignUpGymFavorites({ onBack, onComplete }: SignUpGymFavoritesPro
         <div className="space-y-4">
           <h2 className="text-lg text-white">내 주변 헬스장</h2>
           {filteredGyms.map((gym) => (
-            <Card key={gym.id} className="hover:shadow-lg transition-shadow border-gray-600 bg-card">
+            <Card
+              key={gym.id}
+              className="hover:shadow-lg transition-shadow border-gray-600 bg-card"
+            >
               <CardContent className="p-4">
                 <div className="flex space-x-4">
                   {/* 즐겨찾기 별 아이콘 */}
@@ -114,8 +127,8 @@ export function SignUpGymFavorites({ onBack, onComplete }: SignUpGymFavoritesPro
                     <Star
                       className={`h-6 w-6 transition-colors ${
                         favoriteGyms.has(gym.id)
-                          ? 'fill-yellow-500 text-yellow-500'
-                          : 'text-gray-400'
+                          ? "fill-yellow-500 text-yellow-500"
+                          : "text-gray-400"
                       }`}
                     />
                   </button>
@@ -137,11 +150,14 @@ export function SignUpGymFavorites({ onBack, onComplete }: SignUpGymFavoritesPro
                           <span>{gym.address}</span>
                         </div>
                       </div>
-                      <Badge variant="secondary" className="bg-gray-700 text-gray-200">
+                      <Badge
+                        variant="secondary"
+                        className="bg-gray-700 text-gray-200"
+                      >
                         {gym.distance}
                       </Badge>
                     </div>
-                    
+
                     <div className="flex items-center justify-between text-sm">
                       <div className="flex items-center space-x-1 text-gray-300">
                         <Clock className="h-3 w-3" />
@@ -154,7 +170,9 @@ export function SignUpGymFavorites({ onBack, onComplete }: SignUpGymFavoritesPro
                         </span>
                         <div className="ml-2">
                           <span className="text-yellow-500">★</span>
-                          <span className="text-gray-300 ml-1">{gym.rating}</span>
+                          <span className="text-gray-300 ml-1">
+                            {gym.rating}
+                          </span>
                         </div>
                       </div>
                     </div>

@@ -3,12 +3,13 @@ import { ArrowLeft, Pause, Play, Square } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Progress } from "./ui/progress";
+import React from "react";
 
 interface Equipment {
   id: string;
   name: string;
   type: string;
-  status: 'available' | 'in-use' | 'waiting';
+  status: "available" | "in-use" | "waiting";
   waitingCount?: number;
   currentUser?: string;
   timeRemaining?: number;
@@ -22,8 +23,14 @@ interface WorkoutTimerProps {
   onWorkoutComplete: () => void;
 }
 
-export function WorkoutTimer({ equipment, onBack, onWorkoutComplete }: WorkoutTimerProps) {
-  const [timeRemaining, setTimeRemaining] = useState(equipment.allocatedTime * 60); // 분을 초로 변환
+export function WorkoutTimer({
+  equipment,
+  onBack,
+  onWorkoutComplete,
+}: WorkoutTimerProps) {
+  const [timeRemaining, setTimeRemaining] = useState(
+    equipment.allocatedTime * 60
+  ); // 분을 초로 변환
   const [isRunning, setIsRunning] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
 
@@ -49,7 +56,9 @@ export function WorkoutTimer({ equipment, onBack, onWorkoutComplete }: WorkoutTi
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    return `${mins.toString().padStart(2, "0")}:${secs
+      .toString()
+      .padStart(2, "0")}`;
   };
 
   const totalTime = equipment.allocatedTime * 60;
@@ -66,7 +75,7 @@ export function WorkoutTimer({ equipment, onBack, onWorkoutComplete }: WorkoutTi
 
   const getMotivationalMessage = () => {
     const remainingPercent = (timeRemaining / totalTime) * 100;
-    
+
     if (remainingPercent > 75) {
       return "좋은 시작입니다! 🔥";
     } else if (remainingPercent > 50) {
@@ -100,7 +109,10 @@ export function WorkoutTimer({ equipment, onBack, onWorkoutComplete }: WorkoutTi
             <CardContent className="p-8 text-center">
               <div className="relative w-48 h-48 mx-auto mb-6">
                 {/* 원형 프로그레스 바 */}
-                <svg className="w-48 h-48 transform -rotate-90" viewBox="0 0 144 144">
+                <svg
+                  className="w-48 h-48 transform -rotate-90"
+                  viewBox="0 0 144 144"
+                >
                   <circle
                     cx="72"
                     cy="72"
@@ -118,12 +130,14 @@ export function WorkoutTimer({ equipment, onBack, onWorkoutComplete }: WorkoutTi
                     strokeWidth="8"
                     fill="none"
                     strokeDasharray={`${2 * Math.PI * 60}`}
-                    strokeDashoffset={`${2 * Math.PI * 60 * (1 - progress / 100)}`}
+                    strokeDashoffset={`${
+                      2 * Math.PI * 60 * (1 - progress / 100)
+                    }`}
                     className="text-blue-400 transition-all duration-1000 ease-linear"
                     strokeLinecap="round"
                   />
                 </svg>
-                
+
                 {/* 타이머 텍스트 */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <div className="text-4xl font-bold text-white mb-2">
@@ -160,8 +174,12 @@ export function WorkoutTimer({ equipment, onBack, onWorkoutComplete }: WorkoutTi
               size="lg"
               className="flex-1 border-gray-600 text-white hover:bg-gray-800"
             >
-              {isPaused ? <Play className="w-5 h-5 mr-2" /> : <Pause className="w-5 h-5 mr-2" />}
-              {isPaused ? '재개' : '일시정지'}
+              {isPaused ? (
+                <Play className="w-5 h-5 mr-2" />
+              ) : (
+                <Pause className="w-5 h-5 mr-2" />
+              )}
+              {isPaused ? "재개" : "일시정지"}
             </Button>
 
             <Button
@@ -180,7 +198,9 @@ export function WorkoutTimer({ equipment, onBack, onWorkoutComplete }: WorkoutTi
             <CardContent className="p-4">
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
-                  <p className="text-2xl font-bold text-white">{equipment.allocatedTime}</p>
+                  <p className="text-2xl font-bold text-white">
+                    {equipment.allocatedTime}
+                  </p>
                   <p className="text-sm text-gray-300">할당 시간(분)</p>
                 </div>
                 <div>
@@ -207,7 +227,11 @@ export function WorkoutTimer({ equipment, onBack, onWorkoutComplete }: WorkoutTi
                   운동 시간을 20% 연장하시겠습니까?
                 </p>
                 <Button
-                  onClick={() => setTimeRemaining(prev => prev + (equipment.allocatedTime * 60 * 0.2))}
+                  onClick={() =>
+                    setTimeRemaining(
+                      (prev) => prev + equipment.allocatedTime * 60 * 0.2
+                    )
+                  }
                   className="bg-yellow-600 hover:bg-yellow-700 text-white"
                 >
                   연장하기 (+{Math.round(equipment.allocatedTime * 0.2)}분)

@@ -3,16 +3,17 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { ArrowLeft, User, Settings } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
+import React from "react";
 
 interface SignUpUserInfoProps {
   onBack: () => void;
-  onNext: (name: string, nickname: string, role: 'user' | 'admin') => void;
+  onNext: (name: string, nickname: string, role: "user" | "admin") => void;
 }
 
 export function SignUpUserInfo({ onBack, onNext }: SignUpUserInfoProps) {
   const [name, setName] = useState("");
   const [nickname, setNickname] = useState("");
-  const [role, setRole] = useState<'user' | 'admin' | null>(null);
+  const [role, setRole] = useState<"user" | "admin" | null>(null);
   const [isNicknameChecked, setIsNicknameChecked] = useState(false);
   const [isDuplicate, setIsDuplicate] = useState(false);
   const [showNicknameWarning, setShowNicknameWarning] = useState(false);
@@ -25,7 +26,7 @@ export function SignUpUserInfo({ onBack, onNext }: SignUpUserInfoProps) {
     // 실제로는 서버에 중복 확인 요청
     // 예시: "운동왕", "헬린이", "근육맨" 등의 닉네임은 이미 사용 중이라고 가정
     const existingNicknames = ["운동왕", "헬린이", "근육맨", "철수", "영희"];
-    
+
     if (existingNicknames.includes(nickname)) {
       setIsDuplicate(true);
       setIsNicknameChecked(false);
@@ -94,15 +95,23 @@ export function SignUpUserInfo({ onBack, onNext }: SignUpUserInfoProps) {
                 중복 인증하기
               </Button>
             </div>
-            <p className="text-sm text-gray-400">* 기구 예약 시 다른 사용자에게 표시됩니다</p>
+            <p className="text-sm text-gray-400">
+              * 기구 예약 시 다른 사용자에게 표시됩니다
+            </p>
             {isNicknameChecked && !isDuplicate && (
-              <p className="text-blue-500 text-sm">* 사용 가능한 닉네임 입니다.</p>
+              <p className="text-blue-500 text-sm">
+                * 사용 가능한 닉네임 입니다.
+              </p>
             )}
             {isDuplicate && (
-              <p className="text-red-500 text-sm">* 사용 불가능한 닉네임 입니다. 다시 입력해주세요.</p>
+              <p className="text-red-500 text-sm">
+                * 사용 불가능한 닉네임 입니다. 다시 입력해주세요.
+              </p>
             )}
             {showNicknameWarning && !isNicknameChecked && (
-              <p className="text-red-500 text-sm">* 중복 인증을 완료해주세요.</p>
+              <p className="text-red-500 text-sm">
+                * 중복 인증을 완료해주세요.
+              </p>
             )}
           </div>
 
@@ -112,11 +121,11 @@ export function SignUpUserInfo({ onBack, onNext }: SignUpUserInfoProps) {
             <div className="space-y-3">
               <Card
                 className={`cursor-pointer border-2 transition-all ${
-                  role === 'user'
-                    ? 'border-blue-500 bg-blue-900/20'
-                    : 'border-gray-600 bg-card hover:border-gray-500'
+                  role === "user"
+                    ? "border-blue-500 bg-blue-900/20"
+                    : "border-gray-600 bg-card hover:border-gray-500"
                 }`}
-                onClick={() => setRole('user')}
+                onClick={() => setRole("user")}
               >
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-4">
@@ -125,7 +134,9 @@ export function SignUpUserInfo({ onBack, onNext }: SignUpUserInfoProps) {
                     </div>
                     <div>
                       <h3 className="text-white">헬스장 사용자</h3>
-                      <p className="text-sm text-gray-300">기구를 예약하고 이용합니다</p>
+                      <p className="text-sm text-gray-300">
+                        기구를 예약하고 이용합니다
+                      </p>
                     </div>
                   </div>
                 </CardContent>
@@ -133,11 +144,11 @@ export function SignUpUserInfo({ onBack, onNext }: SignUpUserInfoProps) {
 
               <Card
                 className={`cursor-pointer border-2 transition-all ${
-                  role === 'admin'
-                    ? 'border-blue-500 bg-blue-900/20'
-                    : 'border-gray-600 bg-card hover:border-gray-500'
+                  role === "admin"
+                    ? "border-blue-500 bg-blue-900/20"
+                    : "border-gray-600 bg-card hover:border-gray-500"
                 }`}
-                onClick={() => setRole('admin')}
+                onClick={() => setRole("admin")}
               >
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-4">
@@ -146,7 +157,9 @@ export function SignUpUserInfo({ onBack, onNext }: SignUpUserInfoProps) {
                     </div>
                     <div>
                       <h3 className="text-white">헬스장 운영자</h3>
-                      <p className="text-sm text-gray-300">헬스장을 관리하고 운영합니다</p>
+                      <p className="text-sm text-gray-300">
+                        헬스장을 관리하고 운영합니다
+                      </p>
                     </div>
                   </div>
                 </CardContent>

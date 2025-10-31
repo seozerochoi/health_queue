@@ -5,12 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
+import React from "react";
 
 interface Equipment {
   id: string;
   name: string;
   type: string;
-  status: 'available' | 'in-use' | 'waiting';
+  status: "available" | "in-use" | "waiting";
   waitingCount?: number;
   currentUser?: string;
   timeRemaining?: number;
@@ -25,14 +26,16 @@ interface SatisfactionSurveyProps {
   onSurveyComplete: () => void;
 }
 
-export function SatisfactionSurvey({ 
-  equipment, 
-  actualUsageTime, 
-  onBack, 
-  onSurveyComplete 
+export function SatisfactionSurvey({
+  equipment,
+  actualUsageTime,
+  onBack,
+  onSurveyComplete,
 }: SatisfactionSurveyProps) {
   const [isSatisfied, setIsSatisfied] = useState<boolean | null>(null);
-  const [suggestedTime, setSuggestedTime] = useState(equipment.allocatedTime.toString());
+  const [suggestedTime, setSuggestedTime] = useState(
+    equipment.allocatedTime.toString()
+  );
   const [rating, setRating] = useState(0);
   const [feedback, setFeedback] = useState("");
   const [showTimeInput, setShowTimeInput] = useState(false);
@@ -55,9 +58,9 @@ export function SatisfactionSurvey({
       rating,
       actualUsageTime,
       suggestedTime: parseInt(suggestedTime),
-      feedback
+      feedback,
     });
-    
+
     onSurveyComplete();
   };
 
@@ -91,11 +94,15 @@ export function SatisfactionSurvey({
             <CardContent className="text-center">
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div className="p-3 bg-gray-800 rounded-lg">
-                  <p className="text-2xl font-bold text-blue-400">{equipment.name}</p>
+                  <p className="text-2xl font-bold text-blue-400">
+                    {equipment.name}
+                  </p>
                   <p className="text-sm text-gray-300">사용 기구</p>
                 </div>
                 <div className="p-3 bg-gray-800 rounded-lg">
-                  <p className="text-2xl font-bold text-green-400">{formatTime(actualUsageTime)}</p>
+                  <p className="text-2xl font-bold text-green-400">
+                    {formatTime(actualUsageTime)}
+                  </p>
                   <p className="text-sm text-gray-300">사용 시간</p>
                 </div>
               </div>
@@ -105,7 +112,9 @@ export function SatisfactionSurvey({
           {/* 만족도 평가 */}
           <Card className="border-gray-600 bg-card">
             <CardHeader>
-              <CardTitle className="text-white">이용 시간이 만족스러우셨나요?</CardTitle>
+              <CardTitle className="text-white">
+                이용 시간이 만족스러우셨나요?
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -113,8 +122,8 @@ export function SatisfactionSurvey({
                   onClick={() => handleSatisfactionSelect(true)}
                   variant={isSatisfied === true ? "default" : "outline"}
                   className={`h-16 flex flex-col space-y-2 ${
-                    isSatisfied === true 
-                      ? "bg-green-600 hover:bg-green-700 text-white" 
+                    isSatisfied === true
+                      ? "bg-green-600 hover:bg-green-700 text-white"
                       : "border-gray-600 text-white hover:bg-gray-800"
                   }`}
                 >
@@ -126,8 +135,8 @@ export function SatisfactionSurvey({
                   onClick={() => handleSatisfactionSelect(false)}
                   variant={isSatisfied === false ? "default" : "outline"}
                   className={`h-16 flex flex-col space-y-2 ${
-                    isSatisfied === false 
-                      ? "bg-red-600 hover:bg-red-700 text-white" 
+                    isSatisfied === false
+                      ? "bg-red-600 hover:bg-red-700 text-white"
                       : "border-gray-600 text-white hover:bg-gray-800"
                   }`}
                 >
@@ -139,7 +148,10 @@ export function SatisfactionSurvey({
               {/* 추천 시간 입력 */}
               {showTimeInput && (
                 <div className="mt-4 p-4 bg-gray-800 rounded-lg">
-                  <Label htmlFor="suggested-time" className="text-white mb-2 block">
+                  <Label
+                    htmlFor="suggested-time"
+                    className="text-white mb-2 block"
+                  >
                     얼마나 할당되었으면 좋겠나요?
                   </Label>
                   <div className="flex items-center space-x-2">
@@ -165,7 +177,9 @@ export function SatisfactionSurvey({
           {/* 별점 평가 */}
           <Card className="border-gray-600 bg-card">
             <CardHeader>
-              <CardTitle className="text-white">기구 상태는 어떠셨나요?</CardTitle>
+              <CardTitle className="text-white">
+                기구 상태는 어떠셨나요?
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex justify-center space-x-2 mb-4">
@@ -179,8 +193,8 @@ export function SatisfactionSurvey({
                   >
                     <Star
                       className={`w-8 h-8 ${
-                        star <= rating 
-                          ? "text-yellow-400 fill-yellow-400" 
+                        star <= rating
+                          ? "text-yellow-400 fill-yellow-400"
                           : "text-gray-400"
                       }`}
                     />

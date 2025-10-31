@@ -2,6 +2,7 @@ import { ArrowLeft, Clock, MapPin } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
+import React from "react";
 
 interface Reservation {
   id: string;
@@ -9,7 +10,7 @@ interface Reservation {
   equipmentName: string;
   reservationTime: string;
   duration: number;
-  status: 'confirmed' | 'waiting';
+  status: "confirmed" | "waiting";
   waitingPosition?: number;
   createdAt: Date;
 }
@@ -20,13 +21,21 @@ interface ReservationStatusProps {
   reservations: Reservation[];
 }
 
-export function ReservationStatus({ onBack, gymName, reservations }: ReservationStatusProps) {
+export function ReservationStatus({
+  onBack,
+  gymName,
+  reservations,
+}: ReservationStatusProps) {
   const getStatusBadge = (status: string, position?: number | null) => {
     switch (status) {
       case "confirmed":
         return <Badge className="bg-green-100 text-green-700">예약 확정</Badge>;
       case "waiting":
-        return <Badge className="bg-yellow-100 text-yellow-700">대기중 ({position}번째)</Badge>;
+        return (
+          <Badge className="bg-yellow-100 text-yellow-700">
+            대기중 ({position}번째)
+          </Badge>
+        );
       default:
         return null;
     }
@@ -82,7 +91,10 @@ export function ReservationStatus({ onBack, gymName, reservations }: Reservation
                         </span>
                       </div>
                     </div>
-                    {getStatusBadge(reservation.status, reservation.waitingPosition)}
+                    {getStatusBadge(
+                      reservation.status,
+                      reservation.waitingPosition
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="pt-0">

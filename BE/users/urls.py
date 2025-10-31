@@ -1,12 +1,13 @@
-from django.urls import path
-from .views import UserRegistrationAPIView
-from rest_framework_simplejwt.views import (
-    TokenObtainPairView,  # 로그인(토큰 발급)
-    TokenRefreshView,     # 토큰 재발급
-)
+# users/urls.py
+
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import UserViewSet
+
+# API URL을 자동으로 생성해주는 라우터를 생성합니다.
+router = DefaultRouter()
+router.register(r'users', UserViewSet) # 'users' 경로에 UserViewSet을 등록
 
 urlpatterns = [
-    path('register/', UserRegistrationAPIView.as_view(), name='register'),
-    path('login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('login/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('', include(router.urls)),
 ]
