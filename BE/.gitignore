@@ -1,4 +1,10 @@
 # .gitignore
 
-# ... 다른 내용들 ...
+# Python
+__pycache__/
+*.pyc
+venv/
+*.sqlite3
+
+# Environment
 .env

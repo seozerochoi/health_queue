@@ -5,10 +5,16 @@ from rest_framework import viewsets, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from .models import UsageSession, Reservation, Equipment
+# workouts/views.py (이 코드로 덮어쓰세요)
+from .models import UsageSession, Reservation
 from .serializers import UsageSessionSerializer, ReservationSerializer
+from equipment.models import Equipment # Equipment 모델 import
+from users.models import UserProfile # UserProfile 모델 import
 from django.utils import timezone
 import datetime
+
+# "AI 두뇌 사용설명서"에서 예측 함수를 가져옵니다.
+from ai_model.prediction_utils import get_ai_recommendation
 
 class UsageSessionViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated] # <- 이 줄 추가
@@ -35,42 +41,88 @@ class StartSessionView(APIView):
         except Equipment.DoesNotExist:
             return Response({'error': '해당 NFC 태그를 가진 기구가 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # 1. 기구가 이미 사용 중이거나 고장 상태인지 확인
         if equipment.status != 'AVAILABLE':
             return Response({'error': '현재 사용할 수 없는 기구입니다.'}, status=status.HTTP_409_CONFLICT)
         
-        # 2. 다른 기구를 이미 사용 중인지 확인 (한 번에 하나만 사용 가능)
         if UsageSession.objects.filter(user=user, end_time__isnull=True).exists():
             return Response({'error': '이미 다른 기구를 사용 중입니다.'}, status=status.HTTP_409_CONFLICT)
 
         allocated_time = 0
         session_type = ''
 
-        # 3. 예약자인지 확인
         reservation = Reservation.objects.filter(
             equipment=equipment, 
             user=user,
-            status='NOTIFIED' # 내 차례라고 알림을 받은 예약자
+            status='NOTIFIED'
         ).first()
 
         if reservation:
-            # 예약자일 경우: 고정 시간 할당
+            # 예약자일 경우: 고정 시간 할당 (변경 없음)
             allocated_time = equipment.base_session_time_minutes
             session_type = 'BASE'
             reservation.status = 'COMPLETED'
             reservation.save()
         else:
+            # --- AI 추천 로직 시작 ---
             # 예약자가 아닐 경우 (비어있는 기구 사용)
-            # TODO: AI 모델을 호출하여 추천 시간을 받아오는 로직 추가
-            # 지금은 임시로 기본 시간에 5분을 더한 값을 할당
-            allocated_time = equipment.base_session_time_minutes + 5 
-            session_type = 'AI_RECOMMENDED'
+            try:
+                user_profile = UserProfile.objects.get(user=user)
+                
+                # 1. 최근 24시간 운동 기록을 DB에서 조회
+                now = timezone.now()
+                recent_sessions = UsageSession.objects.filter(
+                    user=user, 
+                    start_time__gte=now - datetime.timedelta(hours=24),
+                    end_time__isnull=False # 완료된 세션만
+                )
 
-        # 4. 기구 상태를 '사용 중'으로 변경
+                # 2. 상/하체 운동 비율 계산
+                total_duration_minutes = 0
+                upper_duration_minutes = 0
+                lower_duration_minutes = 0
+                
+                for session in recent_sessions:
+                    # 운동 시간을 분 단위로 계산
+                    duration = (session.end_time - session.start_time).total_seconds() / 60
+                    total_duration_minutes += duration
+                    
+                    # equipment/models.py에 추가한 body_part 필드 사용
+                    if session.equipment.body_part == 'UPPER':
+                        upper_duration_minutes += duration
+                    elif session.equipment.body_part == 'LOWER':
+                        lower_duration_minutes += duration
+                
+                # 3. 비율(ratio) 계산 (0으로 나누기 방지)
+                upper_ratio = (upper_duration_minutes / total_duration_minutes) if total_duration_minutes > 0 else 0
+                lower_ratio = (lower_duration_minutes / total_duration_minutes) if total_duration_minutes > 0 else 0
+                
+                ratios = {'upper_ratio': upper_ratio, 'lower_ratio': lower_ratio}
+                
+                print(f"DB 기반 비율 계산: 상체 {upper_ratio:.2f}, 하체 {lower_ratio:.2f}")
+
+                # 4. AI 모델 호출
+                allocated_time = get_ai_recommendation(
+                    user_profile,
+                    equipment.ai_model_id, # DB에 저장된 AI용 기구 ID 전달
+                    ratios
+                )
+                session_type = 'AI_RECOMMENDED'
+
+            except UserProfile.DoesNotExist:
+                # 유저 프로필이 없는 경우
+                allocated_time = equipment.base_session_time_minutes
+                session_type = 'BASE'
+            except Exception as e:
+                # 기타 AI 예측 오류 발생 시
+                print(f"!!! AI 추천 중 오류 발생: {e}")
+                allocated_time = equipment.base_session_time_minutes # 오류 시 기본 시간
+                session_type = 'BASE'
+            # --- AI 추천 로직 끝 ---
+
+        # 5. 새로운 운동 세션 생성
         equipment.status = 'IN_USE'
         equipment.save()
 
-        # 5. 새로운 운동 세션 생성
         session = UsageSession.objects.create(
             user=user,
             equipment=equipment,
