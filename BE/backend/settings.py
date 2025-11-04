@@ -34,6 +34,7 @@ ALLOWED_HOSTS = ['*']
 # Application definition
 # (우리가 만든 모든 앱을 여기에 등록합니다)
 INSTALLED_APPS = [
+    'corsheaders', # 수정 FE
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -56,6 +57,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware', # 수정 FE
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -81,6 +83,11 @@ TEMPLATES = [
             ],
         },
     },
+]
+
+CORS_ALLOWED_ORIGINS = [ # 수정 FE(이 단락 전체)
+    "http://localhost:5173",  # Vite 개발 환경의 프론트엔드 도메인
+    "http://43.201.88.27",    # AWS 서버 IP
 ]
 
 WSGI_APPLICATION = 'backend.wsgi.application'
