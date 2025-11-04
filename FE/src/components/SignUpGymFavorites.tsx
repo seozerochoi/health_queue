@@ -25,6 +25,33 @@ interface SignUpGymFavoritesProps {
 export function SignUpGymFavorites({ onBack, onComplete }: SignUpGymFavoritesProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedGymId, setSelectedGymId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const joinGym = async (gymId: string) => {
+    try {
+      setLoading(true);
+      const response = await fetch('http://43.201.88.27/api/gyms/my-gym/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}` // JWT 토큰이 localStorage에 저장되어 있다고 가정
+        },
+        body: JSON.stringify({ gym_id: gymId })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to join gym');
+      }
+
+      const data = await response.json();
+      onComplete([gymId]); // 가입 성공 후 다음 단계로 진행
+    } catch (error) {
+      console.error('Error joining gym:', error);
+      // TODO: 에러 처리
+    } finally {
+      setLoading(false);
+    }
+  };
   
   const nearbyGyms: Gym[] = [
     {

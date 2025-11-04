@@ -1,8 +1,18 @@
+import { useState, useEffect } from "react";
 import { ArrowLeft, User, Calendar, BarChart3, LogOut, Trophy, Clock } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Badge } from "./ui/badge";
+
+interface GymInfo {
+  id: number;
+  user: string;
+  gym_name: string;
+  gym_address: string;
+  status: string;
+  join_date: string;
+}
 
 interface MyPageProps {
   onBack: () => void;
@@ -12,6 +22,32 @@ interface MyPageProps {
 }
 
 export function MyPage({ onBack, onLogout, userName, userNickname }: MyPageProps) {
+  const [gymInfo, setGymInfo] = useState<GymInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchGymInfo = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/gyms/my-gym/', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setGymInfo(data);
+        }
+      } catch (error) {
+        console.error('Error fetching gym info:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchGymInfo();
+  }, []);
+
   const userStats = {
     name: userName || "김헬스",
     membershipType: "프리미엄",
@@ -130,6 +166,30 @@ export function MyPage({ onBack, onLogout, userName, userNickname }: MyPageProps
                 <div>
                   <p className="font-medium text-foreground">{workout.date}</p>
                   <p className="text-sm text-muted-foreground">{workout.equipment}</p>
+                  {/* 헬스장 정보 카드 */}
+                  <Card className="bg-card border-border">
+                    <CardHeader>
+                      <CardTitle className="text-xl font-semibold">내 헬스장 정보</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {loading ? (
+                        <p>Loading...</p>
+                      ) : gymInfo ? (
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-medium">{gymInfo.gym_name}</h3>
+                            <Badge variant="secondary">{gymInfo.status}</Badge>
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            <p>주소: {gymInfo.gym_address}</p>
+                            <p>가입일: {new Date(gymInfo.join_date).toLocaleDateString()}</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground">가입된 헬스장이 없습니다.</p>
+                      )}
+                    </CardContent>
+                  </Card>
                 </div>
                 <div className="text-right">
                   <p className="font-medium text-foreground">{workout.duration}</p>
