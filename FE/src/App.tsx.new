@@ -1,0 +1,130 @@
+import { useEffect, useState } from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { ThemeProvider } from "./components/theme-provider";
+import AuthInitial from "./components/AuthInitial";
+import ModeSelection from "./components/ModeSelection";
+import Login from "./components/Login";
+import AdminDashboard from "./components/AdminDashboard";
+import NFCTagging from "./components/NFCTagging";
+import EquipmentReservation from "./components/EquipmentReservation";
+import BottomNavigation from "./components/BottomNavigation";
+import GymSearch from "./components/GymSearch";
+import MyPage from "./components/MyPage";
+import EquipmentList from "./components/EquipmentList";
+import ReservationStatus from "./components/ReservationStatus";
+import AIRoutineRecommendation from "./components/AIRoutineRecommendation";
+import "./styles/App.css";
+
+interface GymInfo {
+  id: string;
+  name: string;
+  [key: string]: any;
+}
+
+function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [gymInfo, setGymInfo] = useState<GymInfo | null>(null);
+  const [showBottomNav, setShowBottomNav] = useState(true);
+  const [selectedPath, setSelectedPath] = useState("");
+
+  useEffect(() => {
+    // 페이지 로드 시 로그인 상태 확인
+    const token = localStorage.getItem("access_token");
+    if (token) {
+      // 토큰으로 사용자의 헬스장 정보 가져오기
+      fetch("http://43.201.88.27/api/gyms/my-gym/", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data) {
+            setGymInfo(data);
+          }
+        })
+        .catch(console.error);
+    }
+  }, []);
+
+  const handleLoginComplete = (userId: string, userData?: any) => {
+    setIsLoggedIn(true);
+    setUserId(userId);
+    if (userData?.gymInfo) {
+      setGymInfo(userData.gymInfo);
+    }
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setUserId(null);
+    setGymInfo(null);
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+  };
+
+  return (
+    <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+      <Router>
+        <div className="App">
+          <Routes>
+            <Route
+              path="/"
+              element={<AuthInitial onModeSelect={(path) => setSelectedPath(path)} />}
+            />
+            <Route
+              path="/mode-selection"
+              element={<ModeSelection onSelect={(path) => setSelectedPath(path)} />}
+            />
+            <Route
+              path="/login"
+              element={
+                <Login
+                  onBack={() => window.history.back()}
+                  onLoginComplete={handleLoginComplete}
+                />
+              }
+            />
+            <Route path="/admin" element={<AdminDashboard />} />
+            <Route
+              path="/nfc"
+              element={<NFCTagging userId={userId} gymInfo={gymInfo} />}
+            />
+            <Route
+              path="/equipment-reservation"
+              element={<EquipmentReservation gymInfo={gymInfo} />}
+            />
+            <Route path="/gym-search" element={<GymSearch />} />
+            <Route
+              path="/my-page"
+              element={
+                <MyPage
+                  isLoggedIn={isLoggedIn}
+                  userId={userId}
+                  gymInfo={gymInfo}
+                  onLogout={handleLogout}
+                />
+              }
+            />
+            <Route
+              path="/equipment"
+              element={<EquipmentList gymInfo={gymInfo} />}
+            />
+            <Route
+              path="/reservation-status"
+              element={<ReservationStatus userId={userId} gymInfo={gymInfo} />}
+            />
+            <Route
+              path="/ai-recommendation"
+              element={<AIRoutineRecommendation userId={userId} gymInfo={gymInfo} />}
+            />
+          </Routes>
+          {showBottomNav && isLoggedIn && <BottomNavigation />}
+        </div>
+      </Router>
+    </ThemeProvider>
+  );
+}
+
+export default App;

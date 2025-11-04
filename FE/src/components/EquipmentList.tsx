@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Textarea } from "./ui/textarea";
-import { ArrowLeft, Clock, Users, Zap, AlertTriangle, Flag } from "lucide-react";
+import { ArrowLeft, Clock, Users, Zap, AlertTriangle, Flag, Loader2 } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
 interface Equipment {
@@ -32,62 +32,173 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
   const [selectedEquipmentForReport, setSelectedEquipmentForReport] = useState<string>("");
   const [reportType, setReportType] = useState<string>("");
   const [reportDescription, setReportDescription] = useState("");
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const equipment: Equipment[] = [
-    {
-      id: "1",
-      name: "러닝머신 1",
-      type: "cardio",
-      status: "available",
-      image: "https://images.unsplash.com/photo-1716367840427-4c148eb7bf15?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0cmVhZG1pbGwlMjBneW18ZW58MXx8fHwxNzU5MjE2MjY5fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-      allocatedTime: 30
-    },
-    {
-      id: "2",
-      name: "러닝머신 2",
-      type: "cardio",
-      status: "in-use",
-      currentUser: "헬린이123",
-      timeRemaining: 15,
-      image: "https://images.unsplash.com/photo-1716367840427-4c148eb7bf15?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0cmVhZG1pbGwlMjBneW18ZW58MXx8fHwxNzU5MjE2MjY5fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-      allocatedTime: 30
-    },
-    {
-      id: "3",
-      name: "벤치프레스",
-      type: "strength",
-      status: "waiting",
-      waitingCount: 2,
-      currentUser: "근육맨88",
-      timeRemaining: 8,
-      image: "https://images.unsplash.com/photo-1652363722833-509b3aac287b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiZW5jaCUyMHByZXNzJTIwZ3ltfGVufDF8fHx8MTc1OTIxNjI3MHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-      allocatedTime: 25
-    },
-    {
-      id: "4",
-      name: "스쿼트 랙",
-      type: "strength",
-      status: "available",
-      image: "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-      allocatedTime: 25
-    },
-    {
-      id: "5", 
-      name: "덤벨",
-      type: "strength",
-      status: "available",
-      image: "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-      allocatedTime: 20
-    },
-    {
-      id: "6",
-      name: "스텝밀",
-      type: "cardio", 
-      status: "available",
-      image: "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-      allocatedTime: 30
-    }
-  ];
+  // 디버깅: gymName 확인
+  console.log("EquipmentList gymName:", gymName);
+
+  // 컴포넌트 마운트 시 운동기구 목록 가져오기
+  useEffect(() => {
+    const fetchEquipment = async () => {
+      // "헬스장 예제"인 경우 하드코딩 데이터 사용
+      if (gymName === "헬스장 예제" || !gymName) {
+        console.log("헬스장 예제: 하드코딩 데이터 사용");
+        const mockEquipment: Equipment[] = [
+          {
+            id: "1",
+            name: "러닝머신 1",
+            type: "cardio",
+            status: "available",
+            image: "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
+            allocatedTime: 30,
+          },
+          {
+            id: "2",
+            name: "러닝머신 2",
+            type: "cardio",
+            status: "in-use",
+            image: "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
+            allocatedTime: 45,
+            timeRemaining: 25,
+          },
+          {
+            id: "3",
+            name: "벤치프레스",
+            type: "strength",
+            status: "available",
+            image: "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
+            allocatedTime: 30,
+          },
+          {
+            id: "4",
+            name: "스쿼트 랙",
+            type: "strength",
+            status: "in-use",
+            image: "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
+            allocatedTime: 60,
+            timeRemaining: 40,
+          },
+          {
+            id: "5",
+            name: "덤벨",
+            type: "strength",
+            status: "available",
+            image: "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
+            allocatedTime: 20,
+          },
+          {
+            id: "6",
+            name: "스텝밀",
+            type: "cardio",
+            status: "waiting",
+            image: "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
+            allocatedTime: 30,
+            waitingCount: 2,
+          },
+        ];
+        setEquipment(mockEquipment);
+        setLoading(false);
+        return;
+      }
+
+      // 실제 헬스장인 경우 API에서 데이터 가져오기
+      console.log("실제 헬스장: API에서 운동기구 데이터 가져오기");
+      try {
+        setLoading(true);
+        const token = localStorage.getItem("access_token");
+        
+        if (!token) {
+          throw new Error("로그인이 필요합니다.");
+        }
+
+        const response = await fetch("http://43.201.88.27/api/equipment/", {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error("운동기구 목록을 불러올 수 없습니다.");
+        }
+
+        const data = await response.json();
+        console.log("Fetched equipment data:", data);
+        
+        // 운동기구 이름 또는 타입에 따라 이미지 URL 매핑하는 함수
+        const getEquipmentImage = (name: string, type: string): string => {
+          const nameLower = name.toLowerCase();
+          
+          // 이름 기반 매칭
+          if (nameLower.includes('러닝') || nameLower.includes('런닝') || nameLower.includes('treadmill')) {
+            return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
+          }
+          if (nameLower.includes('사이클') || nameLower.includes('cycle') || nameLower.includes('bike')) {
+            return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
+          }
+          if (nameLower.includes('일립티컬') || nameLower.includes('elliptical')) {
+            return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
+          }
+          if (nameLower.includes('로잉') || nameLower.includes('rowing')) {
+            return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
+          }
+          if (nameLower.includes('벤치') || nameLower.includes('bench')) {
+            return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
+          }
+          if (nameLower.includes('스쿼트') || nameLower.includes('squat')) {
+            return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
+          }
+          if (nameLower.includes('덤벨') || nameLower.includes('dumbbell')) {
+            return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
+          }
+          if (nameLower.includes('스텝') || nameLower.includes('step')) {
+            return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
+          }
+          
+          // 타입 기반 기본 이미지
+          if (type.toLowerCase() === 'cardio') {
+            return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
+          }
+          
+          // 기본 이미지
+          return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
+        };
+        
+        // 백엔드 응답을 프론트엔드 형식으로 변환
+        const formattedEquipment: Equipment[] = data.map((eq: any) => {
+          // 백엔드에서 이미지 URL 가져오기 (여러 가능한 필드명 체크)
+          const imageUrl = eq.image_url || eq.image || eq.imageUrl || eq.photo || eq.picture_url || 
+                          getEquipmentImage(eq.name, eq.type);
+          
+          return {
+            id: eq.id.toString(),
+            name: eq.name,
+            type: eq.type.toLowerCase(), // CARDIO -> cardio, STRENGTH -> strength
+            status: eq.status === 'AVAILABLE' ? 'available' : 
+                    eq.status === 'IN_USE' ? 'in-use' : 'available',
+            image: imageUrl,
+            allocatedTime: eq.base_session_time_minutes || 30,
+            waitingCount: 0, // TODO: 백엔드에서 대기열 정보 가져오기
+            currentUser: undefined, // TODO: 백엔드에서 현재 사용자 정보 가져오기
+            timeRemaining: undefined, // TODO: 백엔드에서 남은 시간 정보 가져오기
+          };
+        });
+
+        setEquipment(formattedEquipment);
+        setError(null);
+      } catch (err) {
+        console.error("운동기구 목록 로딩 실패:", err);
+        setError(err instanceof Error ? err.message : "운동기구 목록을 불러오는데 실패했습니다.");
+        setEquipment([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEquipment();
+  }, [gymName]);
 
   const categories = [
     { id: "all", name: "전체" },
@@ -142,7 +253,7 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
     <div className="min-h-screen bg-background p-4 pb-20">
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
-          <div>
+          <div className="space-y-1">
             <h1 className="text-2xl font-bold text-white">{gymName}</h1>
             <p className="text-gray-300">운동기구 현황</p>
           </div>
@@ -176,8 +287,46 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
 
 
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredEquipment.map((eq) => (
+        {loading && (
+          <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+            <Loader2 className="h-12 w-12 animate-spin mb-4" />
+            <p>운동기구 목록을 불러오는 중...</p>
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-red-900/20 border border-red-500 rounded-lg p-6 flex items-start space-x-3">
+            <AlertTriangle className="h-6 w-6 text-red-500 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-red-400 font-medium">오류가 발생했습니다</p>
+              <p className="text-red-300 text-sm mt-1">{error}</p>
+              <Button
+                onClick={() => window.location.reload()}
+                variant="outline"
+                size="sm"
+                className="mt-3 border-red-500 text-red-400 hover:bg-red-500/10"
+              >
+                새로고침
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {!loading && !error && filteredEquipment.length === 0 && (
+          <div className="bg-blue-900/20 border border-blue-500 rounded-lg p-6 text-center">
+            <AlertTriangle className="h-12 w-12 text-blue-400 mx-auto mb-3" />
+            <h3 className="text-white font-medium mb-2">등록된 운동기구가 없습니다</h3>
+            <p className="text-gray-400 text-sm">
+              {selectedCategory === "all" 
+                ? "헬스장에 등록된 운동기구가 없습니다."
+                : "해당 카테고리에 운동기구가 없습니다."}
+            </p>
+          </div>
+        )}
+
+        {!loading && !error && filteredEquipment.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredEquipment.map((eq) => (
             <Card key={eq.id} className="hover:shadow-lg transition-shadow cursor-pointer border-gray-600 bg-card"
                   onClick={() => onEquipmentSelect(eq)}>
               <CardContent className="p-4">
@@ -212,6 +361,7 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
             </Card>
           ))}
         </div>
+        )}
 
         {/* 신고하기 다이얼로그 */}
         <Dialog open={isReportModalOpen} onOpenChange={setIsReportModalOpen}>

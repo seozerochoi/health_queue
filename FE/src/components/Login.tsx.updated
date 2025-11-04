@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
@@ -22,7 +22,8 @@ export function Login({ onBack, onLoginComplete }: LoginProps) {
     setShowError(false);
 
     try {
-      const response = await fetch("http://43.201.88.27/api/login/", {
+      // 1. 로그인 요청
+      const loginResponse = await fetch("http://43.201.88.27/api/login/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -33,70 +34,49 @@ export function Login({ onBack, onLoginComplete }: LoginProps) {
         }),
       });
 
-      if (!response.ok) {
+      if (!loginResponse.ok) {
         setShowError(true);
-        setIsLoading(false);
         return;
       }
 
-      const data = await response.json();
-      console.log("로그인 성공:", data);
+      const loginData = await loginResponse.json();
+      console.log("Login response:", loginData);
 
-      // access 토큰 저장
-      if (data.access) {
-        localStorage.setItem("access_token", data.access);
+      if (loginData.access) {
+        localStorage.setItem("access_token", loginData.access);
       }
+      if (loginData.refresh) {
+        localStorage.setItem("refresh_token", loginData.refresh);
+      }
+
+      // 2. 헬스장 정보 가져오기
+      const gymResponse = await fetch("http://43.201.88.27/api/gyms/my-gym/", {
+        headers: {
+          "Authorization": `Bearer ${loginData.access}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      console.log("Gym response status:", gymResponse.status);
       
-      // refresh 토큰 저장
-      if (data.refresh) {
-        localStorage.setItem("refresh_token", data.refresh);
-      }
-
-      try {
-        // 사용자의 헬스장 정보 가져오기
-        const accessToken = data.access;
-        const gymResponse = await fetch("http://43.201.88.27/api/gyms/my-gym/", {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-        });
-
-        if (gymResponse.ok) {
-          const gymData = await gymResponse.json();
-          console.log("===== 헬스장 API 응답 =====");
-          console.log("Full gymData:", JSON.stringify(gymData, null, 2));
-          console.log("gymData.id:", gymData.id);
-          console.log("gymData.name:", gymData.name);
-          console.log("gymData.gym_name:", gymData.gym_name);
-          console.log("========================");
-          
-          // 로그인 성공과 함께 헬스장 정보 전달
-          const gymInfo = {
-            id: gymData.id,
-            name: gymData.gym_name || gymData.name,
-            address: gymData.gym_address || gymData.address,
-            status: gymData.status,
-            joinDate: gymData.join_date || gymData.joinDate
-          };
-          console.log("전달할 gymInfo:", gymInfo);
-          
-          onLoginComplete(userId, { gymInfo });
-        } else if (gymResponse.status === 404) {
-          // 헬스장 정보가 없는 경우도 로그인은 성공 처리
-          console.log("등록된 헬스장 정보가 없습니다.");
-          onLoginComplete(userId);
+      if (gymResponse.ok) {
+        const gymData = await gymResponse.json();
+        console.log("Gym data:", gymData);
+        
+        // 유효한 헬스장 데이터가 있는지 확인
+        if (gymData && Object.keys(gymData).length > 0) {
+          onLoginComplete(userId, { gymInfo: gymData });
         } else {
-          console.error("헬스장 정보 가져오기 실패");
+          console.warn("Empty gym data received");
           onLoginComplete(userId);
         }
-      } catch (error) {
-        console.error("헬스장 정보 가져오기 에러:", error);
-        // 에러가 발생해도 로그인은 성공 처리
+      } else {
+        const errorText = await gymResponse.text();
+        console.error("Failed to fetch gym info:", gymResponse.status, errorText);
         onLoginComplete(userId);
       }
-    } catch (err) {
+    } catch (error) {
+      console.error("Login error:", error);
       setShowError(true);
     } finally {
       setIsLoading(false);

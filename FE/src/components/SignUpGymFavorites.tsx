@@ -1,20 +1,20 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Badge } from "./ui/badge";
-import { Search, MapPin, Clock, Users, ArrowLeft } from "lucide-react";
+import { Search, MapPin, Clock, Users, ArrowLeft, AlertCircle } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
 interface Gym {
   id: string;
   name: string;
   address: string;
-  distance: string;
-  hours: string;
-  currentUsers: number;
-  maxUsers: number;
-  rating: number;
+  distance?: string;
+  hours?: string;
+  currentUsers?: number;
+  maxUsers?: number;
+  rating?: number;
 }
 
 interface SignUpGymFavoritesProps {
@@ -25,68 +25,49 @@ interface SignUpGymFavoritesProps {
 export function SignUpGymFavorites({ onBack, onComplete }: SignUpGymFavoritesProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedGymId, setSelectedGymId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const joinGym = async (gymId: string) => {
-    try {
-      setLoading(true);
-      const response = await fetch('http://43.201.88.27/api/gyms/my-gym/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}` // JWT 토큰이 localStorage에 저장되어 있다고 가정
-        },
-        body: JSON.stringify({ gym_id: gymId })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to join gym');
-      }
-
-      const data = await response.json();
-      onComplete([gymId]); // 가입 성공 후 다음 단계로 진행
-    } catch (error) {
-      console.error('Error joining gym:', error);
-      // TODO: 에러 처리
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [gyms, setGyms] = useState<Gym[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
-  const nearbyGyms: Gym[] = [
-    {
-      id: "1",
-      name: "피트니스 센터 강남점",
-      address: "서울시 강남구 테헤란로 123",
-      distance: "0.2km",
-      hours: "06:00-24:00",
-      currentUsers: 45,
-      maxUsers: 80,
-      rating: 4.8
-    },
-    {
-      id: "2", 
-      name: "헬스 클럽 역삼점",
-      address: "서울시 강남구 역삼동 456",
-      distance: "0.5km",
-      hours: "05:00-23:00",
-      currentUsers: 32,
-      maxUsers: 60,
-      rating: 4.6
-    },
-    {
-      id: "3",
-      name: "스포츠 센터 선릉점",
-      address: "서울시 강남구 선릉로 789",
-      distance: "0.8km", 
-      hours: "06:30-22:30",
-      currentUsers: 28,
-      maxUsers: 70,
-      rating: 4.5
-    }
-  ];
-
-  const filteredGyms = nearbyGyms.filter(gym => 
+  // 컴포넌트 마운트 시 백엔드에서 헬스장 목록 가져오기
+  useEffect(() => {
+    const fetchGyms = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch("http://43.201.88.27/api/gyms/gyms/");
+        
+        if (!response.ok) {
+          throw new Error("헬스장 목록을 불러올 수 없습니다.");
+        }
+        
+        const data = await response.json();
+        // 백엔드 응답을 프론트엔드 형식으로 변환
+        const formattedGyms = data.map((gym: any) => ({
+          id: gym.id.toString(),
+          name: gym.name,
+          address: gym.address,
+          distance: "0.0km", // 기본값
+          hours: "06:00-24:00", // 기본값
+          currentUsers: 0, // 기본값
+          maxUsers: 100, // 기본값
+          rating: 4.5, // 기본값
+        }));
+        
+        setGyms(formattedGyms);
+        setError(null);
+      } catch (err) {
+        console.error("헬스장 목록 로딩 실패:", err);
+        setError("헬스장 목록을 불러오는데 실패했습니다.");
+        setGyms([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchGyms();
+  }, []);
+  
+  const filteredGyms = gyms.filter(gym => 
     gym.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     gym.address.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -97,6 +78,7 @@ export function SignUpGymFavorites({ onBack, onComplete }: SignUpGymFavoritesPro
   };
 
   const handleComplete = () => {
+    // 선택된 헬스장 ID로 다음 단계 진행
     onComplete(selectedGymId ? [selectedGymId] : []);
   };
 
@@ -122,7 +104,46 @@ export function SignUpGymFavorites({ onBack, onComplete }: SignUpGymFavoritesPro
 
         <div className="space-y-4">
           <h2 className="text-lg text-white">내 주변 헬스장</h2>
-          {filteredGyms.map((gym) => (
+          
+          {loading && (
+            <div className="text-center py-8 text-gray-400">
+              헬스장 목록을 불러오는 중...
+            </div>
+          )}
+          
+          {error && (
+            <div className="bg-red-900/20 border border-red-500 rounded-lg p-4 flex items-start space-x-3">
+              <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-red-400 font-medium">오류가 발생했습니다</p>
+                <p className="text-red-300 text-sm mt-1">{error}</p>
+                <p className="text-gray-400 text-sm mt-2">
+                  관리자에게 헬스장 등록을 요청하거나, 나중에 다시 시도해주세요.
+                </p>
+              </div>
+            </div>
+          )}
+          
+          {!loading && !error && filteredGyms.length === 0 && (
+            <div className="bg-blue-900/20 border border-blue-500 rounded-lg p-6 text-center">
+              <AlertCircle className="h-12 w-12 text-blue-400 mx-auto mb-3" />
+              <h3 className="text-white font-medium mb-2">등록된 헬스장이 없습니다</h3>
+              <p className="text-gray-400 text-sm mb-4">
+                {searchQuery 
+                  ? "검색 결과가 없습니다. 다른 검색어를 시도해보세요."
+                  : "관리자에게 헬스장 등록을 요청해주세요."}
+              </p>
+              <Button
+                onClick={onBack}
+                variant="outline"
+                className="border-blue-500 text-blue-400 hover:bg-blue-500/10"
+              >
+                이전 단계로 돌아가기
+              </Button>
+            </div>
+          )}
+          
+          {!loading && !error && filteredGyms.map((gym) => (
             <Card
               key={gym.id}
               className={`hover:shadow-lg transition-shadow border-gray-600 bg-card ${
@@ -150,23 +171,23 @@ export function SignUpGymFavorites({ onBack, onComplete }: SignUpGymFavoritesPro
                         </div>
                       </div>
                       <Badge variant="secondary" className="bg-gray-700 text-gray-200">
-                        {gym.distance}
+                        {gym.distance || "0.0km"}
                       </Badge>
                     </div>
                     
                     <div className="flex items-center justify-between text-sm">
                       <div className="flex items-center space-x-1 text-gray-300">
                         <Clock className="h-3 w-3" />
-                        <span>{gym.hours}</span>
+                        <span>{gym.hours || "06:00-24:00"}</span>
                       </div>
                       <div className="flex items-center space-x-1">
                         <Users className="h-3 w-3 text-gray-300" />
                         <span className="text-gray-300">
-                          {gym.currentUsers}/{gym.maxUsers}
+                          {gym.currentUsers || 0}/{gym.maxUsers || 100}
                         </span>
                         <div className="ml-2">
                           <span className="text-yellow-500">★</span>
-                          <span className="text-gray-300 ml-1">{gym.rating}</span>
+                          <span className="text-gray-300 ml-1">{gym.rating || 4.5}</span>
                         </div>
                       </div>
                     </div>
@@ -181,7 +202,7 @@ export function SignUpGymFavorites({ onBack, onComplete }: SignUpGymFavoritesPro
         <Button
           onClick={handleComplete}
           disabled={!selectedGymId}
-          className={`w-full h-14 ${selectedGymId ? 'bg-white text-black hover:bg-gray-200' : 'bg-gray-700 text-gray-400 cursor-not-allowed'}`}
+          className="w-full h-14 mt-8"
         >
           회원 가입 완료
         </Button>

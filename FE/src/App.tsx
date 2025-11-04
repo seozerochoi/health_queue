@@ -2,6 +2,9 @@ import { useState } from "react";
 import { AuthInitial } from "./components/AuthInitial";
 import SignUp from "./components/SignUp";
 import { SignUpUserInfo } from "./components/SignUpUserInfo";
+import { Gym } from "./types/gym";
+import { Equipment } from "./types/equipment";
+import axios from "axios";
 import { SignUpGymFavorites } from "./components/SignUpGymFavorites";
 import { SignUpComplete } from "./components/SignUpComplete";
 import { Login } from "./components/Login";
@@ -18,29 +21,7 @@ import { ReservationStatus } from "./components/ReservationStatus";
 import { MyPage } from "./components/MyPage";
 import { BottomNavigation } from "./components/BottomNavigation";
 
-interface Gym {
-  id: string;
-  name: string;
-  address: string;
-  distance: string;
-  hours: string;
-  currentUsers: number;
-  maxUsers: number;
-  rating: number;
-}
-
-interface Equipment {
-  id: string;
-  name: string;
-  type: string;
-  status: "available" | "in-use" | "waiting";
-  waitingCount?: number;
-  currentUser?: string;
-  timeRemaining?: number;
-  image: string;
-  allocatedTime: number;
-}
-
+// Types moved to separate files
 interface Reservation {
   id: string;
   equipmentId: string;
@@ -59,6 +40,16 @@ interface RegisteredUser {
   nickname: string;
   role: "user" | "admin";
 }
+
+// Login 컴포넌트에서 전달하는 결과 타입
+type LoginResult = {
+  userId: string;
+  access?: string;
+  refresh?: string;
+  name?: string;
+  nickname?: string;
+  role?: "user" | "admin";
+};
 
 type AppView =
   | "auth-initial"
@@ -93,65 +84,10 @@ export default function App() {
   const [userRole, setUserRole] = useState<"user" | "admin" | null>(null);
   const [userNickname, setUserNickname] = useState<string>("");
   const [userName, setUserName] = useState<string>("");
+  const [userGym, setUserGym] = useState<string>("");
   const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>([
-    {
-      userId: "user1",
-      password: "1234",
-      name: "홍길동",
-      nickname: "운동왕",
-      role: "user",
-    },
-    {
-      userId: "admin1",
-      password: "admin",
-      name: "김관리",
-      nickname: "헬스지기",
-      role: "admin",
-    },
-    {
-      userId: "test",
-      password: "test",
-      name: "테스트",
-      nickname: "테스터",
-      role: "user",
-    },
-  ]);
   const [tempUserId, setTempUserId] = useState<string>("");
   const [tempPassword, setTempPassword] = useState<string>("");
-
-  const mockGyms: Gym[] = [
-    {
-      id: "1",
-      name: "피트니스 센터 강남점",
-      address: "서울시 강남구 테헤란로 123",
-      distance: "0.2km",
-      hours: "06:00-24:00",
-      currentUsers: 45,
-      maxUsers: 80,
-      rating: 4.8,
-    },
-    {
-      id: "2",
-      name: "헬스 클럽 역삼점",
-      address: "서울시 강남구 역삼동 456",
-      distance: "0.5km",
-      hours: "05:00-23:00",
-      currentUsers: 32,
-      maxUsers: 60,
-      rating: 4.6,
-    },
-    {
-      id: "3",
-      name: "스포츠 센터 선릉점",
-      address: "서울시 강남구 선릉로 789",
-      distance: "0.8km",
-      hours: "06:30-22:30",
-      currentUsers: 28,
-      maxUsers: 70,
-      rating: 4.5,
-    },
-  ];
 
   const handleAuthNavigate = (view: "signup" | "login") => {
     setCurrentView(view);
@@ -169,78 +105,197 @@ export default function App() {
     setUserNickname(name);
     setUserName(name);
 
-    // 회원가입 데이터를 registeredUsers에 추가
-    const newUser: RegisteredUser = {
-      userId: tempUserId,
-      password: tempPassword,
-      name: name,
-      nickname: name,
-      role: role,
-    };
-    setRegisteredUsers((prev) => [...prev, newUser]);
+    // NOTE: signup components are responsible for calling the backend.
+    // App should NOT keep a local registeredUsers list. We keep the local
+    // name/role state for routing after signup completes.
 
     setCurrentView("signup-gym-favorites");
   };
 
-  const handleSignUpStep3Complete = (gymIds: string[]) => {
+  const handleSignUpStep3Complete = async (gymIds: string[]) => {
     setFavoriteGymIds(gymIds);
+    
+    // 선택한 헬스장을 백엔드에 저장
+    if (gymIds.length > 0 && tempUserId && tempPassword) {
+      try {
+        console.log("=== 회원가입 완료: 헬스장 저장 시작 ===");
+        
+        // 1. 먼저 로그인하여 토큰 받기
+        const loginResponse = await fetch("http://43.201.88.27/api/login/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            username: tempUserId,
+            password: tempPassword,
+          }),
+        });
+
+        if (!loginResponse.ok) {
+          console.error("자동 로그인 실패");
+          setCurrentView("signup-complete");
+          return;
+        }
+
+        const loginData = await loginResponse.json();
+        const token = loginData.access;
+        
+        // 토큰 저장
+        localStorage.setItem("access_token", token);
+        if (loginData.refresh) {
+          localStorage.setItem("refresh_token", loginData.refresh);
+        }
+        
+        console.log("자동 로그인 성공, 토큰:", token);
+        
+        // 2. 백엔드에 헬스장 멤버십 생성
+        const gymId = gymIds[0];
+        
+        console.log("선택한 헬스장 ID:", gymId);
+        
+        const membershipResponse = await fetch("http://43.201.88.27/api/gyms/memberships/", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            gym: parseInt(gymId),
+          }),
+        });
+        
+        if (membershipResponse.ok) {
+          console.log("✅ 헬스장 멤버십 저장 성공!");
+        } else {
+          const errorText = await membershipResponse.text();
+          console.error("❌ 헬스장 멤버십 저장 실패:", membershipResponse.status, errorText);
+        }
+      } catch (error) {
+        console.error("헬스장 저장 중 에러:", error);
+      }
+    }
+    
     setCurrentView("signup-complete");
   };
 
-  const handleSignUpComplete = () => {
-    // 즐겨찾기가 1개인 경우
-    if (favoriteGymIds.length === 1) {
-      const gym = mockGyms.find((g) => g.id === favoriteGymIds[0]);
-      if (gym) {
-        setSelectedGym(gym);
-        // 운영자 모드면 운영자 대시보드로, 사용자 모드면 기구 목록으로
-        if (userRole === "admin") {
-          setCurrentView("admin-dashboard");
-        } else {
-          setCurrentView("equipment-list");
+  const handleSignUpComplete = async () => {
+    // 회원가입 후 API를 통해 헬스장 정보 가져오기
+    try {
+      const token = localStorage.getItem("access_token");
+      if (token) {
+        const res = await fetch("http://43.201.88.27/api/gyms/my-gym/", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (res.ok) {
+          const gymData = await res.json();
+          const gymInfo = {
+            id: gymData.id,
+            user: tempUserId,
+            gym_name: gymData.name || "",
+            gym_address: gymData.address || "",
+            status: "운영중",
+            join_date: new Date().toISOString().split('T')[0],
+          };
+          setSelectedGym(gymInfo);
+          console.log("회원가입 후 헬스장 정보 설정:", gymInfo);
         }
       }
+    } catch (error) {
+      console.error("회원가입 후 헬스장 정보 가져오기 실패:", error);
     }
-    // 즐겨찾기가 2개 이상인 경우
-    else if (favoriteGymIds.length > 1) {
-      // If multiple gyms were selected (shouldn't happen with single-selection UI), default to first gym and go to equipment list
-      const first = mockGyms[0];
-      setSelectedGym(first);
-      setCurrentView("equipment-list");
-    }
-    // 즐겨찾기가 없는 경우
-    else {
-      // No gym selected - default to first gym and go to equipment list
-      const first = mockGyms[0];
-      setSelectedGym(first);
-      setCurrentView("equipment-list");
-    }
-  };
 
-  const handleLoginComplete = (userId: string) => {
-    // user 구조체 초기화 및 사용자 정보 설정
-    const user: RegisteredUser = {
-      userId: userId,
-      name: userId, // 닉네임은 기본적으로 userId로 설정
-      nickname: userId,
-      role: "user", // 기본 역할을 "user"로 설정
-      password: "",
-    };
-
-    setUserName(user.name);
-    setUserNickname(user.nickname);
-    setUserRole(user.role);
-
-    // 사용자 역할에 따라 헬스장 검색 또는 관리자 대시보드로 이동
-    // 기본적으로 첫 번째 헬스장을 선택하여 바로 기구 목록으로 이동
-    const firstGym = mockGyms[0];
-    setSelectedGym(firstGym);
-
-    if (user.role === "admin") {
+    // 역할에 따라 화면 이동
+    if (userRole === "admin") {
       setCurrentView("admin-dashboard");
     } else {
       setCurrentView("equipment-list");
     }
+  };
+
+  const handleLoginComplete = async (userId: string, additionalData?: any) => {
+    console.log("============ App.handleLoginComplete ============");
+    console.log("로그인 ID:", userId);
+    console.log("추가 데이터:", additionalData);
+
+    // 사용자 정보 설정
+    setUserName(userId);
+    setUserNickname(userId);
+    setUserRole("user");
+
+    // 헬스장 정보가 있으면 상태 업데이트
+    if (additionalData?.gymInfo && additionalData.gymInfo.name) {
+      const gymInfo = {
+        id: additionalData.gymInfo.id,
+        user: userId,
+        gym_name: additionalData.gymInfo.name,
+        gym_address: additionalData.gymInfo.address,
+        status: additionalData.gymInfo.status,
+        join_date: additionalData.gymInfo.joinDate,
+      };
+      setSelectedGym(gymInfo);
+      console.log("헬스장 정보 설정 (from login payload):", gymInfo);
+    } else {
+      // 추가 데이터에 gymInfo가 없으면 저장된 토큰으로 직접 API 호출 시도
+      try {
+        const token = localStorage.getItem("access_token");
+        if (token) {
+          console.log("No gym in login payload. Fetching /api/gyms/my-gym/ with token.");
+          const res = await fetch("http://43.201.88.27/api/gyms/my-gym/", {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          });
+
+          if (res.ok) {
+            const gymData = await res.json();
+            console.log("Fetched gym data:", gymData);
+            if (gymData) {
+              const gymInfo = {
+                id: gymData.id,
+                user: userId,
+                gym_name: gymData.gym_name || gymData.name || "",
+                gym_address: gymData.gym_address || gymData.address || "",
+                status: gymData.status || "",
+                join_date: gymData.join_date || gymData.joinDate || "",
+              };
+              setSelectedGym(gymInfo);
+              console.log("헬스장 정보 설정 (from API):", gymInfo);
+            }
+          } else if (res.status === 404) {
+            console.warn("User has no gym associated (API returned 404).");
+            // 404인 경우 기본 헬스장 설정 (첫 번째 mock gym)
+            const defaultGym = {
+              id: 1,
+              user: userId,
+              gym_name: "헬스장 예제",
+              gym_address: "서울시 강남구 테헤란로 123",
+              status: "운영중",
+              join_date: new Date().toISOString().split('T')[0],
+            };
+            setSelectedGym(defaultGym);
+            console.log("기본 헬스장 설정 (404 fallback):", defaultGym);
+          } else {
+            const text = await res.text();
+            console.error("Failed fetching gym API:", res.status, text);
+          }
+        } else {
+          console.warn("No access token in localStorage to fetch gym info.");
+        }
+      } catch (err) {
+        console.error("Error fetching gym in handleLoginComplete:", err);
+      }
+    }
+
+    // 화면 전환
+    console.log("→ equipment-list로 이동");
+    setCurrentView("equipment-list");
+    console.log("=================================================");
   };
 
   const handleLogout = () => {
@@ -400,6 +455,8 @@ export default function App() {
           <SignUpUserInfo
             onBack={navigateBack}
             onNext={handleSignUpStep2Complete}
+
+
           />
         );
 
@@ -432,9 +489,10 @@ export default function App() {
         );
 
       case "equipment-list":
+        console.log("Rendering EquipmentList with selectedGym:", selectedGym);
         return (
           <EquipmentList
-            gymName={selectedGym?.name || ""}
+            gymName={selectedGym?.gym_name || ""}
             onBack={navigateBack}
             onEquipmentSelect={handleEquipmentSelect}
           />
@@ -460,7 +518,7 @@ export default function App() {
 
       case "admin-dashboard":
         return (
-          <AdminDashboard onBack={navigateBack} gymName={selectedGym?.name} />
+          <AdminDashboard onBack={navigateBack} gymName={selectedGym?.gym_name} />
         );
 
       case "nfc-tagging":
@@ -497,18 +555,20 @@ export default function App() {
         return (
           <ReservationStatus
             onBack={navigateBack}
-            gymName={selectedGym?.name || ""}
+            gymName={selectedGym?.gym_name || ""}
             reservations={reservations}
           />
         );
 
       case "my-page":
+        console.log("Rendering MyPage with selectedGym:", selectedGym);
         return (
           <MyPage
             onBack={navigateBack}
             onLogout={handleLogout}
             userName={userName}
             userNickname={userNickname}
+            userGym={selectedGym?.gym_name}
           />
         );
 

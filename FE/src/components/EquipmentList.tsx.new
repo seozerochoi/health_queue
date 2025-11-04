@@ -1,0 +1,92 @@
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
+
+interface Equipment {
+  id: number;
+  name: string;
+  available: boolean;
+  is_in_use: boolean;
+  expected_end_time: string | null;
+}
+
+interface GymInfo {
+  id: string;
+  name: string;
+  [key: string]: any;
+}
+
+interface EquipmentListProps {
+  gymInfo: GymInfo | null;
+}
+
+export default function EquipmentList({ gymInfo }: EquipmentListProps) {
+  const navigate = useNavigate();
+  const [equipmentList, setEquipmentList] = useState<Equipment[]>([]);
+
+  useEffect(() => {
+    // 토큰 확인
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    // 기구 목록 가져오기
+    fetch("http://43.201.88.27/api/equipment/equipment-list/", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        setEquipmentList(data);
+      })
+      .catch(console.error);
+  }, [navigate]);
+
+  const getStatusStyle = (equipment: Equipment) => {
+    if (equipment.is_in_use) {
+      return "bg-red-500";
+    } else if (!equipment.available) {
+      return "bg-gray-500";
+    }
+    return "bg-green-500";
+  };
+
+  return (
+    <div className="min-h-screen bg-background p-4">
+      <div className="max-w-md mx-auto">
+        <div className="flex items-center mb-6">
+          <button onClick={() => navigate(-1)} className="text-white">
+            <ArrowLeft className="h-6 w-6" />
+          </button>
+          <h1 className="text-2xl text-white ml-4">
+            {gymInfo?.name || "운동 기구 목록"}
+          </h1>
+        </div>
+
+        <div className="space-y-4">
+          {equipmentList.map((equipment) => (
+            <div
+              key={equipment.id}
+              className="bg-card p-4 rounded-lg flex items-center justify-between"
+            >
+              <div className="flex items-center space-x-4">
+                <div
+                  className={`w-3 h-3 rounded-full ${getStatusStyle(equipment)}`}
+                />
+                <span className="text-white">{equipment.name}</span>
+              </div>
+              {equipment.expected_end_time && (
+                <span className="text-sm text-gray-400">
+                  종료 예정: {equipment.expected_end_time}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -16,27 +16,22 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-
-# 1. 기본 TokenObtainPairView 대신, 우리가 만든 MyTokenObtainPairView를 임포트합니다.
+# Simple JWT가 제공하는 View들을 import 합니다.
 from rest_framework_simplejwt.views import TokenRefreshView
-from users.views import RegisterView, MyTokenObtainPairView  # <--- 여기를 수정!
-from users.views import UserProfileView # 프로필 뷰도 임포트 (이전 단계에서 추가함)
+# 우리가 만든 RegisterView, get_current_user, MyTokenObtainPairView를 import 합니다.
+from users.views import RegisterView, get_current_user, MyTokenObtainPairView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
 
-    # --- 회원가입, 로그인, 프로필 API ---
+    # 회원가입, 로그인, 토큰 갱신 API
     path('api/register/', RegisterView.as_view(), name='register'),
-    
-    # 2. /api/login/ 경로가 우리 뷰를 사용하도록 수정합니다.
-    path('api/login/', MyTokenObtainPairView.as_view(), name='token_obtain_pair'), # <--- 여기를 수정!
-    
+    path('api/login/', MyTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path('api/profile/', UserProfileView.as_view(), name='user-profile'),
-
-
-    # --- 기존에 만들었던 다른 앱들의 URL들 ---
-    path('api/', include('users.urls')),
+    path('api/user/me/', get_current_user, name='current_user'),
+    
+    # 기존에 만들었던 다른 앱들의 URL들
+    path('api/', include('users.urls')), # users.urls를 'api/' 하위로 변경
     path('api/', include('gyms.urls')),
     path('api/', include('equipment.urls')),
     path('api/', include('workouts.urls')),

@@ -1,0 +1,644 @@
+import React, { useState, useEffect } from "react";import { useState, useEffect } from "react";
+
+import { Card } from "./ui/card";import { Card, CardContent } from "./ui/card";
+
+import { Badge } from "./ui/badge";import { Button } from "./ui/button";
+
+import { Button } from "./ui/button";import { Badge } from "./ui/badge";
+
+import {import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+
+  Dialog,import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+
+  DialogContent,import { Textarea } from "./ui/textarea";
+
+  DialogHeader,import { ArrowLeft, Clock, Users, Zap, AlertTriangle, Flag, Loader2 } from "lucide-react";
+
+  DialogTitle,import { ImageWithFallback } from "./figma/ImageWithFallback";
+
+  DialogFooter,
+
+} from "./ui/dialog";interface Equipment {
+
+import { Label } from "./ui/label";  id: string;
+
+import { RadioGroup, RadioGroupItem } from "./ui/radio-group";  name: string;
+
+import { Textarea } from "./ui/textarea";  type: string;
+
+import { Flag, Loader2, Info, AlertCircle } from "lucide-react";  status: 'available' | 'in-use' | 'waiting';
+
+  waitingCount?: number;
+
+interface Equipment {  currentUser?: string;
+
+  name: string;  timeRemaining?: number;
+
+  type: "cardio" | "strength";  image: string;
+
+  status: "available" | "in-use" | "waiting";  allocatedTime: number;
+
+  allocatedTime?: number;}
+
+}
+
+interface EquipmentListProps {
+
+const EquipmentList: React.FC<{ gymName?: string }> = ({ gymName }) => {  gymName: string;
+
+  // 하드코딩된 예제 운동기구 데이터 (헬스장 예제용)  onBack: () => void;
+
+  const mockEquipment: Equipment[] = [  onEquipmentSelect: (equipment: Equipment) => void;
+
+    { name: "러닝머신 1", type: "cardio", status: "available", allocatedTime: 30 },}
+
+    { name: "러닝머신 2", type: "cardio", status: "in-use", allocatedTime: 45 },
+
+    { name: "벤치프레스", type: "strength", status: "available", allocatedTime: 30 },export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentListProps) {
+
+    { name: "스쿼트 랙", type: "strength", status: "in-use", allocatedTime: 60 },  const [selectedCategory, setSelectedCategory] = useState("all");
+
+    { name: "덤벨", type: "strength", status: "available", allocatedTime: 20 },  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+
+    { name: "스텝밀", type: "cardio", status: "waiting", allocatedTime: 30 },  const [selectedEquipmentForReport, setSelectedEquipmentForReport] = useState<string>("");
+
+  ];  const [reportType, setReportType] = useState<string>("");
+
+  const [reportDescription, setReportDescription] = useState("");
+
+  const [equipment, setEquipment] = useState<Equipment[]>([]);  const [equipment, setEquipment] = useState<Equipment[]>([]);
+
+  const [loading, setLoading] = useState(true);  const [loading, setLoading] = useState(true);
+
+  const [error, setError] = useState<string | null>(null);  const [error, setError] = useState<string | null>(null);
+
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);  // 디버깅: gymName 확인
+
+  const [selectedEquipment, setSelectedEquipment] = useState<Equipment | null>(null);  console.log("EquipmentList gymName:", gymName);
+
+  const [reportType, setReportType] = useState<string>("equipment");
+
+  const [reportContent, setReportContent] = useState("");  // 컴포넌트 마운트 시 백엔드에서 운동기구 목록 가져오기
+
+  useEffect(() => {
+
+  // 운동기구 데이터 가져오기    const fetchEquipment = async () => {
+
+  useEffect(() => {      try {
+
+    const fetchEquipment = async () => {        setLoading(true);
+
+      // "헬스장 예제" 또는 gymName이 없으면 하드코딩 데이터 사용        const token = localStorage.getItem("access_token");
+
+      if (gymName === "헬스장 예제" || !gymName) {        
+
+        console.log("헬스장 예제: 하드코딩 데이터 사용");        if (!token) {
+
+        setEquipment(mockEquipment);          throw new Error("로그인이 필요합니다.");
+
+        setLoading(false);        }
+
+        return;
+
+      }        const response = await fetch("http://43.201.88.27/api/equipment/equipment/", {
+
+          headers: {
+
+      // 실제 헬스장인 경우 API에서 데이터 가져오기            "Authorization": `Bearer ${token}`,
+
+      console.log("실제 헬스장: API에서 운동기구 데이터 가져오기");            "Content-Type": "application/json",
+
+      try {          },
+
+        const token = localStorage.getItem("access_token");        });
+
+        if (!token) {
+
+          console.error("액세스 토큰이 없습니다");        if (!response.ok) {
+
+          setError("로그인이 필요합니다");          throw new Error("운동기구 목록을 불러올 수 없습니다.");
+
+          // 토큰이 없어도 예제 데이터 표시        }
+
+          setEquipment(mockEquipment);
+
+          setLoading(false);        const data = await response.json();
+
+          return;        console.log("Fetched equipment data:", data);
+
+        }        
+
+        // 백엔드 응답을 프론트엔드 형식으로 변환
+
+        const response = await fetch("http://43.201.88.27/api/equipment/equipment/", {        const formattedEquipment: Equipment[] = data.map((eq: any) => ({
+
+          headers: {          id: eq.id.toString(),
+
+            Authorization: `Bearer ${token}`,          name: eq.name,
+
+          },          type: eq.type.toLowerCase(), // CARDIO -> cardio, STRENGTH -> strength
+
+        });          status: eq.status === 'AVAILABLE' ? 'available' : 
+
+                  eq.status === 'IN_USE' ? 'in-use' : 'available',
+
+        if (!response.ok) {          image: "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
+
+          throw new Error(`API 요청 실패: ${response.status}`);          allocatedTime: eq.base_session_time_minutes || 30,
+
+        }          waitingCount: 0, // TODO: 백엔드에서 대기열 정보 가져오기
+
+          currentUser: undefined, // TODO: 백엔드에서 현재 사용자 정보 가져오기
+
+        const data = await response.json();          timeRemaining: undefined, // TODO: 백엔드에서 남은 시간 정보 가져오기
+
+        console.log("API 응답:", data);        }));
+
+
+
+        // API 응답을 프론트엔드 형식으로 변환        setEquipment(formattedEquipment);
+
+        const transformedEquipment: Equipment[] = data.map((item: any) => ({        setError(null);
+
+          name: item.name,      } catch (err) {
+
+          type: item.type.toLowerCase() as "cardio" | "strength",        console.error("운동기구 목록 로딩 실패:", err);
+
+          status: (item.status === "AVAILABLE"        setError(err instanceof Error ? err.message : "운동기구 목록을 불러오는데 실패했습니다.");
+
+            ? "available"        setEquipment([]);
+
+            : item.status === "IN_USE"      } finally {
+
+            ? "in-use"        setLoading(false);
+
+            : "waiting") as "available" | "in-use" | "waiting",      }
+
+          allocatedTime: item.base_session_time_minutes,    };
+
+        }));
+
+    fetchEquipment();
+
+        setEquipment(transformedEquipment);  }, []);
+
+        setError(null);
+
+      } catch (err) {  const categories = [
+
+        console.error("운동기구 데이터 가져오기 실패:", err);    { id: "all", name: "전체" },
+
+        setError("운동기구 데이터를 가져오는데 실패했습니다");    { id: "cardio", name: "유산소" },
+
+        // API 실패시에도 예제 데이터 표시    { id: "strength", name: "근력" },
+
+        setEquipment(mockEquipment);  ];
+
+      } finally {
+
+        setLoading(false);  const reportTypes = [
+
+      }    { value: "malfunction", label: "기기 고장" },
+
+    };    { value: "violation", label: "사용자 규정 위반" },
+
+    { value: "other", label: "기타" },
+
+    fetchEquipment();  ];
+
+  }, [gymName]);
+
+  const handleReportSubmit = () => {
+
+  const categories = [    // 실제 앱에서는 여기서 서버로 신고 정보를 전송
+
+    { id: "all", label: "전체" },    console.log("신고 접수:", {
+
+    { id: "cardio", label: "유산소" },      equipmentId: selectedEquipmentForReport,
+
+    { id: "strength", label: "근력" },      type: reportType,
+
+  ];      description: reportDescription,
+
+    });
+
+  const reportTypes = [    
+
+    { id: "equipment", label: "기기 고장 신고" },    // 폼 초기화
+
+    { id: "user", label: "사용자 신고" },    setSelectedEquipmentForReport("");
+
+  ];    setReportType("");
+
+    setReportDescription("");
+
+  const handleReport = (equipmentItem: Equipment) => {    setIsReportModalOpen(false);
+
+    setSelectedEquipment(equipmentItem);    
+
+    setIsReportModalOpen(true);    // 사용자에게 알림 (실제 앱에서는 토스트나 알림 사용)
+
+  };    alert("신고가 정상적으로 접수되었습니다. 빠른 시일 내에 처리하겠습니다.");
+
+  };
+
+  const submitReport = () => {
+
+    console.log("Report submitted:", {  const filteredEquipment = selectedCategory === "all" 
+
+      equipment: selectedEquipment,    ? equipment 
+
+      type: reportType,    : equipment.filter(eq => eq.type === selectedCategory);
+
+      content: reportContent,
+
+    });  const getStatusBadge = (eq: Equipment) => {
+
+    setIsReportModalOpen(false);    switch (eq.status) {
+
+    setReportContent("");      case "available":
+
+    setReportType("equipment");        return <Badge className="bg-green-100 text-green-700">바로 사용 가능</Badge>;
+
+  };      case "in-use":
+
+        return <Badge className="bg-yellow-100 text-yellow-700">사용 중 ({eq.timeRemaining}분 남음)</Badge>;
+
+  const filteredEquipment = equipment.filter(      case "waiting":
+
+    (item) => selectedCategory === "all" || item.type === selectedCategory        return <Badge className="bg-red-100 text-red-700">현재 {eq.waitingCount}명 대기중</Badge>;
+
+  );      default:
+
+        return null;
+
+  const getStatusBadge = (status: Equipment["status"]) => {    }
+
+    const statusConfig = {  };
+
+      available: { label: "사용 가능", variant: "default" as const },
+
+      "in-use": { label: "사용 중", variant: "secondary" as const },
+
+      waiting: { label: "대기 중", variant: "destructive" as const },
+
+    };  return (
+
+    const config = statusConfig[status];    <div className="min-h-screen bg-background p-4 pb-20">
+
+    return <Badge variant={config.variant}>{config.label}</Badge>;      <div className="max-w-4xl mx-auto space-y-6">
+
+  };        <div className="flex items-center justify-between">
+
+          <div className="space-y-1">
+
+  return (            <h1 className="text-2xl font-bold text-white">{gymName}</h1>
+
+    <div className="min-h-screen bg-background text-white pb-20 pt-4 px-4">            <p className="text-gray-300">운동기구 현황</p>
+
+      <div className="max-w-4xl mx-auto">          </div>
+
+        <h1 className="text-3xl font-bold mb-6">운동기구 현황</h1>          <Button 
+
+            onClick={() => setIsReportModalOpen(true)}
+
+        {/* 헬스장 예제 안내 배너 */}            variant="outline"
+
+        {(gymName === "헬스장 예제" || !gymName) && (            size="sm"
+
+          <div className="mb-6 p-4 bg-blue-500/20 border border-blue-500/50 rounded-lg flex items-start gap-3">            className="border-red-600 text-red-400 hover:bg-red-900/20 px-2"
+
+            <Info className="h-5 w-5 text-blue-400 mt-0.5 flex-shrink-0" />          >
+
+            <div>            <Flag className="h-4 w-4 mr-1" />
+
+              <p className="text-blue-100 font-medium">헬스장 예제 모드</p>            신고하기
+
+              <p className="text-blue-200/80 text-sm mt-1">          </Button>
+
+                현재 예제 데이터를 보고 계십니다. 실제 헬스장에 등록하시면 해당 헬스장의 운동기구 정보를 확인할 수 있습니다.        </div>
+
+              </p>
+
+            </div>        <div className="flex space-x-2">
+
+          </div>          {categories.map((category) => (
+
+        )}            <Button
+
+              key={category.id}
+
+        {/* API 에러 배너 */}              variant={selectedCategory === category.id ? "default" : "outline"}
+
+        {error && gymName && gymName !== "헬스장 예제" && (              size="sm"
+
+          <div className="mb-6 p-4 bg-yellow-500/20 border border-yellow-500/50 rounded-lg flex items-start gap-3">              onClick={() => setSelectedCategory(category.id)}
+
+            <AlertCircle className="h-5 w-5 text-yellow-400 mt-0.5 flex-shrink-0" />              className={selectedCategory === category.id ? 
+
+            <div>                "bg-blue-500 hover:bg-blue-600" : 
+
+              <p className="text-yellow-100 font-medium">데이터 로드 실패</p>                "border-gray-600 text-gray-300 hover:bg-gray-700"
+
+              <p className="text-yellow-200/80 text-sm mt-1">              }
+
+                {error}. 예제 데이터를 표시합니다.            >
+
+              </p>              {category.name}
+
+            </div>            </Button>
+
+          </div>          ))}
+
+        )}        </div>
+
+
+
+        {/* 카테고리 필터 */}
+
+        <div className="flex gap-2 mb-6">
+
+          {categories.map((category) => (        {loading && (
+
+            <Button          <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+
+              key={category.id}            <Loader2 className="h-12 w-12 animate-spin mb-4" />
+
+              variant={selectedCategory === category.id ? "default" : "outline"}            <p>운동기구 목록을 불러오는 중...</p>
+
+              onClick={() => setSelectedCategory(category.id)}          </div>
+
+            >        )}
+
+              {category.label}
+
+            </Button>        {error && (
+
+          ))}          <div className="bg-red-900/20 border border-red-500 rounded-lg p-6 flex items-start space-x-3">
+
+        </div>            <AlertTriangle className="h-6 w-6 text-red-500 flex-shrink-0 mt-0.5" />
+
+            <div className="flex-1">
+
+        {/* 로딩 상태 */}              <p className="text-red-400 font-medium">오류가 발생했습니다</p>
+
+        {loading && (              <p className="text-red-300 text-sm mt-1">{error}</p>
+
+          <div className="flex justify-center items-center py-12">              <Button
+
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />                onClick={() => window.location.reload()}
+
+          </div>                variant="outline"
+
+        )}                size="sm"
+
+                className="mt-3 border-red-500 text-red-400 hover:bg-red-500/10"
+
+        {/* 운동기구 카드 리스트 */}              >
+
+        {!loading && (                새로고침
+
+          <div className="grid gap-4 md:grid-cols-2">              </Button>
+
+            {filteredEquipment.map((item, index) => (            </div>
+
+              <Card key={index} className="bg-card border-gray-700 p-4">          </div>
+
+                <div className="flex justify-between items-start mb-3">        )}
+
+                  <div>
+
+                    <h3 className="text-lg font-semibold">{item.name}</h3>        {!loading && !error && filteredEquipment.length === 0 && (
+
+                    <p className="text-sm text-gray-400 capitalize">{item.type}</p>          <div className="bg-blue-900/20 border border-blue-500 rounded-lg p-6 text-center">
+
+                  </div>            <AlertTriangle className="h-12 w-12 text-blue-400 mx-auto mb-3" />
+
+                  {getStatusBadge(item.status)}            <h3 className="text-white font-medium mb-2">등록된 운동기구가 없습니다</h3>
+
+                </div>            <p className="text-gray-400 text-sm">
+
+              {selectedCategory === "all" 
+
+                {item.allocatedTime && (                ? "헬스장에 등록된 운동기구가 없습니다."
+
+                  <div className="mb-3">                : "해당 카테고리에 운동기구가 없습니다."}
+
+                    <p className="text-sm text-gray-400">            </p>
+
+                      배정 시간: {item.allocatedTime}분          </div>
+
+                    </p>        )}
+
+                  </div>
+
+                )}        {!loading && !error && filteredEquipment.length > 0 && (
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                <Button            {filteredEquipment.map((eq) => (
+
+                  variant="outline"            <Card key={eq.id} className="hover:shadow-lg transition-shadow cursor-pointer border-gray-600 bg-card"
+
+                  size="sm"                  onClick={() => onEquipmentSelect(eq)}>
+
+                  className="w-full"              <CardContent className="p-4">
+
+                  onClick={() => handleReport(item)}                <div className="flex space-x-4">
+
+                >                  <div className="w-24 h-24 rounded-lg overflow-hidden">
+
+                  <Flag className="h-4 w-4 mr-2" />                    <ImageWithFallback
+
+                  신고하기                      src={eq.image}
+
+                </Button>                      alt={eq.name}
+
+              </Card>                      className="w-full h-full object-cover"
+
+            ))}                    />
+
+          </div>                  </div>
+
+        )}                  <div className="flex-1 space-y-2">
+
+                    <div className="flex items-start justify-between">
+
+        {/* 신고하기 다이얼로그 */}                      <h3 className="font-semibold text-white">{eq.name}</h3>
+
+        <Dialog open={isReportModalOpen} onOpenChange={setIsReportModalOpen}>                      {getStatusBadge(eq)}
+
+          <DialogContent className="bg-card border-gray-600 text-white max-w-md">                    </div>
+
+            <DialogHeader>                    
+
+              <DialogTitle className="flex items-center space-x-2 text-red-400">                    <div className="flex items-center space-x-1 text-sm text-gray-300">
+
+                <Flag className="h-5 w-5" />                      <Clock className="h-3 w-3" />
+
+                <span>기기/사용자 신고</span>                      <span>기본 할당시간: {eq.allocatedTime}분</span>
+
+              </DialogTitle>                    </div>
+
+            </DialogHeader>                    
+
+                    {eq.currentUser && (
+
+            <div className="space-y-4">                      <div className="flex items-center space-x-1 text-sm text-gray-300">
+
+              <div>                        <Users className="h-3 w-3" />
+
+                <Label className="text-gray-300">신고 대상 기기</Label>                        <span>사용자: {eq.currentUser}</span>
+
+                <p className="text-white font-medium mt-1">                      </div>
+
+                  {selectedEquipment?.name}                    )}
+
+                </p>                  </div>
+
+              </div>                </div>
+
+              </CardContent>
+
+              <div>            </Card>
+
+                <Label className="text-gray-300 mb-2 block">신고 유형</Label>          ))}
+
+                <RadioGroup value={reportType} onValueChange={setReportType}>        </div>
+
+                  {reportTypes.map((type) => (        )}
+
+                    <div key={type.id} className="flex items-center space-x-2">
+
+                      <RadioGroupItem value={type.id} id={type.id} />        </Card>
+
+                      <Label htmlFor={type.id} className="text-white">              ))}
+
+                        {type.label}            </div>
+
+                      </Label>            )}
+
+                    </div>          </>
+
+                  ))}        )}
+
+                </RadioGroup>
+
+              </div>        {/* 신고하기 다이얼로그 */}
+
+        <Dialog open={isReportModalOpen} onOpenChange={setIsReportModalOpen}>
+
+              <div>          <DialogContent className="bg-card border-gray-600 text-white max-w-md">
+
+                <Label htmlFor="report-content" className="text-gray-300">            <DialogHeader>
+
+                  신고 내용              <DialogTitle className="flex items-center space-x-2 text-red-400">
+
+                </Label>                <Flag className="h-5 w-5" />
+
+                <Textarea                <span>기기/사용자 신고</span>
+
+                  id="report-content"              </DialogTitle>
+
+                  placeholder="신고 내용을 입력해주세요..."            </DialogHeader>
+
+                  value={reportContent}            
+
+                  onChange={(e) => setReportContent(e.target.value)}            <div className="space-y-4">
+
+                  className="mt-1 bg-background border-gray-600 text-white"              <div className="space-y-2">
+
+                  rows={4}                <label className="text-sm font-medium text-gray-300">신고할 기구 선택</label>
+
+                />                <Select value={selectedEquipmentForReport} onValueChange={setSelectedEquipmentForReport}>
+
+              </div>                  <SelectTrigger className="bg-input-background border-gray-600 text-white">
+
+            </div>                    <SelectValue placeholder="기구를 선택하세요" />
+
+                  </SelectTrigger>
+
+            <DialogFooter>                  <SelectContent className="bg-card border-gray-600">
+
+              <Button                    {equipment.map((eq) => (
+
+                variant="outline"                      <SelectItem key={eq.id} value={eq.id} className="text-white hover:bg-gray-700">
+
+                onClick={() => setIsReportModalOpen(false)}                        {eq.name}
+
+              >                      </SelectItem>
+
+                취소                    ))}
+
+              </Button>                  </SelectContent>
+
+              <Button                </Select>
+
+                variant="destructive"              </div>
+
+                onClick={submitReport}              
+
+                disabled={!reportContent.trim()}              <div className="space-y-2">
+
+              >                <label className="text-sm font-medium text-gray-300">신고 유형</label>
+
+                신고 제출                <Select value={reportType} onValueChange={setReportType}>
+
+              </Button>                  <SelectTrigger className="bg-input-background border-gray-600 text-white">
+
+            </DialogFooter>                    <SelectValue placeholder="신고 유형을 선택하세요" />
+
+          </DialogContent>                  </SelectTrigger>
+
+        </Dialog>                  <SelectContent className="bg-card border-gray-600">
+
+      </div>                    {reportTypes.map((type) => (
+
+    </div>                      <SelectItem key={type.value} value={type.value} className="text-white hover:bg-gray-700">
+
+  );                        {type.label}
+
+};                      </SelectItem>
+
+                    ))}
+
+export default EquipmentList;                  </SelectContent>
+
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-300">상세 설명 (선택사항)</label>
+                <Textarea
+                  value={reportDescription}
+                  onChange={(e) => setReportDescription(e.target.value)}
+                  placeholder="신고 내용을 자세히 설명해주세요..."
+                  className="bg-input-background border-gray-600 text-white placeholder-gray-400 min-h-[80px]"
+                />
+              </div>
+              
+              <div className="flex space-x-3 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsReportModalOpen(false)}
+                  className="flex-1 border-gray-600 text-gray-300 hover:bg-gray-700"
+                >
+                  취소
+                </Button>
+                <Button
+                  onClick={handleReportSubmit}
+                  disabled={!selectedEquipmentForReport || !reportType}
+                  className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                >
+                  신고 접수
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </div>
+  );
+}

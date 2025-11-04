@@ -17,3 +17,13 @@ class GymMembershipSerializer(serializers.ModelSerializer):
     class Meta:
         model = GymMembership
         fields = '__all__'
+
+class MyGymSerializer(serializers.ModelSerializer):
+    """내 헬스장 정보 조회용 Serializer (API 명세서 형식)"""
+    user = serializers.ReadOnlyField(source='user.username')
+    gym_name = serializers.ReadOnlyField(source='gym.name')
+    gym_address = serializers.ReadOnlyField(source='gym.address')
+
+    class Meta:
+        model = GymMembership
+        fields = ['id', 'user', 'gym_name', 'gym_address', 'status', 'join_date']

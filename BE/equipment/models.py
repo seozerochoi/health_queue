@@ -24,6 +24,7 @@ class Equipment(models.Model):
     ]
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='AVAILABLE')
     base_session_time_minutes = models.IntegerField(default=15)
+    image_url = models.URLField(max_length=500, blank=True, null=True, help_text="운동기구 이미지 URL")
 
     BODY_PART_CHOICES = [
         ('UPPER', '상체'),
