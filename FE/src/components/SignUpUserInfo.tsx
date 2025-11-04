@@ -6,12 +6,12 @@ import { Card, CardContent } from "./ui/card";
 
 interface SignUpUserInfoProps {
   onBack: () => void;
-  onNext: (name: string, role: 'user' | 'admin') => void;
+  onNext: (name: string, role: "user" | "admin") => void;
 }
 
 export function SignUpUserInfo({ onBack, onNext }: SignUpUserInfoProps) {
   const [name, setName] = useState("");
-  const [role, setRole] = useState<'user' | 'admin' | null>(null);
+  const [role, setRole] = useState<"user" | "admin" | null>(null);
 
   const canProceed = name.trim() !== "" && role !== null;
 
@@ -52,11 +52,11 @@ export function SignUpUserInfo({ onBack, onNext }: SignUpUserInfoProps) {
             <div className="space-y-3">
               <Card
                 className={`cursor-pointer border-2 transition-all ${
-                  role === 'user'
-                    ? 'border-blue-500 bg-blue-900/20'
-                    : 'border-gray-600 bg-card hover:border-gray-500'
+                  role === "user"
+                    ? "border-blue-500 bg-blue-900/20"
+                    : "border-gray-600 bg-card hover:border-gray-500"
                 }`}
-                onClick={() => setRole('user')}
+                onClick={() => setRole("user")}
               >
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-4">
@@ -65,7 +65,9 @@ export function SignUpUserInfo({ onBack, onNext }: SignUpUserInfoProps) {
                     </div>
                     <div>
                       <h3 className="text-white">헬스장 사용자</h3>
-                      <p className="text-sm text-gray-300">기구를 예약하고 이용합니다</p>
+                      <p className="text-sm text-gray-300">
+                        기구를 예약하고 이용합니다
+                      </p>
                     </div>
                   </div>
                 </CardContent>
@@ -73,11 +75,11 @@ export function SignUpUserInfo({ onBack, onNext }: SignUpUserInfoProps) {
 
               <Card
                 className={`cursor-pointer border-2 transition-all ${
-                  role === 'admin'
-                    ? 'border-blue-500 bg-blue-900/20'
-                    : 'border-gray-600 bg-card hover:border-gray-500'
+                  role === "admin"
+                    ? "border-blue-500 bg-blue-900/20"
+                    : "border-gray-600 bg-card hover:border-gray-500"
                 }`}
-                onClick={() => setRole('admin')}
+                onClick={() => setRole("admin")}
               >
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-4">
@@ -86,7 +88,9 @@ export function SignUpUserInfo({ onBack, onNext }: SignUpUserInfoProps) {
                     </div>
                     <div>
                       <h3 className="text-white">헬스장 운영자</h3>
-                      <p className="text-sm text-gray-300">헬스장을 관리하고 운영합니다</p>
+                      <p className="text-sm text-gray-300">
+                        헬스장을 관리하고 운영합니다
+                      </p>
                     </div>
                   </div>
                 </CardContent>
