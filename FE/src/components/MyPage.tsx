@@ -1,18 +1,7 @@
-import { useState, useEffect } from "react";
-import { ArrowLeft, User, Calendar, BarChart3, LogOut, Trophy, Clock } from "lucide-react";
+import { ArrowLeft, LogOut, User } from "lucide-react";
 import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-import { Badge } from "./ui/badge";
-
-interface GymInfo {
-  id: number;
-  user: string;
-  gym_name: string;
-  gym_address: string;
-  status: string;
-  join_date: string;
-}
+import { Card, CardContent } from "./ui/card";
+import { Avatar, AvatarFallback } from "./ui/avatar";
 
 interface MyPageProps {
   onBack: () => void;
@@ -22,202 +11,45 @@ interface MyPageProps {
 }
 
 export function MyPage({ onBack, onLogout, userName, userNickname }: MyPageProps) {
-  const [gymInfo, setGymInfo] = useState<GymInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchGymInfo = async () => {
-      try {
-        const response = await fetch('http://localhost:8000/gyms/my-gym/', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setGymInfo(data);
-        }
-      } catch (error) {
-        console.error('Error fetching gym info:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchGymInfo();
-  }, []);
-
-  const userStats = {
-    name: userName || "김헬스",
-    membershipType: "프리미엄",
-    totalWorkouts: 42,
-    thisMonthWorkouts: 12,
-    avgWorkoutTime: 75,
-    favoriteEquipment: "런닝머신"
-  };
-
-  // 아바타 이니셜 - 사용자 이름의 첫 글자
-  const avatarInitial = userName ? userName.charAt(0) : "김";
-
-  const recentWorkouts = [
-    {
-      date: "2024-01-15",
-      duration: "80분",
-      equipment: "런닝머신, 벤치프레스",
-      satisfaction: 4.5
-    },
-    {
-      date: "2024-01-13", 
-      duration: "65분",
-      equipment: "덤벨, 레그프레스",
-      satisfaction: 4.0
-    },
-    {
-      date: "2024-01-11",
-      duration: "90분", 
-      equipment: "런닝머신, 풀다운",
-      satisfaction: 5.0
-    }
-  ];
-
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-4xl mx-auto space-y-6">
+        {/* 헤더 */}
         <div className="flex items-center space-x-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onBack}
-            className="text-foreground hover:bg-secondary"
-          >
+          <Button variant="ghost" size="icon" onClick={onBack} className="text-white hover:bg-gray-700">
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h1 className="text-2xl font-bold text-foreground">마이페이지</h1>
+          <h1 className="text-2xl font-bold text-white">마이페이지</h1>
         </div>
 
-        {/* 프로필 카드 */}
-        <Card className="bg-card border-border">
+        {/* 사용자 프로필 카드 */}
+        <Card className="border-gray-600 bg-card">
           <CardContent className="p-6">
-            <div className="flex items-center space-x-4">
-              <Avatar className="h-16 w-16">
-                <AvatarImage src="" />
-                <AvatarFallback className="bg-primary text-primary-foreground text-lg">
-                  {avatarInitial}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1">
-                <h2 className="text-xl font-bold text-foreground">{userStats.name}</h2>
-                <Badge className="bg-blue-100 text-blue-700 mt-1">
-                  {userStats.membershipType} 회원
-                </Badge>
+            <div className="flex items-start justify-between">
+              <div className="flex items-center space-x-4">
+                <Avatar className="h-16 w-16 border-2 border-primary">
+                  <AvatarFallback className="bg-primary text-primary-foreground">
+                    <User className="h-8 w-8" />
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <h2 className="text-2xl font-semibold text-white">
+                    {userNickname || userName || "사용자"}
+                  </h2>
+                  <p className="text-gray-400">회원</p>
+                </div>
               </div>
-              <Button variant="outline" size="sm" className="border-gray-600 text-gray-300 hover:bg-gray-700" onClick={onLogout}>
-                <LogOut className="h-4 w-4 mr-2 transform rotate-90" />
+              <Button 
+                variant="ghost" 
+                className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                onClick={onLogout}
+              >
+                <LogOut className="h-5 w-5 mr-2" />
                 로그아웃
               </Button>
             </div>
           </CardContent>
         </Card>
-
-        {/* 운동 통계 */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="bg-card border-border">
-            <CardContent className="p-4 text-center">
-              <Trophy className="h-8 w-8 mx-auto mb-2 text-yellow-500" />
-              <p className="text-2xl font-bold text-foreground">{userStats.totalWorkouts}</p>
-              <p className="text-sm text-muted-foreground">총 운동횟수</p>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-card border-border">
-            <CardContent className="p-4 text-center">
-              <Calendar className="h-8 w-8 mx-auto mb-2 text-blue-500" />
-              <p className="text-2xl font-bold text-foreground">{userStats.thisMonthWorkouts}</p>
-              <p className="text-sm text-muted-foreground">이달 운동</p>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-card border-border">
-            <CardContent className="p-4 text-center">
-              <Clock className="h-8 w-8 mx-auto mb-2 text-green-500" />
-              <p className="text-2xl font-bold text-foreground">{userStats.avgWorkoutTime}분</p>
-              <p className="text-sm text-muted-foreground">평균 운동시간</p>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-card border-border">
-            <CardContent className="p-4 text-center">
-              <BarChart3 className="h-8 w-8 mx-auto mb-2 text-purple-500" />
-              <p className="text-lg font-bold text-foreground">{userStats.favoriteEquipment}</p>
-              <p className="text-sm text-muted-foreground">선호 기구</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* 최근 운동 기록 */}
-        <Card className="bg-card border-border">
-          <CardHeader>
-            <CardTitle className="text-foreground">최근 운동 기록</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {recentWorkouts.map((workout, index) => (
-              <div key={index} className="flex justify-between items-center p-4 bg-secondary rounded-lg">
-                <div>
-                  <p className="font-medium text-foreground">{workout.date}</p>
-                  <p className="text-sm text-muted-foreground">{workout.equipment}</p>
-                  {/* 헬스장 정보 카드 */}
-                  <Card className="bg-card border-border">
-                    <CardHeader>
-                      <CardTitle className="text-xl font-semibold">내 헬스장 정보</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {loading ? (
-                        <p>Loading...</p>
-                      ) : gymInfo ? (
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <h3 className="text-lg font-medium">{gymInfo.gym_name}</h3>
-                            <Badge variant="secondary">{gymInfo.status}</Badge>
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            <p>주소: {gymInfo.gym_address}</p>
-                            <p>가입일: {new Date(gymInfo.join_date).toLocaleDateString()}</p>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-muted-foreground">가입된 헬스장이 없습니다.</p>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-                <div className="text-right">
-                  <p className="font-medium text-foreground">{workout.duration}</p>
-                  <div className="flex items-center space-x-1">
-                    <span className="text-yellow-500">★</span>
-                    <span className="text-sm text-muted-foreground">{workout.satisfaction}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        {/* 빠른 액션 */}
-        <div className="grid grid-cols-2 gap-4">
-          <Button variant="outline" className="h-20 border-gray-600 text-gray-300 hover:bg-gray-700">
-            <div className="text-center">
-              <BarChart3 className="h-6 w-6 mx-auto mb-1" />
-              <span className="text-sm">운동 분석</span>
-            </div>
-          </Button>
-          <Button variant="outline" className="h-20 border-gray-600 text-gray-300 hover:bg-gray-700">
-            <div className="text-center">
-              <Trophy className="h-6 w-6 mx-auto mb-1" />
-              <span className="text-sm">운동 목표</span>
-            </div>
-          </Button>
-        </div>
       </div>
     </div>
   );
