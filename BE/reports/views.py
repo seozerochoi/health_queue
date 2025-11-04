@@ -11,3 +11,7 @@ class ReportViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated] # <- 이 줄 추가
     queryset = Report.objects.all()
     serializer_class = ReportSerializer
+    
+    def perform_create(self, serializer):
+        # 신고를 생성할 때 자동으로 reporter를 현재 로그인한 사용자로 설정
+        serializer.save(reporter=self.request.user)

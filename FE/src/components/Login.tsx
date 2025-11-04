@@ -41,27 +41,35 @@ export function Login({ onBack, onLoginComplete }: LoginProps) {
 
       const data = await response.json();
       console.log("로그인 성공:", data);
+      console.log("로그인 응답에서 받은 role:", data.role);
 
       // access 토큰 저장
       if (data.access) {
         localStorage.setItem("access_token", data.access);
       }
-      
+
       // refresh 토큰 저장
       if (data.refresh) {
         localStorage.setItem("refresh_token", data.refresh);
       }
 
+      // role 매핑: OPERATOR -> admin, MEMBER -> user
+      const mappedRole = data.role === "OPERATOR" ? "admin" : "user";
+      console.log("매핑된 role:", mappedRole);
+
       try {
         // 사용자의 헬스장 정보 가져오기
         const accessToken = data.access;
-        const gymResponse = await fetch("http://43.201.88.27/api/gyms/my-gym/", {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-        });
+        const gymResponse = await fetch(
+          "http://43.201.88.27/api/gyms/my-gym/",
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
 
         if (gymResponse.ok) {
           const gymData = await gymResponse.json();
@@ -71,30 +79,44 @@ export function Login({ onBack, onLoginComplete }: LoginProps) {
           console.log("gymData.name:", gymData.name);
           console.log("gymData.gym_name:", gymData.gym_name);
           console.log("========================");
-          
-          // 로그인 성공과 함께 헬스장 정보 전달
+
+          // 로그인 성공과 함께 헬스장 정보 및 role 전달
           const gymInfo = {
             id: gymData.id,
             name: gymData.gym_name || gymData.name,
             address: gymData.gym_address || gymData.address,
             status: gymData.status,
-            joinDate: gymData.join_date || gymData.joinDate
+            joinDate: gymData.join_date || gymData.joinDate,
           };
           console.log("전달할 gymInfo:", gymInfo);
-          
-          onLoginComplete(userId, { gymInfo });
+          console.log("전달할 role:", mappedRole);
+
+          onLoginComplete(userId, { 
+            gymInfo,
+            role: mappedRole,
+            name: data.name || data.username,
+          });
         } else if (gymResponse.status === 404) {
           // 헬스장 정보가 없는 경우도 로그인은 성공 처리
           console.log("등록된 헬스장 정보가 없습니다.");
-          onLoginComplete(userId);
+          onLoginComplete(userId, { 
+            role: mappedRole,
+            name: data.name || data.username,
+          });
         } else {
           console.error("헬스장 정보 가져오기 실패");
-          onLoginComplete(userId);
+          onLoginComplete(userId, { 
+            role: mappedRole,
+            name: data.name || data.username,
+          });
         }
       } catch (error) {
         console.error("헬스장 정보 가져오기 에러:", error);
         // 에러가 발생해도 로그인은 성공 처리
-        onLoginComplete(userId);
+        onLoginComplete(userId, { 
+          role: mappedRole,
+          name: data.name || data.username,
+        });
       }
     } catch (err) {
       setShowError(true);

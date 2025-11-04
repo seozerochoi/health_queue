@@ -114,12 +114,12 @@ export default function App() {
 
   const handleSignUpStep3Complete = async (gymIds: string[]) => {
     setFavoriteGymIds(gymIds);
-    
+
     // 선택한 헬스장을 백엔드에 저장
     if (gymIds.length > 0 && tempUserId && tempPassword) {
       try {
         console.log("=== 회원가입 완료: 헬스장 저장 시작 ===");
-        
+
         // 1. 먼저 로그인하여 토큰 받기
         const loginResponse = await fetch("http://43.201.88.27/api/login/", {
           method: "POST",
@@ -140,42 +140,49 @@ export default function App() {
 
         const loginData = await loginResponse.json();
         const token = loginData.access;
-        
+
         // 토큰 저장
         localStorage.setItem("access_token", token);
         if (loginData.refresh) {
           localStorage.setItem("refresh_token", loginData.refresh);
         }
-        
+
         console.log("자동 로그인 성공, 토큰:", token);
-        
+
         // 2. 백엔드에 헬스장 멤버십 생성
         const gymId = gymIds[0];
-        
+
         console.log("선택한 헬스장 ID:", gymId);
-        
-        const membershipResponse = await fetch("http://43.201.88.27/api/gyms/memberships/", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            gym: parseInt(gymId),
-          }),
-        });
-        
+
+        const membershipResponse = await fetch(
+          "http://43.201.88.27/api/gyms/memberships/",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              gym: parseInt(gymId),
+            }),
+          }
+        );
+
         if (membershipResponse.ok) {
           console.log("✅ 헬스장 멤버십 저장 성공!");
         } else {
           const errorText = await membershipResponse.text();
-          console.error("❌ 헬스장 멤버십 저장 실패:", membershipResponse.status, errorText);
+          console.error(
+            "❌ 헬스장 멤버십 저장 실패:",
+            membershipResponse.status,
+            errorText
+          );
         }
       } catch (error) {
         console.error("헬스장 저장 중 에러:", error);
       }
     }
-    
+
     setCurrentView("signup-complete");
   };
 
@@ -199,7 +206,7 @@ export default function App() {
             gym_name: gymData.name || "",
             gym_address: gymData.address || "",
             status: "운영중",
-            join_date: new Date().toISOString().split('T')[0],
+            join_date: new Date().toISOString().split("T")[0],
           };
           setSelectedGym(gymInfo);
           console.log("회원가입 후 헬스장 정보 설정:", gymInfo);
@@ -223,9 +230,15 @@ export default function App() {
     console.log("추가 데이터:", additionalData);
 
     // 사용자 정보 설정
-    setUserName(userId);
-    setUserNickname(userId);
-    setUserRole("user");
+    const name = additionalData?.name || userId;
+    const role = additionalData?.role || "user";
+
+    setUserName(name);
+    setUserNickname(name);
+    setUserRole(role);
+
+    console.log("설정된 role:", role);
+    console.log("설정된 name:", name);
 
     // 헬스장 정보가 있으면 상태 업데이트
     if (additionalData?.gymInfo && additionalData.gymInfo.name) {
@@ -244,7 +257,9 @@ export default function App() {
       try {
         const token = localStorage.getItem("access_token");
         if (token) {
-          console.log("No gym in login payload. Fetching /api/gyms/my-gym/ with token.");
+          console.log(
+            "No gym in login payload. Fetching /api/gyms/my-gym/ with token."
+          );
           const res = await fetch("http://43.201.88.27/api/gyms/my-gym/", {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -276,7 +291,7 @@ export default function App() {
               gym_name: "헬스장 예제",
               gym_address: "서울시 강남구 테헤란로 123",
               status: "운영중",
-              join_date: new Date().toISOString().split('T')[0],
+              join_date: new Date().toISOString().split("T")[0],
             };
             setSelectedGym(defaultGym);
             console.log("기본 헬스장 설정 (404 fallback):", defaultGym);
@@ -292,9 +307,14 @@ export default function App() {
       }
     }
 
-    // 화면 전환
-    console.log("→ equipment-list로 이동");
-    setCurrentView("equipment-list");
+    // 화면 전환 - role에 따라 다른 페이지로 이동
+    if (role === "admin") {
+      console.log("→ admin-dashboard로 이동 (role=admin)");
+      setCurrentView("admin-dashboard");
+    } else {
+      console.log("→ equipment-list로 이동 (role=user)");
+      setCurrentView("equipment-list");
+    }
     console.log("=================================================");
   };
 
@@ -455,8 +475,6 @@ export default function App() {
           <SignUpUserInfo
             onBack={navigateBack}
             onNext={handleSignUpStep2Complete}
-
-
           />
         );
 
@@ -518,7 +536,11 @@ export default function App() {
 
       case "admin-dashboard":
         return (
-          <AdminDashboard onBack={navigateBack} gymName={selectedGym?.gym_name} />
+          <AdminDashboard
+            onBack={navigateBack}
+            gymName={selectedGym?.gym_name}
+            onLogout={handleLogout}
+          />
         );
 
       case "nfc-tagging":

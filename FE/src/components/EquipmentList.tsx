@@ -3,16 +3,30 @@ import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
 import { Textarea } from "./ui/textarea";
-import { ArrowLeft, Clock, Users, Zap, AlertTriangle, Flag, Loader2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Clock,
+  Users,
+  Zap,
+  AlertTriangle,
+  Flag,
+  Loader2,
+} from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
 interface Equipment {
   id: string;
   name: string;
   type: string;
-  status: 'available' | 'in-use' | 'waiting';
+  status: "available" | "in-use" | "waiting";
   waitingCount?: number;
   currentUser?: string;
   timeRemaining?: number;
@@ -26,15 +40,21 @@ interface EquipmentListProps {
   onEquipmentSelect: (equipment: Equipment) => void;
 }
 
-export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentListProps) {
+export function EquipmentList({
+  gymName,
+  onBack,
+  onEquipmentSelect,
+}: EquipmentListProps) {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [selectedEquipmentForReport, setSelectedEquipmentForReport] = useState<string>("");
+  const [selectedEquipmentForReport, setSelectedEquipmentForReport] =
+    useState<string>("");
   const [reportType, setReportType] = useState<string>("");
   const [reportDescription, setReportDescription] = useState("");
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
   // 디버깅: gymName 확인
   console.log("EquipmentList gymName:", gymName);
@@ -51,7 +71,8 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
             name: "러닝머신 1",
             type: "cardio",
             status: "available",
-            image: "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
+            image:
+              "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
             allocatedTime: 30,
           },
           {
@@ -59,7 +80,8 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
             name: "러닝머신 2",
             type: "cardio",
             status: "in-use",
-            image: "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
+            image:
+              "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
             allocatedTime: 45,
             timeRemaining: 25,
           },
@@ -68,7 +90,8 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
             name: "벤치프레스",
             type: "strength",
             status: "available",
-            image: "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
+            image:
+              "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
             allocatedTime: 30,
           },
           {
@@ -76,7 +99,8 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
             name: "스쿼트 랙",
             type: "strength",
             status: "in-use",
-            image: "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
+            image:
+              "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
             allocatedTime: 60,
             timeRemaining: 40,
           },
@@ -85,7 +109,8 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
             name: "덤벨",
             type: "strength",
             status: "available",
-            image: "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
+            image:
+              "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
             allocatedTime: 20,
           },
           {
@@ -93,7 +118,8 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
             name: "스텝밀",
             type: "cardio",
             status: "waiting",
-            image: "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
+            image:
+              "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
             allocatedTime: 30,
             waitingCount: 2,
           },
@@ -108,14 +134,14 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
       try {
         setLoading(true);
         const token = localStorage.getItem("access_token");
-        
+
         if (!token) {
           throw new Error("로그인이 필요합니다.");
         }
 
         const response = await fetch("http://43.201.88.27/api/equipment/", {
           headers: {
-            "Authorization": `Bearer ${token}`,
+            Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
         });
@@ -126,58 +152,78 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
 
         const data = await response.json();
         console.log("Fetched equipment data:", data);
-        
+
         // 운동기구 이름 또는 타입에 따라 이미지 URL 매핑하는 함수
         const getEquipmentImage = (name: string, type: string): string => {
           const nameLower = name.toLowerCase();
-          
+
           // 이름 기반 매칭
-          if (nameLower.includes('러닝') || nameLower.includes('런닝') || nameLower.includes('treadmill')) {
+          if (
+            nameLower.includes("러닝") ||
+            nameLower.includes("런닝") ||
+            nameLower.includes("treadmill")
+          ) {
             return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
           }
-          if (nameLower.includes('사이클') || nameLower.includes('cycle') || nameLower.includes('bike')) {
+          if (
+            nameLower.includes("사이클") ||
+            nameLower.includes("cycle") ||
+            nameLower.includes("bike")
+          ) {
             return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
           }
-          if (nameLower.includes('일립티컬') || nameLower.includes('elliptical')) {
+          if (
+            nameLower.includes("일립티컬") ||
+            nameLower.includes("elliptical")
+          ) {
             return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
           }
-          if (nameLower.includes('로잉') || nameLower.includes('rowing')) {
+          if (nameLower.includes("로잉") || nameLower.includes("rowing")) {
             return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
           }
-          if (nameLower.includes('벤치') || nameLower.includes('bench')) {
+          if (nameLower.includes("벤치") || nameLower.includes("bench")) {
             return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
           }
-          if (nameLower.includes('스쿼트') || nameLower.includes('squat')) {
+          if (nameLower.includes("스쿼트") || nameLower.includes("squat")) {
             return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
           }
-          if (nameLower.includes('덤벨') || nameLower.includes('dumbbell')) {
+          if (nameLower.includes("덤벨") || nameLower.includes("dumbbell")) {
             return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
           }
-          if (nameLower.includes('스텝') || nameLower.includes('step')) {
+          if (nameLower.includes("스텝") || nameLower.includes("step")) {
             return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
           }
-          
+
           // 타입 기반 기본 이미지
-          if (type.toLowerCase() === 'cardio') {
+          if (type.toLowerCase() === "cardio") {
             return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
           }
-          
+
           // 기본 이미지
           return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
         };
-        
+
         // 백엔드 응답을 프론트엔드 형식으로 변환
         const formattedEquipment: Equipment[] = data.map((eq: any) => {
           // 백엔드에서 이미지 URL 가져오기 (여러 가능한 필드명 체크)
-          const imageUrl = eq.image_url || eq.image || eq.imageUrl || eq.photo || eq.picture_url || 
-                          getEquipmentImage(eq.name, eq.type);
-          
+          const imageUrl =
+            eq.image_url ||
+            eq.image ||
+            eq.imageUrl ||
+            eq.photo ||
+            eq.picture_url ||
+            getEquipmentImage(eq.name, eq.type);
+
           return {
             id: eq.id.toString(),
             name: eq.name,
             type: eq.type.toLowerCase(), // CARDIO -> cardio, STRENGTH -> strength
-            status: eq.status === 'AVAILABLE' ? 'available' : 
-                    eq.status === 'IN_USE' ? 'in-use' : 'available',
+            status:
+              eq.status === "AVAILABLE"
+                ? "available"
+                : eq.status === "IN_USE"
+                ? "in-use"
+                : "available",
             image: imageUrl,
             allocatedTime: eq.base_session_time_minutes || 30,
             waitingCount: 0, // TODO: 백엔드에서 대기열 정보 가져오기
@@ -190,7 +236,11 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
         setError(null);
       } catch (err) {
         console.error("운동기구 목록 로딩 실패:", err);
-        setError(err instanceof Error ? err.message : "운동기구 목록을 불러오는데 실패했습니다.");
+        setError(
+          err instanceof Error
+            ? err.message
+            : "운동기구 목록을 불러오는데 실패했습니다."
+        );
         setEquipment([]);
       } finally {
         setLoading(false);
@@ -212,42 +262,86 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
     { value: "other", label: "기타" },
   ];
 
-  const handleReportSubmit = () => {
-    // 실제 앱에서는 여기서 서버로 신고 정보를 전송
-    console.log("신고 접수:", {
-      equipmentId: selectedEquipmentForReport,
-      type: reportType,
-      description: reportDescription,
-    });
-    
-    // 폼 초기화
-    setSelectedEquipmentForReport("");
-    setReportType("");
-    setReportDescription("");
-    setIsReportModalOpen(false);
-    
-    // 사용자에게 알림 (실제 앱에서는 토스트나 알림 사용)
-    alert("신고가 정상적으로 접수되었습니다. 빠른 시일 내에 처리하겠습니다.");
+  const handleReportSubmit = async () => {
+    if (!selectedEquipmentForReport || !reportType) return;
+
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      alert("로그인이 필요합니다.");
+      return;
+    }
+
+    // SatisfactionSurvey.tsx와 동일한 API 경로/방식으로 신고 전송
+    setIsSubmittingReport(true);
+    try {
+      const label =
+        reportTypes.find((t) => t.value === reportType)?.label || "신고";
+      const reason = reportDescription
+        ? `${label}: ${reportDescription}`
+        : label;
+
+      const response = await fetch("http://43.201.88.27/api/reports/", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          equipment: parseInt(selectedEquipmentForReport, 10),
+          reason,
+          report_type: reportType, // malfunction | violation | other
+        }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        console.error("신고 제출 실패:", response.status, text);
+        throw new Error("신고 제출 실패");
+      }
+
+      // 폼 초기화 및 닫기
+      setSelectedEquipmentForReport("");
+      setReportType("");
+      setReportDescription("");
+      setIsReportModalOpen(false);
+
+      // 사용자 알림 (기존 메시지 유지)
+      alert("신고가 정상적으로 접수되었습니다. 빠른 시일 내에 처리하겠습니다.");
+    } catch (e) {
+      console.error("신고 제출 중 오류:", e);
+      alert("신고 제출 중 오류가 발생했습니다.");
+    } finally {
+      setIsSubmittingReport(false);
+    }
   };
 
-  const filteredEquipment = selectedCategory === "all" 
-    ? equipment 
-    : equipment.filter(eq => eq.type === selectedCategory);
+  const filteredEquipment =
+    selectedCategory === "all"
+      ? equipment
+      : equipment.filter((eq) => eq.type === selectedCategory);
 
   const getStatusBadge = (eq: Equipment) => {
     switch (eq.status) {
       case "available":
-        return <Badge className="bg-green-100 text-green-700">바로 사용 가능</Badge>;
+        return (
+          <Badge className="bg-green-100 text-green-700">바로 사용 가능</Badge>
+        );
       case "in-use":
-        return <Badge className="bg-yellow-100 text-yellow-700">사용 중 ({eq.timeRemaining}분 남음)</Badge>;
+        return (
+          <Badge className="bg-yellow-100 text-yellow-700">
+            사용 중 ({eq.timeRemaining}분 남음)
+          </Badge>
+        );
       case "waiting":
-        return <Badge className="bg-red-100 text-red-700">현재 {eq.waitingCount}명 대기중</Badge>;
+        return (
+          <Badge className="bg-red-100 text-red-700">
+            현재 {eq.waitingCount}명 대기중
+          </Badge>
+        );
       default:
         return null;
     }
   };
-
-
 
   return (
     <div className="min-h-screen bg-background p-4 pb-20">
@@ -257,7 +351,7 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
             <h1 className="text-2xl font-bold text-white">{gymName}</h1>
             <p className="text-gray-300">운동기구 현황</p>
           </div>
-          <Button 
+          <Button
             onClick={() => setIsReportModalOpen(true)}
             variant="outline"
             size="sm"
@@ -275,17 +369,16 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
               variant={selectedCategory === category.id ? "default" : "outline"}
               size="sm"
               onClick={() => setSelectedCategory(category.id)}
-              className={selectedCategory === category.id ? 
-                "bg-blue-500 hover:bg-blue-600" : 
-                "border-gray-600 text-gray-300 hover:bg-gray-700"
+              className={
+                selectedCategory === category.id
+                  ? "bg-blue-500 hover:bg-blue-600"
+                  : "border-gray-600 text-gray-300 hover:bg-gray-700"
               }
             >
               {category.name}
             </Button>
           ))}
         </div>
-
-
 
         {loading && (
           <div className="flex flex-col items-center justify-center py-16 text-gray-400">
@@ -315,9 +408,11 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
         {!loading && !error && filteredEquipment.length === 0 && (
           <div className="bg-blue-900/20 border border-blue-500 rounded-lg p-6 text-center">
             <AlertTriangle className="h-12 w-12 text-blue-400 mx-auto mb-3" />
-            <h3 className="text-white font-medium mb-2">등록된 운동기구가 없습니다</h3>
+            <h3 className="text-white font-medium mb-2">
+              등록된 운동기구가 없습니다
+            </h3>
             <p className="text-gray-400 text-sm">
-              {selectedCategory === "all" 
+              {selectedCategory === "all"
                 ? "헬스장에 등록된 운동기구가 없습니다."
                 : "해당 카테고리에 운동기구가 없습니다."}
             </p>
@@ -327,40 +422,43 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
         {!loading && !error && filteredEquipment.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredEquipment.map((eq) => (
-            <Card key={eq.id} className="hover:shadow-lg transition-shadow cursor-pointer border-gray-600 bg-card"
-                  onClick={() => onEquipmentSelect(eq)}>
-              <CardContent className="p-4">
-                <div className="flex space-x-4">
-                  <div className="w-24 h-24 rounded-lg overflow-hidden">
-                    <ImageWithFallback
-                      src={eq.image}
-                      alt={eq.name}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-start justify-between">
-                      <h3 className="font-semibold text-white">{eq.name}</h3>
-                      {getStatusBadge(eq)}
+              <Card
+                key={eq.id}
+                className="hover:shadow-lg transition-shadow cursor-pointer border-gray-600 bg-card"
+                onClick={() => onEquipmentSelect(eq)}
+              >
+                <CardContent className="p-4">
+                  <div className="flex space-x-4">
+                    <div className="w-24 h-24 rounded-lg overflow-hidden">
+                      <ImageWithFallback
+                        src={eq.image}
+                        alt={eq.name}
+                        className="w-full h-full object-cover"
+                      />
                     </div>
-                    
-                    <div className="flex items-center space-x-1 text-sm text-gray-300">
-                      <Clock className="h-3 w-3" />
-                      <span>기본 할당시간: {eq.allocatedTime}분</span>
-                    </div>
-                    
-                    {eq.currentUser && (
-                      <div className="flex items-center space-x-1 text-sm text-gray-300">
-                        <Users className="h-3 w-3" />
-                        <span>사용자: {eq.currentUser}</span>
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-start justify-between">
+                        <h3 className="font-semibold text-white">{eq.name}</h3>
+                        {getStatusBadge(eq)}
                       </div>
-                    )}
+
+                      <div className="flex items-center space-x-1 text-sm text-gray-300">
+                        <Clock className="h-3 w-3" />
+                        <span>기본 할당시간: {eq.allocatedTime}분</span>
+                      </div>
+
+                      {eq.currentUser && (
+                        <div className="flex items-center space-x-1 text-sm text-gray-300">
+                          <Users className="h-3 w-3" />
+                          <span>사용자: {eq.currentUser}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         )}
 
         {/* 신고하기 다이얼로그 */}
@@ -372,42 +470,59 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
                 <span>기기/사용자 신고</span>
               </DialogTitle>
             </DialogHeader>
-            
+
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-300">신고할 기구 선택</label>
-                <Select value={selectedEquipmentForReport} onValueChange={setSelectedEquipmentForReport}>
+                <label className="text-sm font-medium text-gray-300">
+                  신고할 기구 선택
+                </label>
+                <Select
+                  value={selectedEquipmentForReport}
+                  onValueChange={setSelectedEquipmentForReport}
+                >
                   <SelectTrigger className="bg-input-background border-gray-600 text-white">
                     <SelectValue placeholder="기구를 선택하세요" />
                   </SelectTrigger>
                   <SelectContent className="bg-card border-gray-600">
                     {equipment.map((eq) => (
-                      <SelectItem key={eq.id} value={eq.id} className="text-white hover:bg-gray-700">
+                      <SelectItem
+                        key={eq.id}
+                        value={eq.id}
+                        className="text-white hover:bg-gray-700"
+                      >
                         {eq.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              
+
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-300">신고 유형</label>
+                <label className="text-sm font-medium text-gray-300">
+                  신고 유형
+                </label>
                 <Select value={reportType} onValueChange={setReportType}>
                   <SelectTrigger className="bg-input-background border-gray-600 text-white">
                     <SelectValue placeholder="신고 유형을 선택하세요" />
                   </SelectTrigger>
                   <SelectContent className="bg-card border-gray-600">
                     {reportTypes.map((type) => (
-                      <SelectItem key={type.value} value={type.value} className="text-white hover:bg-gray-700">
+                      <SelectItem
+                        key={type.value}
+                        value={type.value}
+                        className="text-white hover:bg-gray-700"
+                      >
                         {type.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              
+
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-300">상세 설명 (선택사항)</label>
+                <label className="text-sm font-medium text-gray-300">
+                  상세 설명 (선택사항)
+                </label>
                 <Textarea
                   value={reportDescription}
                   onChange={(e) => setReportDescription(e.target.value)}
@@ -415,7 +530,7 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
                   className="bg-input-background border-gray-600 text-white placeholder-gray-400 min-h-[80px]"
                 />
               </div>
-              
+
               <div className="flex space-x-3 pt-2">
                 <Button
                   variant="outline"
@@ -426,10 +541,14 @@ export function EquipmentList({ gymName, onBack, onEquipmentSelect }: EquipmentL
                 </Button>
                 <Button
                   onClick={handleReportSubmit}
-                  disabled={!selectedEquipmentForReport || !reportType}
+                  disabled={
+                    isSubmittingReport ||
+                    !selectedEquipmentForReport ||
+                    !reportType
+                  }
                   className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
                 >
-                  신고 접수
+                  {isSubmittingReport ? "접수 중..." : "신고 접수"}
                 </Button>
               </div>
             </div>
