@@ -6,13 +6,6 @@ import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 interface LoginProps {
   onBack: () => void;
   onLoginComplete: (userId: string) => void;
-  registeredUsers: Array<{
-    userId: string;
-    password: string;
-    name: string;
-    nickname: string;
-    role: "user" | "admin";
-  }>;
 }
 
 export function Login({ onBack, onLoginComplete }: LoginProps) {
@@ -20,91 +13,105 @@ export function Login({ onBack, onLoginComplete }: LoginProps) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showError, setShowError] = useState(false);
-  const [isValid, setIsValid] = useState(false);
-
-  useEffect(() => {
-    if (userId.trim() === "" || password.trim() === "") {
-      setIsValid(false);
-      setShowError(false);
-    } else {
-      setIsValid(true);
-    }
-  }, [userId, password]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async () => {
+    if (!userId || !password) return;
+
+    setIsLoading(true);
+    setShowError(false);
+
     try {
-      const response = await fetch("http:///api/token/", {
+      const response = await fetch("http://43.201.88.27/api/login/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ username: userId, password }),
+        body: JSON.stringify({
+          username: userId,
+          password: password,
+        }),
       });
 
       if (!response.ok) {
-        throw new Error("로그인 실패: 사용자 이름 또는 비밀번호를 확인하세요.");
+        setShowError(true);
+        setIsLoading(false);
+        return;
       }
 
       const data = await response.json();
-      localStorage.setItem("accessToken", data.access); // JWT 토큰 저장
-      localStorage.setItem("refreshToken", data.refresh);
-
-      onLoginComplete(userId); // 로그인 완료 콜백 호출
-    } catch (err: any) {
+      console.log("로그인 성공:", data); // 토큰 확인용
+      onLoginComplete(userId);
+    } catch (err) {
       setShowError(true);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="login-container">
-      <div className="header">
-        <Button variant="ghost" onClick={onBack}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          뒤로가기
-        </Button>
-      </div>
-      <div className="content">
-        <h1 className="text-2xl font-bold mb-4">로그인</h1>
-        <div className="form-group">
-          <label htmlFor="userId">아이디</label>
-          <Input
-            id="userId"
-            type="text"
-            placeholder="아이디를 입력하세요"
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-          />
+    <div className="min-h-screen bg-background p-4">
+      <div className="max-w-md mx-auto">
+        <div className="flex items-center mb-6 pt-4">
+          <button onClick={onBack} className="text-white">
+            <ArrowLeft className="h-6 w-6" />
+          </button>
+          <h1 className="text-2xl text-white ml-4">로그인</h1>
         </div>
-        <div className="form-group">
-          <label htmlFor="password">비밀번호</label>
-          <div className="password-input">
+
+        <div className="space-y-6 mt-8">
+          <div className="space-y-2">
+            <label className="text-white">아이디를 입력하시오</label>
             <Input
-              id="password"
-              type={showPassword ? "text" : "password"}
-              placeholder="비밀번호를 입력하세요"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              type="text"
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              placeholder="아이디"
+              className="w-full bg-card border-gray-600 text-white placeholder:text-gray-500"
             />
-            <Button
-              variant="ghost"
-              onClick={() => setShowPassword(!showPassword)}
-            >
-              {showPassword ? <EyeOff /> : <Eye />}
-            </Button>
           </div>
+
+          <div className="space-y-2">
+            <label className="text-white">비밀번호를 입력하시오</label>
+            <div className="relative">
+              <Input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="비밀번호"
+                className="w-full bg-card border-gray-600 text-white placeholder:text-gray-500"
+              />
+              <button
+                type="button"
+                className="absolute right-3 top-3"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-5 w-5 text-gray-400" />
+                ) : (
+                  <Eye className="h-5 w-5 text-gray-400" />
+                )}
+              </button>
+            </div>
+            {showError && (
+              <p className="text-red-500 text-sm">
+                * 아이디 및 비밀번호를 다시 입력해주세요
+              </p>
+            )}
+          </div>
+
+          <Button
+            onClick={handleLogin}
+            disabled={isLoading}
+            className={`w-full h-14 mt-8 transition-all ${
+              !isLoading
+                ? "bg-white text-black hover:bg-gray-200"
+                : "bg-transparent border border-gray-600 text-gray-600 cursor-not-allowed"
+            }`}
+          >
+            {isLoading ? "로그인 중..." : "로그인하기"}
+          </Button>
         </div>
-        {showError && (
-          <p className="text-red-500 mt-2">
-            로그인에 실패했습니다. 다시 시도하세요.
-          </p>
-        )}
-        <Button
-          className="w-full mt-4"
-          onClick={handleLogin}
-          disabled={!isValid}
-        >
-          로그인하기
-        </Button>
       </div>
     </div>
   );

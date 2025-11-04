@@ -1,169 +1,3 @@
-/*
-import { useState } from "react";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { ArrowLeft, Eye, EyeOff } from "lucide-react";
-
-interface SignUpProps {
-  onBack: () => void;
-  onSignUpComplete: (userId: string, password: string) => void;
-}
-
-export function SignUp({ onBack, onSignUpComplete }: SignUpProps) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [isUsernameChecked, setIsUsernameChecked] = useState(false);
-  const [showUsernameWarning, setShowUsernameWarning] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isDuplicate, setIsDuplicate] = useState(false);
-
-  const handleCheckUsername = () => {
-    if (username.trim() === "") {
-      alert("아이디를 입력해주세요.");
-      return;
-    }
-    // 실제로는 서버에 중복 확인 요청
-    // 예시: "admin", "user", "test" 등의 아이디는 이미 사용 중이라고 가정
-    const existingUsernames = ["admin", "user", "test", "hong", "kim"];
-    
-    if (existingUsernames.includes(username.toLowerCase())) {
-      setIsDuplicate(true);
-      setIsUsernameChecked(false);
-    } else {
-      setIsDuplicate(false);
-      setIsUsernameChecked(true);
-    }
-    setShowUsernameWarning(false);
-  };
-
-  const isPasswordMatch = password !== "" && confirmPassword !== "" && password === confirmPassword;
-  const canSubmit = isUsernameChecked && isPasswordMatch;
-
-  const handleSignUp = () => {
-    if (!isUsernameChecked) {
-      setShowUsernameWarning(true);
-      return;
-    }
-    if (canSubmit) {
-      // 실제로는 서버에 회원가입 요청
-      onSignUpComplete(username, password);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-md mx-auto">
-        {}
-        <div className="flex items-center mb-6 pt-4">
-          <button onClick={onBack} className="text-white">
-            <ArrowLeft className="h-6 w-6" />
-          </button>
-          <h1 className="text-2xl text-white ml-4">회원가입</h1>
-        </div>
-
-        {}
-        <div className="space-y-6 mt-8">
-          {}
-          <div className="space-y-2">
-            <label className="text-white">아이디를 입력하시오</label>
-            <div className="flex gap-2">
-              <Input
-                type="text"
-                value={username}
-                onChange={(e) => {
-                  setUsername(e.target.value);
-                  setIsUsernameChecked(false);
-                }}
-                placeholder="아이디"
-                className="flex-[5] bg-card border-gray-600 text-white placeholder:text-gray-500"
-              />
-              <Button
-                onClick={handleCheckUsername}
-                className="flex-[2] bg-white text-black hover:bg-gray-200"
-              >
-                중복 인증하기
-              </Button>
-            </div>
-            {isUsernameChecked && !isDuplicate && (
-              <p className="text-blue-500 text-sm">* 사용 가능한 아이디 입니다.</p>
-            )}
-            {isDuplicate && (
-              <p className="text-red-500 text-sm">* 사용 불가능한 아이디 입니다. 다시 입력해주세요.</p>
-            )}
-            {showUsernameWarning && !isUsernameChecked && (
-              <p className="text-red-500 text-sm">* 중복 인증을 완료해주세요.</p>
-            )}
-          </div>
-
-          {}
-          <div className="space-y-2">
-            <label className="text-white">비밀번호를 입력하시오</label>
-            <div className="relative">
-              <Input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="비밀번호"
-                className="w-full bg-card border-gray-600 text-white placeholder:text-gray-500"
-              />
-              <button
-                type="button"
-                className="absolute right-3 top-3"
-                onClick={() => setShowPassword(!showPassword)}
-              >
-                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </button>
-            </div>
-          </div>
-
-          {} 
-          <div className="space-y-2">
-            <label className="text-white">비밀번호를 다시한번 입력하시오</label>
-            <div className="relative">
-              <Input
-                type={showConfirmPassword ? "text" : "password"}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="비밀번호 확인"
-                className="w-full bg-card border-gray-600 text-white placeholder:text-gray-500"
-              />
-              <button
-                type="button"
-                className="absolute right-3 top-3"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              >
-                {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </button>
-            </div>
-            {confirmPassword !== "" && !isPasswordMatch && (
-              <p className="text-red-500 text-sm">비밀번호가 일치하지 않습니다.</p>
-            )}
-            {isPasswordMatch && (
-              <p className="text-green-500 text-sm">비밀번호가 일치합니다.</p>
-            )}
-          </div>
-
-          {}
-          <Button
-            onClick={handleSignUp}
-            className={`w-full h-14 mt-8 transition-all ${
-              canSubmit 
-                ? "bg-white text-black hover:bg-gray-200" 
-                : "bg-transparent border border-gray-600 text-gray-600"
-            }`}
-          >
-            다음 단계 →
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-*/
-
-
 import { useState } from "react";
 
 interface SignUpProps {
@@ -175,11 +9,48 @@ export default function SignUp({ onBack, onSubmit }: SignUpProps) {
   const [userId, setUserId] = useState("");
   const [pw, setPw] = useState("");
   const [showPw, setShowPw] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   const canNext = userId.trim().length >= 1 && pw.length >= 1;
 
+  const handleSignUp = async () => {
+    if (!canNext) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch("http://43.201.88.27/api/register/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: userId,
+          password: pw,
+          email: `${userId}@example.com`, // 이메일은 임시로 생성
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        setError(data.detail || "회원가입에 실패했습니다.");
+        setIsLoading(false);
+        return;
+      }
+
+      // 회원가입 성공 시 부모 컴포넌트로 데이터 전달
+      onSubmit({ userId, password: pw });
+    } catch (err) {
+      setError("서버와의 통신 중 오류가 발생했습니다.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
-  <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
+    <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* 헤더 */}
         <div className="flex items-center gap-3 py-4">
@@ -212,13 +83,13 @@ export default function SignUp({ onBack, onSubmit }: SignUpProps) {
             비밀번호를 입력하십시오
           </label>
           <div className="relative">
-              <input
-                type={showPw ? "text" : "password"}
-                value={pw}
-                onChange={(e) => setPw(e.target.value)}
-                placeholder="비밀번호"
-                className="w-full h-12 rounded-lg bg-[#1f1f1f] border border-gray-700 px-4 pr-11 placeholder:text-gray-400 outline-none focus:border-blue-400"
-              />
+            <input
+              type={showPw ? "text" : "password"}
+              value={pw}
+              onChange={(e) => setPw(e.target.value)}
+              placeholder="비밀번호"
+              className="w-full h-12 rounded-lg bg-[#1f1f1f] border border-gray-700 px-4 pr-11 placeholder:text-gray-400 outline-none focus:border-blue-400"
+            />
             <button
               type="button"
               onClick={() => setShowPw((v) => !v)}
@@ -231,18 +102,21 @@ export default function SignUp({ onBack, onSubmit }: SignUpProps) {
           </div>
         </div>
 
+        {/* 에러 메시지 */}
+        {error && <p className="mt-4 text-red-500 text-sm">{error}</p>}
+
         {/* 다음 단계 */}
         <div className="mt-8">
           <button
-            onClick={() => onSubmit({ userId, password: pw })}
-            disabled={!canNext}
+            onClick={handleSignUp}
+            disabled={!canNext || isLoading}
             className={`w-full h-12 rounded-lg transition-colors ${
-              canNext
+              canNext && !isLoading
                 ? "bg-white text-black hover:bg-gray-200"
                 : "bg-gray-700 text-gray-400 cursor-not-allowed"
             }`}
           >
-            다음 단계 →
+            {isLoading ? "처리 중..." : "다음 단계 →"}
           </button>
         </div>
       </div>
