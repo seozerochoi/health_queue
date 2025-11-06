@@ -99,7 +99,10 @@ export default function App() {
     setCurrentView("signup-user-info");
   };
 
-  const handleSignUpStep2Complete = (name: string, role: "user" | "admin") => {
+  const handleSignUpStep2Complete = async (
+    name: string,
+    role: "user" | "admin"
+  ) => {
     setUserRole(role);
     // nickname field removed; use name as display nickname to keep downstream components stable
     setUserNickname(name);
@@ -109,7 +112,8 @@ export default function App() {
     // App should NOT keep a local registeredUsers list. We keep the local
     // name/role state for routing after signup completes.
 
-    setCurrentView("signup-gym-favorites");
+    // 헬스장 선택 건너뛰고 자동으로 스마트짐(id=1)에 연결
+    await handleSignUpStep3Complete(["1"]);
   };
 
   const handleSignUpStep3Complete = async (gymIds: string[]) => {
