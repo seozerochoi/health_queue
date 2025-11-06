@@ -8,7 +8,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
-from .serializers import UserSerializer, RegisterSerializer
+from .serializers import UserSerializer, RegisterSerializer, UserProfileSerializer
 from .models import UserProfile
 import logging
 
@@ -31,6 +31,27 @@ class RegisterView(generics.CreateAPIView):
 @permission_classes([IsAuthenticated])
 def get_current_user(request):
     serializer = UserSerializer(request.user)
+    return Response(serializer.data)
+
+# 현재 로그인한 사용자의 프로필 조회/수정
+@api_view(['GET', 'PUT', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def current_user_profile(request):
+    try:
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    except Exception as e:
+        return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    if request.method in ['PUT', 'PATCH']:
+        partial = request.method == 'PATCH'
+        serializer = UserProfileSerializer(profile, data=request.data, partial=partial)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    # GET
+    serializer = UserProfileSerializer(profile)
     return Response(serializer.data)
 
 # JWT 토큰에 사용자 정보(role, username, name) 추가

@@ -96,3 +96,16 @@ class RegisterView(generics.CreateAPIView):
             print("유효성 검사 실패:", serializer.errors)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         return super().post(request, *args, **kwargs)
+
+
+# 사용자 프로필 조회/수정용 Serializer
+class UserProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserProfile
+        fields = [
+            'gender', 'age', 'height_cm', 'weight_kg', 'experience_level',
+            'exercise_goal', 'inbody_score', 'bmi', 'body_fat_percentage',
+            'skeletal_muscle_mass_kg', 'body_fat_mass_kg',
+            'segment_right_arm_kg', 'segment_left_arm_kg', 'segment_trunk_kg',
+            'segment_right_leg_kg', 'segment_left_leg_kg',
+        ]
