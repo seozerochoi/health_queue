@@ -88,6 +88,8 @@ export default function App() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [tempUserId, setTempUserId] = useState<string>("");
   const [tempPassword, setTempPassword] = useState<string>("");
+  // 사용자가 NFC 과정을 거치지 않고 바로 타이머로 진입했는지 여부
+  const [directWorkout, setDirectWorkout] = useState<boolean>(false);
 
   const handleAuthNavigate = (view: "signup" | "login") => {
     setCurrentView(view);
@@ -353,7 +355,17 @@ export default function App() {
   };
 
   const handleEquipmentSelect = (equipment: Equipment) => {
+    // 기구 상태가 'available'이면 예약/NFC 단계를 건너뛰고 바로 타이머 시작
+    if (equipment.status === "available") {
+      setSelectedEquipment(equipment);
+      setWorkoutStartTime(new Date());
+      setDirectWorkout(true);
+      setCurrentView("workout-timer");
+      return;
+    }
+    // 그 외(in-use, waiting 등)는 기존 예약 흐름 유지
     setSelectedEquipment(equipment);
+    setDirectWorkout(false);
     setCurrentView("equipment-reservation");
   };
 
@@ -374,10 +386,13 @@ export default function App() {
     setCurrentView("equipment-list");
     setSelectedEquipment(null);
     setWorkoutStartTime(null);
+    setDirectWorkout(false);
   };
 
   const handleReservationComplete = (newReservations: Reservation[]) => {
+    // AI 루틴에서 생성된 예약을 추가하고 즉시 예약 현황 화면으로 이동
     setReservations((prev) => [...prev, ...newReservations]);
+    setCurrentView("reservation-status");
   };
 
   const handleSingleReservation = (
@@ -443,7 +458,15 @@ export default function App() {
         setCurrentView("equipment-reservation");
         break;
       case "workout-timer":
-        setCurrentView("nfc-tagging");
+        // 바로 시작한 경우엔 NFC 화면이 없으므로 목록으로 돌아간다
+        if (directWorkout) {
+          setCurrentView("equipment-list");
+          setSelectedEquipment(null);
+          setWorkoutStartTime(null);
+          setDirectWorkout(false);
+        } else {
+          setCurrentView("nfc-tagging");
+        }
         break;
       case "satisfaction-survey":
         setCurrentView("equipment-list");

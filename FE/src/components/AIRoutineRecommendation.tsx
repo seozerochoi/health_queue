@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
 import { Badge } from "./ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { ArrowLeft, Zap, Clock, CheckCircle } from "lucide-react";
+import { ArrowLeft, Zap, Clock, CheckCircle, Dumbbell, Users } from "lucide-react";
+
+type BodyPart = "등" | "가슴" | "복근" | "힙" | "허벅지" | "종아리" | "유산소" | "어깨";
+type Intensity = "상" | "중" | "하";
+type RecommendMethod = "전체 기구" | "비어있는 기구";
 
 interface RoutineStep {
   equipment: string;
@@ -31,14 +32,23 @@ interface AIRoutineRecommendationProps {
 }
 
 export function AIRoutineRecommendation({ onBack, onReservationComplete }: AIRoutineRecommendationProps) {
-  const [step, setStep] = useState<'form' | 'recommendation' | 'reserved'>('form');
-  const [formData, setFormData] = useState({
-    gender: '',
-    workoutTime: '',
-    focusArea: '',
-    experience: ''
-  });
+  const [step, setStep] = useState<'form' | 'recommendation'>('form');
+  const [selectedBodyParts, setSelectedBodyParts] = useState<BodyPart[]>([]);
+  const [intensity, setIntensity] = useState<Intensity | null>(null);
+  const [recommendMethod, setRecommendMethod] = useState<RecommendMethod | null>(null);
   const [recommendedRoutine, setRecommendedRoutine] = useState<RoutineStep[]>([]);
+
+  const bodyParts: BodyPart[] = ["등", "가슴", "복근", "힙", "허벅지", "종아리", "유산소", "어깨"];
+  const intensities: Intensity[] = ["상", "중", "하"];
+  const recommendMethods: RecommendMethod[] = ["전체 기구", "비어있는 기구"];
+
+  const toggleBodyPart = (part: BodyPart) => {
+    setSelectedBodyParts(prev => 
+      prev.includes(part) 
+        ? prev.filter(p => p !== part)
+        : [...prev, part]
+    );
+  };
 
   const generateRoutine = () => {
     // AI 루틴 생성 시뮬레이션
@@ -85,30 +95,7 @@ export function AIRoutineRecommendation({ onBack, onReservationComplete }: AIRou
     });
     
     onReservationComplete(reservations);
-    setStep('reserved');
   };
-
-  if (step === 'reserved') {
-    return (
-      <div className="min-h-screen bg-background p-4">
-        <div className="max-w-md mx-auto mt-20">
-          <Card className="border-green-600 bg-green-900/20">
-            <CardContent className="p-6 text-center space-y-4">
-              <CheckCircle className="h-16 w-16 text-green-400 mx-auto" />
-              <h2 className="text-xl font-semibold text-green-300">예약 완료!</h2>
-              <p className="text-green-200">
-                AI 추천 루틴이 모두 예약되었습니다.<br/>
-                운동 순서에 따라 알림을 받으실 수 있습니다.
-              </p>
-              <Button onClick={onBack} className="bg-green-500 hover:bg-green-600">
-                기구 목록으로 돌아가기
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
 
   if (step === 'recommendation') {
     return (
@@ -149,30 +136,46 @@ export function AIRoutineRecommendation({ onBack, onReservationComplete }: AIRou
 
               <div className="space-y-3">
                 {recommendedRoutine.map((step, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg border border-gray-700">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-semibold">
-                        {index + 1}
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-white">{step.equipment}</h4>
-                        <div className="flex items-center space-x-2 text-sm text-gray-300">
-                          <Clock className="h-3 w-3" />
-                          <span>{step.duration}분</span>
-                          {step.waitTime && (
-                            <span className="text-yellow-400">• {step.waitTime}분 대기</span>
-                          )}
+                  <div key={index} className="p-3 bg-gray-800 rounded-lg border border-gray-700">
+                    <div className="flex justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-semibold">
+                          {index + 1}
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-white">{step.equipment}</h4>
+                          <div className="flex items-center space-x-2 text-sm text-gray-300">
+                            <Clock className="h-3 w-3" />
+                            <span>{step.duration}분</span>
+                            {step.waitTime && (
+                              <span className="text-yellow-400">• {step.waitTime}분 대기</span>
+                            )}
+                          </div>
                         </div>
                       </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <Badge 
+                          className={`${step.status === 'available' ? 
+                            'bg-green-100 text-green-700' : 
+                            'bg-yellow-100 text-yellow-700'} w-20 text-center`}
+                        >
+                          {step.status === 'available' ? '사용가능' : '대기필요'}
+                        </Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-blue-500 text-blue-400 hover:bg-blue-500/10 h-6 text-xs px-2 w-20 justify-center"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // 줄서기 로직 (필요시 추가)
+                            console.log(`줄서기: ${step.equipment}`);
+                          }}
+                        >
+                          <Users className="h-3 w-3 mr-1" />
+                          줄서기
+                        </Button>
+                      </div>
                     </div>
-                    <Badge 
-                      className={step.status === 'available' ? 
-                        'bg-green-100 text-green-700' : 
-                        'bg-yellow-100 text-yellow-700'
-                      }
-                    >
-                      {step.status === 'available' ? '사용가능' : '대기필요'}
-                    </Badge>
                   </div>
                 ))}
               </div>
@@ -214,69 +217,70 @@ export function AIRoutineRecommendation({ onBack, onReservationComplete }: AIRou
             <CardTitle className="text-white">운동 정보 입력</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="gender" className="text-white">성별</Label>
-              <Select value={formData.gender} onValueChange={(value) => setFormData({...formData, gender: value})}>
-                <SelectTrigger className="border-gray-600 bg-input-background text-white">
-                  <SelectValue placeholder="성별을 선택하세요" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="male">남성</SelectItem>
-                  <SelectItem value="female">여성</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* 운동 부위 선택 */}
+            <div className="space-y-3">
+              <h3 className="text-white font-semibold">운동 부위 선택 (중복 선택 가능)</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+                {bodyParts.map((part) => (
+                  <button
+                    key={part}
+                    onClick={() => toggleBodyPart(part)}
+                    className={`py-3 px-2 rounded-lg border-2 transition-all text-sm font-medium ${
+                      selectedBodyParts.includes(part)
+                        ? "bg-blue-500 border-blue-500 text-white"
+                        : "bg-gray-800 border-gray-600 text-gray-300 hover:border-gray-400"
+                    }`}
+                  >
+                    {part}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="workoutTime" className="text-white">총 운동시간</Label>
-              <Select value={formData.workoutTime} onValueChange={(value) => setFormData({...formData, workoutTime: value})}>
-                <SelectTrigger className="border-gray-600 bg-input-background text-white">
-                  <SelectValue placeholder="운동시간을 선택하세요" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="30">30분</SelectItem>
-                  <SelectItem value="60">1시간</SelectItem>
-                  <SelectItem value="90">1시간 30분</SelectItem>
-                  <SelectItem value="120">2시간</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* 운동 강도 선택 */}
+            <div className="space-y-3">
+              <h3 className="text-white font-semibold">운동 강도 선택</h3>
+              <div className="flex gap-2">
+                {intensities.map((level) => (
+                  <button
+                    key={level}
+                    onClick={() => setIntensity(level)}
+                    className={`flex-1 py-3 rounded-lg border-2 transition-all text-base ${
+                      intensity === level
+                        ? "bg-blue-500 border-blue-500 text-white font-bold"
+                        : "bg-gray-800 border-gray-600 text-gray-300 hover:border-gray-400"
+                    }`}
+                  >
+                    {level}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="focusArea" className="text-white">집중하고 싶은 부위</Label>
-              <Select value={formData.focusArea} onValueChange={(value) => setFormData({...formData, focusArea: value})}>
-                <SelectTrigger className="border-gray-600 bg-input-background text-white">
-                  <SelectValue placeholder="운동 부위를 선택하세요" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="chest">가슴</SelectItem>
-                  <SelectItem value="back">등</SelectItem>
-                  <SelectItem value="legs">하체</SelectItem>
-                  <SelectItem value="arms">팔</SelectItem>
-                  <SelectItem value="cardio">유산소</SelectItem>
-                  <SelectItem value="full">전신</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="experience" className="text-white">운동 경력</Label>
-              <Select value={formData.experience} onValueChange={(value) => setFormData({...formData, experience: value})}>
-                <SelectTrigger className="border-gray-600 bg-input-background text-white">
-                  <SelectValue placeholder="운동 경력을 선택하세요" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="beginner">초급 (6개월 미만)</SelectItem>
-                  <SelectItem value="intermediate">중급 (6개월-2년)</SelectItem>
-                  <SelectItem value="advanced">고급 (2년 이상)</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* 추천 방법 선택 */}
+            <div className="space-y-3">
+              <h3 className="text-white font-semibold">추천 방법</h3>
+              <div className="flex gap-4">
+                {recommendMethods.map((method) => (
+                  <button
+                    key={method}
+                    onClick={() => setRecommendMethod(method)}
+                    className={`flex-1 py-3 rounded-lg border-2 transition-all text-sm ${
+                      recommendMethod === method
+                        ? "bg-blue-500 border-blue-500 text-white font-bold"
+                        : "bg-gray-800 border-gray-600 text-gray-300 hover:border-gray-400"
+                    }`}
+                  >
+                    {method}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <Button 
               onClick={generateRoutine}
-              className="w-full bg-gradient-to-r from-blue-500 to-sky-500 hover:from-blue-600 hover:to-sky-600"
-              disabled={!formData.gender || !formData.workoutTime || !formData.focusArea || !formData.experience}
+              className="w-full bg-gradient-to-r from-blue-500 to-sky-500 hover:from-blue-600 hover:to-sky-600 h-12"
+              disabled={selectedBodyParts.length === 0 || !intensity || !recommendMethod}
             >
               <Zap className="h-4 w-4 mr-2" />
               AI 루틴 생성하기

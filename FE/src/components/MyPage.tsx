@@ -1,17 +1,11 @@
-import { ArrowLeft, LogOut, User } from "lucide-react";
+// 아이콘 최소화 요청: 불필요 아이콘 제거
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
-import { Avatar, AvatarFallback } from "./ui/avatar";
 import { useEffect, useState } from "react";
 import { Label } from "./ui/label";
 import { Input } from "./ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "./ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Camera } from "lucide-react";
 
 interface MyPageProps {
   onBack: () => void;
@@ -36,17 +30,7 @@ export function MyPage({
 
   // 폼 상태
   const [exerciseGoal, setExerciseGoal] = useState<string>("");
-  const [inbodyScore, setInbodyScore] = useState<string>("");
-  const [weightKg, setWeightKg] = useState<string>("");
-  const [skeletalKg, setSkeletalKg] = useState<string>("");
-  const [fatMassKg, setFatMassKg] = useState<string>("");
-  const [bodyFatPct, setBodyFatPct] = useState<string>("");
-  const [bmi, setBmi] = useState<string>("");
-  const [segRightArm, setSegRightArm] = useState<string>("");
-  const [segLeftArm, setSegLeftArm] = useState<string>("");
-  const [segTrunk, setSegTrunk] = useState<string>("");
-  const [segRightLeg, setSegRightLeg] = useState<string>("");
-  const [segLeftLeg, setSegLeftLeg] = useState<string>("");
+  // 단순화: 운동 목적만 유지
 
   // 공통: 토큰 만료 시 자동 갱신 후 재시도하는 fetch 래퍼
   const fetchWithAuth = async (
@@ -109,17 +93,6 @@ export function MyPage({
         if (!res.ok) return;
         const data = await res.json();
         setExerciseGoal(data.exercise_goal || "");
-        setInbodyScore(data.inbody_score?.toString() || "");
-        setWeightKg(data.weight_kg?.toString() || "");
-        setSkeletalKg(data.skeletal_muscle_mass_kg?.toString() || "");
-        setFatMassKg(data.body_fat_mass_kg?.toString() || "");
-        setBodyFatPct(data.body_fat_percentage?.toString() || "");
-        setBmi(data.bmi?.toString() || "");
-        setSegRightArm(data.segment_right_arm_kg?.toString() || "");
-        setSegLeftArm(data.segment_left_arm_kg?.toString() || "");
-        setSegTrunk(data.segment_trunk_kg?.toString() || "");
-        setSegRightLeg(data.segment_right_leg_kg?.toString() || "");
-        setSegLeftLeg(data.segment_left_leg_kg?.toString() || "");
       } finally {
         setLoading(false);
       }
@@ -131,18 +104,7 @@ export function MyPage({
     try {
       setSaving(true);
       const body: any = {
-        exercise_goal: exerciseGoal || null,
-        inbody_score: inbodyScore ? parseFloat(inbodyScore) : null,
-        weight_kg: weightKg ? parseFloat(weightKg) : null,
-        skeletal_muscle_mass_kg: skeletalKg ? parseFloat(skeletalKg) : null,
-        body_fat_mass_kg: fatMassKg ? parseFloat(fatMassKg) : null,
-        body_fat_percentage: bodyFatPct ? parseFloat(bodyFatPct) : null,
-        bmi: bmi ? parseFloat(bmi) : null,
-        segment_right_arm_kg: segRightArm ? parseFloat(segRightArm) : null,
-        segment_left_arm_kg: segLeftArm ? parseFloat(segLeftArm) : null,
-        segment_trunk_kg: segTrunk ? parseFloat(segTrunk) : null,
-        segment_right_leg_kg: segRightLeg ? parseFloat(segRightLeg) : null,
-        segment_left_leg_kg: segLeftLeg ? parseFloat(segLeftLeg) : null,
+        exercise_goal: exerciseGoal || null
       };
 
       const res = await fetchWithAuth(
@@ -172,11 +134,11 @@ export function MyPage({
           <div className="flex items-center space-x-4">
             <Button
               variant="ghost"
-              size="icon"
+              size="sm"
               onClick={onBack}
               className="text-foreground hover:bg-secondary"
             >
-              <ArrowLeft className="h-5 w-5" />
+              뒤로
             </Button>
             <h1 className="text-2xl font-bold text-foreground">마이페이지</h1>
           </div>
@@ -186,33 +148,14 @@ export function MyPage({
             className="border-red-600 text-red-400 hover:bg-red-900/20 hover:text-red-300 active:bg-red-800/30 active:text-red-200 active:border-red-500 transition-transform duration-150 ease-out active:scale-105"
             onClick={onLogout}
           >
-            <LogOut className="h-4 w-4 mr-2 transform rotate-90" />
             로그아웃
           </Button>
         </div>
 
         {/* 프로필 카드: 우측 버튼은 "마이페이지"(편집)로 변경 */}
-        <Card className="bg-card border-border">
-          <CardContent className="p-6">
-            <div className="flex items-center space-x-4">
-              <Avatar className="h-16 w-16">
-                <AvatarFallback className="bg-primary text-primary-foreground">
-                  <User className="h-8 w-8" />
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1">
-                <h2 className="text-xl font-bold text-foreground">
-                  {userNickname || userName || "사용자"}
-                </h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {userGym ? userGym : "소속 헬스장 없음"}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* 프로필 카드 제거 */}
 
-        {/* 프로필/인바디 폼: 항상 표시 */}
+        {/* 단순화된 폼: 운동 목적만 */}
         <Card className="bg-card border-border">
           <CardContent className="p-6 space-y-6">
             {/* 운동 목적 */}
@@ -229,138 +172,23 @@ export function MyPage({
               </Select>
             </div>
 
-            {/* 인바디 핵심 지표 */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <Label className="text-foreground">인바디 점수</Label>
-                <Input
-                  type="number"
-                  value={inbodyScore}
-                  onChange={(e) => setInbodyScore(e.target.value)}
-                  placeholder="예: 82"
-                  className="border-gray-600 bg-input-background text-white"
-                />
+            {/* 인바디 사진 촬영 CTA */}
+            <button
+              type="button"
+              onClick={() => alert('카메라/앨범 열기(구현 예정)')}
+              className="w-full border-2 border-dotted border-gray-600 rounded-xl bg-gray-900/40 hover:bg-gray-800/50 transition-colors"
+              style={{ height: '280px' }}
+            >
+              <div className="h-full w-full flex items-center justify-center">
+                <div className="flex items-center gap-3 text-gray-300">
+                  <Camera className="h-6 w-6" />
+                  <span className="text-lg font-medium">인바디 사진 촬영</span>
+                </div>
               </div>
-              <div>
-                <Label className="text-foreground">체중(kg)</Label>
-                <Input
-                  type="number"
-                  value={weightKg}
-                  onChange={(e) => setWeightKg(e.target.value)}
-                  placeholder="예: 72.5"
-                  className="border-gray-600 bg-input-background text-white"
-                />
-              </div>
-              <div>
-                <Label className="text-foreground">BMI</Label>
-                <Input
-                  type="number"
-                  value={bmi}
-                  onChange={(e) => setBmi(e.target.value)}
-                  placeholder="예: 23.1"
-                  className="border-gray-600 bg-input-background text-white"
-                />
-              </div>
-            </div>
+            </button>
 
-            {/* 체성분 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label className="text-foreground">골격근량(kg)</Label>
-                <Input
-                  type="number"
-                  value={skeletalKg}
-                  onChange={(e) => setSkeletalKg(e.target.value)}
-                  placeholder="예: 31.2"
-                  className="border-gray-600 bg-input-background text-white"
-                />
-              </div>
-              <div>
-                <Label className="text-foreground">체지방량(kg)</Label>
-                <Input
-                  type="number"
-                  value={fatMassKg}
-                  onChange={(e) => setFatMassKg(e.target.value)}
-                  placeholder="예: 16.8"
-                  className="border-gray-600 bg-input-background text-white"
-                />
-              </div>
-              <div>
-                <Label className="text-foreground">체지방률(%)</Label>
-                <Input
-                  type="number"
-                  value={bodyFatPct}
-                  onChange={(e) => setBodyFatPct(e.target.value)}
-                  placeholder="예: 18.5"
-                  className="border-gray-600 bg-input-background text-white"
-                />
-              </div>
-            </div>
-
-            {/* 부위별 근육 분석 */}
-            <div className="space-y-2">
-              <Label className="text-foreground">부위별 근육 분석(kg)</Label>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label className="text-muted-foreground text-xs">
-                    오른팔
-                  </Label>
-                  <Input
-                    type="number"
-                    value={segRightArm}
-                    onChange={(e) => setSegRightArm(e.target.value)}
-                    className="border-gray-600 bg-input-background text-white"
-                  />
-                </div>
-                <div>
-                  <Label className="text-muted-foreground text-xs">왼팔</Label>
-                  <Input
-                    type="number"
-                    value={segLeftArm}
-                    onChange={(e) => setSegLeftArm(e.target.value)}
-                    className="border-gray-600 bg-input-background text-white"
-                  />
-                </div>
-                <div>
-                  <Label className="text-muted-foreground text-xs">몸통</Label>
-                  <Input
-                    type="number"
-                    value={segTrunk}
-                    onChange={(e) => setSegTrunk(e.target.value)}
-                    className="border-gray-600 bg-input-background text-white"
-                  />
-                </div>
-                <div>
-                  <Label className="text-muted-foreground text-xs">
-                    오른다리
-                  </Label>
-                  <Input
-                    type="number"
-                    value={segRightLeg}
-                    onChange={(e) => setSegRightLeg(e.target.value)}
-                    className="border-gray-600 bg-input-background text-white"
-                  />
-                </div>
-                <div>
-                  <Label className="text-muted-foreground text-xs">
-                    왼다리
-                  </Label>
-                  <Input
-                    type="number"
-                    value={segLeftLeg}
-                    onChange={(e) => setSegLeftLeg(e.target.value)}
-                    className="border-gray-600 bg-input-background text-white"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3">
-              <Button
-                onClick={saveProfile}
-                disabled={saving}
-                className="bg-blue-500 hover:bg-blue-600"
-              >
+            <div className="flex justify-end">
+              <Button onClick={saveProfile} disabled={saving} className="bg-blue-500 hover:bg-blue-600">
                 {saving ? "저장 중..." : "저장"}
               </Button>
             </div>

@@ -447,6 +447,26 @@ export function EquipmentList({
                         <span>기본 할당시간: {eq.allocatedTime}분</span>
                       </div>
 
+                      {/* 이용 중 또는 대기 중일 때 줄서기 버튼 표시 */}
+                      {(eq.status === "in-use" || eq.status === "waiting") && (
+                        <div>
+                          <Button
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEquipmentSelect(eq);
+                            }}
+                            className="mt-1 bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1 px-3 py-1"
+                          >
+                            <Users className="h-4 w-4" />
+                            줄서기
+                            {typeof eq.waitingCount === "number" && eq.waitingCount > 0 && (
+                              <span className="text-xs ml-1">({eq.waitingCount}명)</span>
+                            )}
+                          </Button>
+                        </div>
+                      )}
+
                       {eq.currentUser && (
                         <div className="flex items-center space-x-1 text-sm text-gray-300">
                           <Users className="h-3 w-3" />

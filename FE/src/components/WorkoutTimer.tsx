@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ArrowLeft, Pause, Play, Square } from "lucide-react";
+import { ArrowLeft, Square } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Progress } from "./ui/progress";
@@ -25,7 +25,8 @@ interface WorkoutTimerProps {
 export function WorkoutTimer({ equipment, onBack, onWorkoutComplete }: WorkoutTimerProps) {
   const [timeRemaining, setTimeRemaining] = useState(equipment.allocatedTime * 60); // 분을 초로 변환
   const [isRunning, setIsRunning] = useState(true);
-  const [isPaused, setIsPaused] = useState(false);
+  // 요구사항: 이용 시간 중에는 일시정지 기능 제거
+  const [isPaused] = useState(false);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -55,9 +56,8 @@ export function WorkoutTimer({ equipment, onBack, onWorkoutComplete }: WorkoutTi
   const totalTime = equipment.allocatedTime * 60;
   const progress = ((totalTime - timeRemaining) / totalTime) * 100;
 
-  const handlePauseResume = () => {
-    setIsPaused(!isPaused);
-  };
+  // 일시정지 제거로 핸들러도 비활성화
+  const handlePauseResume = () => {};
 
   const handleStop = () => {
     setIsRunning(false);
@@ -153,22 +153,12 @@ export function WorkoutTimer({ equipment, onBack, onWorkoutComplete }: WorkoutTi
           </Card>
 
           {/* 컨트롤 버튼들 */}
-          <div className="flex space-x-4 w-full">
-            <Button
-              onClick={handlePauseResume}
-              variant="outline"
-              size="lg"
-              className="flex-1 border-gray-600 text-white hover:bg-gray-800"
-            >
-              {isPaused ? <Play className="w-5 h-5 mr-2" /> : <Pause className="w-5 h-5 mr-2" />}
-              {isPaused ? '재개' : '일시정지'}
-            </Button>
-
+          <div className="flex justify-center w-full">
             <Button
               onClick={handleStop}
               variant="destructive"
               size="lg"
-              className="flex-1"
+              className="w-full"
             >
               <Square className="w-5 h-5 mr-2" />
               이용 종료
