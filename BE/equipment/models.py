@@ -23,6 +23,17 @@ class Equipment(models.Model):
         ('OUT_OF_ORDER', 'Out of Order'),
     ]
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='AVAILABLE')
+    # 운영자에 의해 설정되는 기구 운영 상태 (정상 / 점검중)
+    OPERATIONAL_STATE_CHOICES = [
+        ('NORMAL', '정상'),
+        ('MAINTENANCE', '점검중'),
+    ]
+    operational_state = models.CharField(
+        max_length=20,
+        choices=OPERATIONAL_STATE_CHOICES,
+        default='NORMAL',
+        help_text='운영자가 설정하는 기구의 운영 상태 (정상 / 점검중)'
+    )
     base_session_time_minutes = models.IntegerField(default=15)
     image_url = models.URLField(max_length=500, blank=True, null=True, help_text="운동기구 이미지 URL")
 

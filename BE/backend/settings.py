@@ -157,3 +157,22 @@ try:
 except ImportError:
     print("AI 모델 유틸리티를 로드하는 중 오류 발생 (무시하고 진행)")
 
+# ==========================================================
+# Celery 설정
+# ==========================================================
+# 브로커 URL은 .env 또는 환경변수로 설정하세요. 기본은 로컬 Redis입니다.
+CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default=CELERY_BROKER_URL)
+
+# Beat 스케줄: expire task를 1분마다 실행하여 NOTIFIED 예약 만료 처리를 수행합니다.
+from datetime import timedelta
+
+CELERY_BEAT_SCHEDULE = {
+    'expire-reservations-every-minute': {
+        'task': 'workouts.tasks.expire_notified_reservations',
+        'schedule': 60.0,  # seconds
+        'args': (),
+    },
+}
+
+
