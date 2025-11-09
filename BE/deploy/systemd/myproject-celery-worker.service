@@ -1,0 +1,18 @@
+[Unit]
+Description=Celery Worker for myproject
+After=network.target redis-server.service
+Requires=redis-server.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/healthqueue
+EnvironmentFile=/home/ubuntu/healthqueue/deploy/env
+ExecStart=/home/ubuntu/healthqueue/venv/bin/celery -A backend worker --loglevel=${CELERY_LOG_LEVEL} --concurrency=4
+Restart=on-failure
+RestartSec=5s
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

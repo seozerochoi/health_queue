@@ -1,0 +1,17 @@
+[Unit]
+Description=Celery Beat for myproject
+After=network.target redis-server.service
+Requires=redis-server.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/healthqueue
+EnvironmentFile=/home/ubuntu/healthqueue/deploy/env
+ExecStart=/home/ubuntu/healthqueue/venv/bin/celery -A backend beat --loglevel=${CELERY_LOG_LEVEL} --pidfile=/run/celery/beat.pid --schedule=/home/ubuntu/healthqueue/celerybeat-schedule
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

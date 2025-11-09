@@ -8,3 +8,5 @@ venv/
 
 # Environment
 .env
+# Deployment files
+deploy/README_CELERY.md
