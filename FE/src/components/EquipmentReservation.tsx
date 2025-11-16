@@ -57,20 +57,89 @@ export function EquipmentReservation({ equipment, onBack, onStartNFC, onReservat
   };
 
   const handleReserve = () => {
+    const token = localStorage.getItem('access_token');
     if (equipment.status === 'available') {
-      setIsReserved(true);
-      onStartNFC();
-      onReservationComplete(equipment, 'confirmed');
+      // try to start session immediately via API
+      fetch(`${process.env.REACT_APP_API_BASE || 'http://43.201.88.27'}/api/workouts/start/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ equipment_id: equipment.id }),
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const txt = await res.text();
+            throw new Error(txt || 'start failed');
+          }
+          return res.json();
+        })
+        .then((data) => {
+          // server returns UsageSession serializer; allocated_duration_minutes expected
+          const allocated = data.allocated_duration_minutes || equipment.allocatedTime;
+          setTimeLeft(allocated * 60);
+          setIsUsing(true);
+          setIsReserved(false);
+          onReservationComplete(equipment, 'confirmed');
+        })
+        .catch((err) => {
+          console.error('Start failed', err);
+          alert('시작에 실패했습니다: ' + err.message);
+        });
     } else {
-      setIsReserved(true);
-      setQueuePosition((equipment.waitingCount || 0) + 1);
-      onReservationComplete(equipment, 'waiting', (equipment.waitingCount || 0) + 1);
+      // join queue
+      const token = localStorage.getItem('access_token');
+      fetch(`${process.env.REACT_APP_API_BASE || 'http://43.201.88.27'}/api/workouts/join-queue/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ equipment_id: Number(equipment.id) }),
+      })
+        .then(async (res) => {
+          const json = await res.json();
+          if (!res.ok) throw new Error(JSON.stringify(json));
+          setIsReserved(true);
+          setQueuePosition(json.position || (equipment.waitingCount || 0) + 1);
+          onReservationComplete(equipment, 'waiting', json.position || (equipment.waitingCount || 0) + 1);
+        })
+        .catch((err) => {
+          console.error('Join queue failed', err);
+          alert('대기열 등록에 실패했습니다.');
+        });
     }
   };
 
   const handleStartUsing = () => {
-    setIsUsing(true);
-    setIsReserved(false);
+    // For NFC simulation in UI: attempt to start via API (if not already started)
+    const token = localStorage.getItem('access_token');
+    fetch(`${process.env.REACT_APP_API_BASE || 'http://43.201.88.27'}/api/workouts/start/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ equipment_id: equipment.id }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(txt || 'start failed');
+        }
+        return res.json();
+      })
+      .then((data) => {
+        const allocated = data.allocated_duration_minutes || equipment.allocatedTime;
+        setTimeLeft(allocated * 60);
+        setIsUsing(true);
+        setIsReserved(false);
+      })
+      .catch((err) => {
+        console.error('Start failed', err);
+        alert('사용 시작에 실패했습니다: ' + err.message);
+      });
   };
 
   const handleExtendTime = () => {
@@ -243,8 +312,29 @@ export function EquipmentReservation({ equipment, onBack, onStartNFC, onReservat
                 )}
                 <Button 
                   onClick={() => {
-                    setIsUsing(false);
-                    setShowFeedback(true);
+                    // call end API then show feedback
+                    const token = localStorage.getItem('access_token');
+                    fetch(`${process.env.REACT_APP_API_BASE || 'http://43.201.88.27'}/api/workouts/end/`, {
+                      method: 'POST',
+                      headers: {
+                        Authorization: `Bearer ${token}`,
+                      },
+                    })
+                      .then(async (res) => {
+                        if (!res.ok) {
+                          const txt = await res.text();
+                          throw new Error(txt || 'end failed');
+                        }
+                        return res.json();
+                      })
+                      .then(() => {
+                        setIsUsing(false);
+                        setShowFeedback(true);
+                      })
+                      .catch((err) => {
+                        console.error('End failed', err);
+                        alert('사용 종료에 실패했습니다: ' + err.message);
+                      });
                   }}
                   variant="destructive"
                   className="bg-red-500 hover:bg-red-600"

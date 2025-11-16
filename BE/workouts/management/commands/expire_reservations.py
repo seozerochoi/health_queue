@@ -8,14 +8,14 @@ import datetime
 class Command(BaseCommand):
     help = 'Expire NOTIFIED reservations older than the configured timeout and notify next waiting user.'
 
-    # 기본 만료 시간(분)
-    DEFAULT_TIMEOUT_MINUTES = 10
+    # 기본 만료 시간(분) - 데모를 위해 기본을 0.25분(15초)로 설정
+    DEFAULT_TIMEOUT_MINUTES = 0.25
 
     def add_arguments(self, parser):
         parser.add_argument(
             '--minutes',
-            type=int,
-            help='만료 타임아웃(분). 기본값은 10분입니다.',
+            type=float,
+            help='만료 타임아웃(분). 소수값 허용 (예: 0.25 = 15초). 기본값은 0.25분입니다.',
             default=self.DEFAULT_TIMEOUT_MINUTES,
         )
 

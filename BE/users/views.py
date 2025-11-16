@@ -11,6 +11,12 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import UserSerializer, RegisterSerializer, UserProfileSerializer
 from .models import UserProfile
 import logging
+import re
+import boto3
+from rest_framework.parsers import MultiPartParser
+from rest_framework.views import APIView
+from django.core.files.uploadedfile import InMemoryUploadedFile
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -125,3 +131,147 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 class MyTokenObtainPairView(TokenObtainPairView):
     serializer_class = MyTokenObtainPairSerializer
+
+
+class InbodyAnalyzeView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser]
+
+    def post(self, request):
+        # Expecting multipart/form-data with field 'image'
+        image_file = request.FILES.get('image')
+        if not image_file:
+            return Response({'detail': 'No image provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Read bytes
+            if isinstance(image_file, InMemoryUploadedFile):
+                img_bytes = image_file.read()
+            else:
+                img_bytes = image_file.file.read()
+
+            # Call AWS Rekognition detect_text
+            rek = boto3.client('rekognition',
+                               region_name=getattr(settings, 'AWS_REGION', None))
+            resp = rek.detect_text(Image={'Bytes': img_bytes})
+
+            # Build a list of detections with type/confidence for better post-processing
+            detections = resp.get('TextDetections', []) or []
+            items = []
+            for d in detections:
+                items.append({
+                    'text': d.get('DetectedText', '').strip(),
+                    'type': d.get('Type'),
+                    'confidence': d.get('Confidence'),
+                    'geometry': d.get('Geometry'),
+                })
+
+            # Helper: normalize numeric string -> float (remove commas/fullwidth digits)
+            def normalize_num_str(s: str) -> str:
+                if not s:
+                    return s
+                # replace full-width digits
+                s = s.replace('\uFF10', '0').replace('\uFF11', '1').replace('\uFF12', '2').replace('\uFF13', '3')
+                s = s.replace('\uFF14', '4').replace('\uFF15', '5').replace('\uFF16', '6').replace('\uFF17', '7')
+                s = s.replace('\uFF18', '8').replace('\uFF19', '9')
+                # remove commas and spaces
+                s = s.replace(',', '').replace('\u2009', '').strip()
+                return s
+
+            def to_float(s: str):
+                try:
+                    s2 = normalize_num_str(s)
+                    return float(s2)
+                except Exception:
+                    return None
+
+            # Helper: find number in a text using common patterns
+            def find_number_in_text(text: str):
+                if not text:
+                    return None
+                # common number patterns like 70, 70.1, 70.1kg, 70kg
+                m = re.search(r"([0-9]+(?:[\.,][0-9]+)?)", text)
+                if m:
+                    return to_float(m.group(1))
+                return None
+
+            # Sequence-based search: look for a keyword then number within same text or adjacent items
+            def find_by_keywords(keywords_regex_list, unit_hint=None):
+                # search lines first
+                for idx, it in enumerate(items):
+                    text = it['text']
+                    for kw in keywords_regex_list:
+                        if re.search(kw, text, re.IGNORECASE):
+                            # try to extract number from same text
+                            num = None
+                            # common pattern: keyword followed by number
+                            m = re.search(kw + r"[:\s]*([0-9]+(?:[\.,][0-9]+)?)", text, re.IGNORECASE)
+                            if m:
+                                num = to_float(m.group(1))
+                            else:
+                                # try any number in same text
+                                num = find_number_in_text(text)
+                            if num is not None:
+                                return num
+                            # else try following few items concatenated
+                            look = ' '.join([items[j]['text'] for j in range(idx, min(idx+3, len(items)))])
+                            num = find_number_in_text(look)
+                            if num is not None:
+                                return num
+                return None
+
+            # Build concatenated lines for fallback
+            lines = [it['text'] for it in items if it.get('type') == 'LINE']
+            concat = '\n'.join(lines)
+
+            parsed = {}
+
+            # weight: keywords in Korean/English
+            parsed['weight_kg'] = find_by_keywords([r"체중", r"몸무게", r"weight"], unit_hint='kg')
+            # also try kg tokens anywhere
+            if parsed['weight_kg'] is None:
+                m = re.search(r"([0-9]+(?:[\.,][0-9]+)?)\s*(kg|㎏)\b", concat, re.IGNORECASE)
+                if m:
+                    parsed['weight_kg'] = to_float(m.group(1))
+
+            # body fat percent: keywords and percent symbols
+            parsed['body_fat_percentage'] = find_by_keywords([r"체지방률", r"체지방", r"체지방율", r"body fat", r"bodyfat"], unit_hint='%')
+            if parsed['body_fat_percentage'] is None:
+                m = re.search(r"([0-9]+(?:[\.,][0-9]+)?)\s*(%|퍼센트)", concat, re.IGNORECASE)
+                if m:
+                    parsed['body_fat_percentage'] = to_float(m.group(1))
+
+            # skeletal muscle mass
+            parsed['skeletal_muscle_mass_kg'] = find_by_keywords([r"골격근량", r"골격근", r"skeletal muscle", r"SMM", r"muscle"], unit_hint='kg')
+            if parsed['skeletal_muscle_mass_kg'] is None:
+                # try patterns like 'xx kg' with muscle keywords nearby
+                m = re.search(r"(골격근량|골격근|SMM|skeletal muscle|muscle)[:\s]*([0-9]+(?:[\.,][0-9]+)?)\s*(kg)?", concat, re.IGNORECASE)
+                if m:
+                    parsed['skeletal_muscle_mass_kg'] = to_float(m.group(2))
+
+            # BMI
+            parsed['bmi'] = find_by_keywords([r"BMI", r"체질량지수"], unit_hint=None)
+            if parsed['bmi'] is None:
+                m = re.search(r"\b([0-9]+(?:[\.,][0-9]+)?)\s*BMI\b", concat, re.IGNORECASE)
+                if m:
+                    parsed['bmi'] = to_float(m.group(1))
+
+            # Fallback heuristics: if weight missing, find any standalone kg number
+            if parsed.get('weight_kg') is None:
+                m = re.search(r"([0-9]+(?:[\.,][0-9]+)?)\s*(kg|㎏)\b", concat, re.IGNORECASE)
+                if m:
+                    parsed['weight_kg'] = to_float(m.group(1))
+
+            # Attach raw detected lines with confidences for debugging and possible UI display
+            raw_lines = [{'text': it['text'], 'type': it['type'], 'confidence': it.get('confidence')} for it in items if it.get('type') == 'LINE']
+
+            result = {
+                'parsed': parsed,
+                'raw_lines': raw_lines,
+            }
+
+            return Response(result)
+
+        except Exception as e:
+            logger.exception('Inbody analyze failed')
+            return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

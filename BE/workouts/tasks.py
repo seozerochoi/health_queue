@@ -6,7 +6,7 @@ from .models import Reservation
 
 
 @shared_task(bind=True)
-def expire_notified_reservations(self, timeout_minutes: int = 5, batch_size: int = 50):
+def expire_notified_reservations(self, timeout_minutes: float = 0.25, batch_size: int = 50):
     """
     Expire NOTIFIED reservations older than timeout_minutes and notify next waiting users.
     This task is intended to be run periodically (or scheduled per-reservation).

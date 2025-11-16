@@ -11,6 +11,7 @@ from .serializers import UsageSessionSerializer, ReservationSerializer
 from equipment.models import Equipment # Equipment 모델 import
 from users.models import UserProfile # UserProfile 모델 import
 from django.utils import timezone
+from django.db import transaction
 import datetime
 
 # "AI 두뇌 사용설명서"에서 예측 함수를 가져옵니다.
@@ -31,37 +32,76 @@ class StartSessionView(APIView):
 
     def post(self, request, *args, **kwargs):
         nfc_tag_id = request.data.get('nfc_tag_id')
+        equipment_id = request.data.get('equipment_id')
         user = request.user
 
-        if not nfc_tag_id:
-            return Response({'error': 'NFC 태그 ID가 필요합니다.'}, status=status.HTTP_400_BAD_REQUEST)
+        # Validate input: allow equipment lookup by nfc_tag_id or equipment_id
+        if not nfc_tag_id and not equipment_id:
+            return Response({'error': 'nfc_tag_id 또는 equipment_id 중 하나가 필요합니다.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            equipment = Equipment.objects.get(nfc_tag_id=nfc_tag_id)
+            if equipment_id:
+                equipment = Equipment.objects.get(id=equipment_id)
+            else:
+                equipment = Equipment.objects.get(nfc_tag_id=nfc_tag_id)
         except Equipment.DoesNotExist:
-            return Response({'error': '해당 NFC 태그를 가진 기구가 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': '해당 기구를 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
 
-        if equipment.status != 'AVAILABLE':
-            return Response({'error': '현재 사용할 수 없는 기구입니다.'}, status=status.HTTP_409_CONFLICT)
-        
-        if UsageSession.objects.filter(user=user, end_time__isnull=True).exists():
-            return Response({'error': '이미 다른 기구를 사용 중입니다.'}, status=status.HTTP_409_CONFLICT)
+        # Use DB transaction and row-level lock to avoid races
+        from django.db import transaction
+        with transaction.atomic():
+            equipment = Equipment.objects.select_for_update().get(pk=equipment.pk)
+
+            if equipment.status != 'AVAILABLE':
+                return Response({'error': '현재 사용할 수 없는 기구입니다.'}, status=status.HTTP_409_CONFLICT)
+
+            # If the user already has an active session, end it immediately (simulate switching machines)
+            existing_session = UsageSession.objects.filter(user=user, end_time__isnull=True).first()
+            if existing_session:
+                # end previous session
+                existing_session.end_time = timezone.now()
+                existing_session.save()
+
+                prev_equipment = existing_session.equipment
+                prev_equipment.status = 'AVAILABLE'
+                prev_equipment.save()
+
+                # notify next waiting on previous equipment
+                next_prev = Reservation.objects.filter(equipment=prev_equipment, status='WAITING').order_by('created_at').first()
+                if next_prev:
+                    next_prev.status = 'NOTIFIED'
+                    next_prev.notified_at = timezone.now()
+                    next_prev.save()
+
+            # Check queue: if other users in queue, only NOTIFIED user may start
+            other_in_queue = Reservation.objects.filter(equipment=equipment, status__in=['WAITING', 'NOTIFIED']).exclude(user=user).exists()
+            reservation = Reservation.objects.filter(equipment=equipment, user=user, status='NOTIFIED').first()
+            if other_in_queue and not reservation:
+                return Response({'error': '대기열이 있습니다. 알림 받은 사용자만 시작할 수 있습니다.'}, status=status.HTTP_409_CONFLICT)
 
         allocated_time = 0
         session_type = ''
 
+        # If there are other users in queue (WAITING or NOTIFIED), only allow start
+        # for the user who has been NOTIFIED. If the equipment has any waiting/notified
+        # reservations for other users, deny start for users who are not the notified one.
+        other_in_queue = Reservation.objects.filter(equipment=equipment, status__in=['WAITING', 'NOTIFIED']).exclude(user=user).exists()
         reservation = Reservation.objects.filter(
-            equipment=equipment, 
+            equipment=equipment,
             user=user,
             status='NOTIFIED'
         ).first()
 
-        if reservation:
-            # 예약자일 경우: 고정 시간 할당 (변경 없음)
-            allocated_time = equipment.base_session_time_minutes
-            session_type = 'BASE'
-            reservation.status = 'COMPLETED'
-            reservation.save()
+        if other_in_queue and not reservation:
+            # There is someone else waiting or notified — user cannot bypass the queue
+            return Response({'error': '대기열이 있습니다. 알림 받은 사용자만 시작할 수 있습니다.'}, status=status.HTTP_409_CONFLICT)
+
+            if reservation:
+                # 예약자일 경우: 고정 시간 할당 (변경 없음)
+                allocated_time = equipment.base_session_time_minutes
+                session_type = 'BASE'
+                reservation.status = 'COMPLETED'
+                reservation.save()
         else:
             # --- AI 추천 로직 시작 ---
             # 예약자가 아닐 경우 (비어있는 기구 사용)
@@ -141,30 +181,34 @@ class EndSessionView(APIView):
 
     def post(self, request, *args, **kwargs):
         user = request.user
+        # 트랜잭션과 row-level lock을 사용해 레이스 컨디션을 방지합니다.
+        from django.db import transaction
 
-        # 1. 현재 진행 중인 운동 세션을 찾습니다.
         try:
-            current_session = UsageSession.objects.get(user=user, end_time__isnull=True)
+            with transaction.atomic():
+                # 진행중인 세션과 관련된 행들을 select_for_update로 잠급니다.
+                current_session = UsageSession.objects.select_for_update().get(user=user, end_time__isnull=True)
+
+                # 종료 시간 기록
+                current_session.end_time = timezone.now()
+                current_session.save()
+
+                # 장비 상태를 잠그고 AVAILABLE로 변경
+                equipment = Equipment.objects.select_for_update().get(pk=current_session.equipment.pk)
+                equipment.status = 'AVAILABLE'
+                equipment.save()
+
+
+                # 다음 대기자에게 알림 보내기 (해당 행도 트랜잭션 내에서 처리)
+                next_reservation = Reservation.objects.select_for_update(skip_locked=True).filter(equipment=equipment, status='WAITING').order_by('created_at').first()
+                if next_reservation:
+                    next_reservation.status = 'NOTIFIED'
+                    next_reservation.notified_at = timezone.now()
+                    next_reservation.save()
+                    # TODO: 다음 사용자에게 FCM 푸시 알림을 보내는 로직 추가
+
         except UsageSession.DoesNotExist:
             return Response({'error': '현재 진행 중인 운동 세션이 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
-
-        # 2. 세션 종료 시간 기록 및 기구 상태 변경
-        current_session.end_time = timezone.now()
-        current_session.save()
-
-        equipment = current_session.equipment
-        equipment.status = 'AVAILABLE'
-        equipment.save()
-
-        # TODO: 아두이노에 소켓 통신으로 'LOCK' 신호 보내는 로직 추가
-
-        # 3. 다음 대기자에게 알림 보내기
-        next_reservation = Reservation.objects.filter(equipment=equipment, status='WAITING').order_by('created_at').first()
-        if next_reservation:
-            next_reservation.status = 'NOTIFIED'
-            next_reservation.notified_at = timezone.now()
-            next_reservation.save()
-            # TODO: 다음 사용자에게 FCM 푸시 알림을 보내는 로직 추가
 
         return Response({'message': '운동이 성공적으로 종료되었습니다.'}, status=status.HTTP_200_OK)
 
