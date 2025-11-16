@@ -6,6 +6,7 @@ import { Label } from "./ui/label";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Camera } from "lucide-react";
+import { InBodyImageUpload } from "./InBodyImageUpload";
 
 interface MyPageProps {
   onBack: () => void;
@@ -27,10 +28,20 @@ export function MyPage({
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showInBodyUpload, setShowInBodyUpload] = useState(false);
 
   // 폼 상태
   const [exerciseGoal, setExerciseGoal] = useState<string>("");
-  // 단순화: 운동 목적만 유지
+  
+  // 인바디 데이터 상태
+  const [inbodyData, setInbodyData] = useState<any>({
+    weight_kg: null,
+    skeletal_muscle_mass_kg: null,
+    body_fat_mass_kg: null,
+    body_fat_percentage: null,
+    bmi: null,
+    inbody_score: null,
+  });
 
   // 공통: 토큰 만료 시 자동 갱신 후 재시도하는 fetch 래퍼
   const fetchWithAuth = async (
@@ -93,6 +104,16 @@ export function MyPage({
         if (!res.ok) return;
         const data = await res.json();
         setExerciseGoal(data.exercise_goal || "");
+        
+        // 인바디 데이터 로드
+        setInbodyData({
+          weight_kg: data.weight_kg,
+          skeletal_muscle_mass_kg: data.skeletal_muscle_mass_kg,
+          body_fat_mass_kg: data.body_fat_mass_kg,
+          body_fat_percentage: data.body_fat_percentage,
+          bmi: data.bmi,
+          inbody_score: data.inbody_score,
+        });
       } finally {
         setLoading(false);
       }
@@ -104,7 +125,8 @@ export function MyPage({
     try {
       setSaving(true);
       const body: any = {
-        exercise_goal: exerciseGoal || null
+        exercise_goal: exerciseGoal || null,
+        ...inbodyData, // 인바디 데이터 포함
       };
 
       const res = await fetchWithAuth(
@@ -124,6 +146,16 @@ export function MyPage({
     } finally {
       setSaving(false);
     }
+  };
+
+  // 인바디 데이터 추출 완료 시 호출
+  const handleInBodyDataExtracted = (data: any) => {
+    setInbodyData({
+      ...inbodyData,
+      ...data,
+    });
+    setShowInBodyUpload(false);
+    alert("인바디 데이터가 추출되었습니다. 저장 버튼을 눌러 저장하세요.");
   };
 
   return (
@@ -173,19 +205,73 @@ export function MyPage({
             </div>
 
             {/* 인바디 사진 촬영 CTA */}
-            <button
-              type="button"
-              onClick={() => alert('카메라/앨범 열기(구현 예정)')}
-              className="w-full border-2 border-dotted border-gray-600 rounded-xl bg-gray-900/40 hover:bg-gray-800/50 transition-colors"
-              style={{ height: '280px' }}
-            >
-              <div className="h-full w-full flex items-center justify-center">
-                <div className="flex items-center gap-3 text-gray-300">
-                  <Camera className="h-6 w-6" />
-                  <span className="text-lg font-medium">인바디 사진 촬영</span>
-                </div>
-              </div>
-            </button>
+            {showInBodyUpload ? (
+              <InBodyImageUpload
+                onDataExtracted={handleInBodyDataExtracted}
+                onCancel={() => setShowInBodyUpload(false)}
+              />
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowInBodyUpload(true)}
+                  className="w-full border-2 border-dotted border-gray-600 rounded-xl bg-gray-900/40 hover:bg-gray-800/50 transition-colors"
+                  style={{ minHeight: '200px' }}
+                >
+                  <div className="h-full w-full flex items-center justify-center">
+                    <div className="flex items-center gap-3 text-gray-300">
+                      <Camera className="h-6 w-6" />
+                      <span className="text-lg font-medium">인바디 사진 촬영</span>
+                    </div>
+                  </div>
+                </button>
+
+                {/* 인바디 데이터 표시 */}
+                {(inbodyData.weight_kg || inbodyData.skeletal_muscle_mass_kg) && (
+                  <div className="bg-gray-800/50 p-4 rounded-lg">
+                    <h4 className="font-semibold mb-3 text-green-400">현재 인바디 데이터</h4>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      {inbodyData.weight_kg && (
+                        <div>
+                          <div className="text-gray-400">체중</div>
+                          <div className="text-white font-semibold">{inbodyData.weight_kg} kg</div>
+                        </div>
+                      )}
+                      {inbodyData.skeletal_muscle_mass_kg && (
+                        <div>
+                          <div className="text-gray-400">골격근량</div>
+                          <div className="text-white font-semibold">{inbodyData.skeletal_muscle_mass_kg} kg</div>
+                        </div>
+                      )}
+                      {inbodyData.body_fat_mass_kg && (
+                        <div>
+                          <div className="text-gray-400">체지방량</div>
+                          <div className="text-white font-semibold">{inbodyData.body_fat_mass_kg} kg</div>
+                        </div>
+                      )}
+                      {inbodyData.body_fat_percentage && (
+                        <div>
+                          <div className="text-gray-400">체지방률</div>
+                          <div className="text-white font-semibold">{inbodyData.body_fat_percentage} %</div>
+                        </div>
+                      )}
+                      {inbodyData.bmi && (
+                        <div>
+                          <div className="text-gray-400">BMI</div>
+                          <div className="text-white font-semibold">{inbodyData.bmi}</div>
+                        </div>
+                      )}
+                      {inbodyData.inbody_score && (
+                        <div>
+                          <div className="text-gray-400">인바디점수</div>
+                          <div className="text-white font-semibold">{inbodyData.inbody_score}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
 
             <div className="flex justify-end">
               <Button onClick={saveProfile} disabled={saving} className="bg-blue-500 hover:bg-blue-600">

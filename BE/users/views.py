@@ -10,7 +10,9 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import UserSerializer, RegisterSerializer, UserProfileSerializer
 from .models import UserProfile
+from .ocr_service import InBodyOCRService
 import logging
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -125,3 +127,77 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 class MyTokenObtainPairView(TokenObtainPairView):
     serializer_class = MyTokenObtainPairSerializer
+
+
+# 인바디 이미지 업로드 및 OCR 처리
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_inbody_image(request):
+    """
+    인바디 이미지를 업로드하고 AWS Rekognition으로 OCR 처리
+    
+    Request Body:
+        - image: base64 인코딩된 이미지 문자열 또는 파일
+        - auto_save: True일 경우 자동으로 프로필에 저장 (default: False)
+    
+    Returns:
+        - data: 추출된 인바디 데이터
+        - detected_texts: 감지된 모든 텍스트 (확인용)
+    """
+    try:
+        # 프로필 가져오기 또는 생성
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        
+        # 이미지 데이터 가져오기
+        image_data = None
+        
+        # 1. base64 인코딩된 이미지인 경우
+        if 'image' in request.data and isinstance(request.data['image'], str):
+            image_str = request.data['image']
+            # data:image/jpeg;base64, 접두사 제거
+            if 'base64,' in image_str:
+                image_str = image_str.split('base64,')[1]
+            image_data = base64.b64decode(image_str)
+        
+        # 2. 파일 업로드인 경우
+        elif 'image' in request.FILES:
+            image_file = request.FILES['image']
+            image_data = image_file.read()
+        
+        if not image_data:
+            return Response(
+                {'error': '이미지 데이터가 필요합니다.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # OCR 서비스 초기화 및 처리
+        ocr_service = InBodyOCRService()
+        result = ocr_service.process_inbody_image(image_data)
+        
+        # auto_save가 True이면 프로필에 자동 저장
+        auto_save = request.data.get('auto_save', False)
+        if auto_save and result['data']:
+            for field_name, value in result['data'].items():
+                if hasattr(profile, field_name):
+                    setattr(profile, field_name, value)
+            profile.save()
+            
+            return Response({
+                'message': '인바디 데이터가 성공적으로 저장되었습니다.',
+                'data': result['data'],
+                'detected_texts': result['detected_texts']
+            }, status=status.HTTP_200_OK)
+        
+        # auto_save가 False이면 데이터만 반환
+        return Response({
+            'message': 'OCR 처리가 완료되었습니다.',
+            'data': result['data'],
+            'detected_texts': result['detected_texts']
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"인바디 이미지 처리 오류: {str(e)}")
+        return Response(
+            {'error': f'이미지 처리 중 오류가 발생했습니다: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
