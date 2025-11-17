@@ -147,6 +147,22 @@ REST_FRAMEWORK = {
     )
 }
 
+# Simple JWT 설정: 액세스/리프레시 토큰 수명 연장
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    # 액세스 토큰 유효 시간 (예: 30분)
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
+    # 리프레시 토큰 유효 시간 (예: 7일)
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    # 리프레시 토큰 회전 사용 여부 (회전 사용 시 추가 구현 권장)
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': False,
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+}
+
 # ==========================================================
 # 6. AI 모델 로드 설정 (파일 맨 아래)
 # (이전에 추가했던 AI 모델 로더도 여기에 포함되어야 합니다)
@@ -165,8 +181,6 @@ CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default=CELERY_BROKER_URL)
 
 # Beat 스케줄: expire task를 1분마다 실행하여 NOTIFIED 예약 만료 처리를 수행합니다.
-from datetime import timedelta
-
 CELERY_BEAT_SCHEDULE = {
     'expire-reservations-every-minute': {
         'task': 'workouts.tasks.expire_notified_reservations',

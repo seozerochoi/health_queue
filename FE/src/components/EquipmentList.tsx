@@ -248,6 +248,13 @@ export function EquipmentList({
     };
 
     fetchEquipment();
+    // 5초마다 자동 새로고침 (실시간 상태 반영)
+    const interval = setInterval(() => {
+      console.log("🔄 기구 목록 자동 새로고침 (3초)");
+      fetchEquipment();
+    }, 3000);
+
+    return () => clearInterval(interval);
   }, [gymName]);
 
   const categories = [
@@ -460,9 +467,12 @@ export function EquipmentList({
                           >
                             <Users className="h-4 w-4" />
                             줄서기
-                            {typeof eq.waitingCount === "number" && eq.waitingCount > 0 && (
-                              <span className="text-xs ml-1">({eq.waitingCount}명)</span>
-                            )}
+                            {typeof eq.waitingCount === "number" &&
+                              eq.waitingCount > 0 && (
+                                <span className="text-xs ml-1">
+                                  ({eq.waitingCount}명)
+                                </span>
+                              )}
                           </Button>
                         </div>
                       )}

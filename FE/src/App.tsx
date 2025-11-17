@@ -354,17 +354,54 @@ export default function App() {
     }
   };
 
-  const handleEquipmentSelect = (equipment: Equipment) => {
-    // 기구 상태가 'available'이면 예약/NFC 단계를 건너뛰고 바로 타이머 시작
+  const handleEquipmentSelect = async (equipment: Equipment) => {
+    setSelectedEquipment(equipment);
+
+    // 기구 상태가 'available'이면 세션을 시작하고 바로 타이머로 이동
     if (equipment.status === "available") {
-      setSelectedEquipment(equipment);
-      setWorkoutStartTime(new Date());
-      setDirectWorkout(true);
-      setCurrentView("workout-timer");
+      try {
+        const token = localStorage.getItem("access_token");
+        if (!token) {
+          alert("로그인이 필요합니다.");
+          return;
+        }
+
+        // 백엔드에 세션 시작 요청
+        const response = await fetch(
+          "http://43.201.88.27/api/workouts/start/",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              equipment_id: parseInt(equipment.id),
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("세션 시작 실패:", response.status, errorText);
+          alert("운동 세션 시작에 실패했습니다.");
+          return;
+        }
+
+        const sessionData = await response.json();
+        console.log("세션 시작 성공:", sessionData);
+
+        setWorkoutStartTime(new Date());
+        setDirectWorkout(true);
+        setCurrentView("workout-timer");
+      } catch (error) {
+        console.error("세션 시작 중 오류:", error);
+        alert("운동 세션 시작 중 오류가 발생했습니다.");
+      }
       return;
     }
+
     // 그 외(in-use, waiting 등)는 기존 예약 흐름 유지
-    setSelectedEquipment(equipment);
     setDirectWorkout(false);
     setCurrentView("equipment-reservation");
   };
