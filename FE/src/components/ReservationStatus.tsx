@@ -5,13 +5,23 @@ import { Badge } from "./ui/badge";
 
 interface Reservation {
   id: string;
-  equipmentId: string;
-  equipmentName: string;
-  reservationTime: string;
-  duration: number;
-  status: 'confirmed' | 'waiting';
+  // support both camelCase and snake_case coming from BE
+  equipmentId?: string | number;
+  equipment_id?: string | number;
+  equipmentName?: string;
+  equipment?: string; // BE returns 'equipment' as name
+  equipmentImage?: string;
+  equipment_image?: string;
+  reservationTime?: string;
+  duration?: number;
+  equipment_allocated_time?: number;
+  equipmentAllocatedTime?: number;
+  status: "confirmed" | "waiting" | string;
   waitingPosition?: number;
-  createdAt: Date;
+  waiting_position?: number;
+  waitingCount?: number;
+  waiting_count?: number;
+  createdAt?: Date | string;
 }
 
 interface ReservationStatusProps {
@@ -20,13 +30,21 @@ interface ReservationStatusProps {
   reservations: Reservation[];
 }
 
-export function ReservationStatus({ onBack, gymName, reservations }: ReservationStatusProps) {
+export function ReservationStatus({
+  onBack,
+  gymName,
+  reservations,
+}: ReservationStatusProps) {
   const getStatusBadge = (status: string, position?: number | null) => {
     switch (status) {
       case "confirmed":
         return <Badge className="bg-green-100 text-green-700">예약 확정</Badge>;
       case "waiting":
-        return <Badge className="bg-yellow-100 text-yellow-700">대기중 ({position}번째)</Badge>;
+        return (
+          <Badge className="bg-yellow-100 text-yellow-700">
+            대기중 {position ? `(${position}번째)` : ""}
+          </Badge>
+        );
       default:
         return null;
     }
@@ -67,44 +85,85 @@ export function ReservationStatus({ onBack, gymName, reservations }: Reservation
               </CardContent>
             </Card>
           ) : (
-            reservations.map((reservation) => (
-              <Card key={reservation.id} className="bg-card border-border">
-                <CardHeader className="pb-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <CardTitle className="text-foreground">
-                        {reservation.equipmentName}
-                      </CardTitle>
-                      <div className="flex items-center space-x-2 mt-2">
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">
-                          {reservation.reservationTime}
-                        </span>
+            reservations.map((reservation) => {
+              const name =
+                reservation.equipmentName || reservation.equipment || "기구";
+              const image =
+                reservation.equipment_image ||
+                reservation.equipmentImage ||
+                null;
+              const position =
+                reservation.waitingPosition ??
+                reservation.waiting_position ??
+                null;
+              const allocated =
+                reservation.equipment_allocated_time ??
+                reservation.equipmentAllocatedTime ??
+                reservation.duration ??
+                null;
+              const eqId =
+                reservation.equipment_id ?? reservation.equipmentId ?? null;
+
+              return (
+                <Card key={reservation.id} className="bg-card border-border">
+                  <CardHeader className="pb-4">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-start space-x-3">
+                        {image ? (
+                          <img
+                            src={image}
+                            alt={String(name)}
+                            className="h-16 w-16 rounded-md object-cover"
+                          />
+                        ) : (
+                          <div className="h-16 w-16 rounded-md bg-muted flex items-center justify-center text-sm text-muted-foreground">
+                            이미지 없음
+                          </div>
+                        )}
+
+                        <div>
+                          <CardTitle className="text-foreground">
+                            {name}
+                          </CardTitle>
+                          <div className="flex items-center space-x-2 mt-2 text-sm text-muted-foreground">
+                            <Clock className="h-4 w-4" />
+                            <span>{reservation.reservationTime}</span>
+                            {allocated ? (
+                              <span className="ml-2">
+                                권장 시간: {allocated}분
+                              </span>
+                            ) : null}
+                            {eqId ? (
+                              <span className="ml-2">• ID: {eqId}</span>
+                            ) : null}
+                          </div>
+                        </div>
                       </div>
+
+                      {getStatusBadge(String(reservation.status), position)}
                     </div>
-                    {getStatusBadge(reservation.status, reservation.waitingPosition)}
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="flex space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="border-gray-600 text-gray-300 hover:bg-gray-700"
-                    >
-                      예약 변경
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="border-red-600 text-red-400 hover:bg-red-900/20"
-                    >
-                      예약 취소
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="flex space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-gray-600 text-gray-300 hover:bg-gray-700"
+                      >
+                        예약 변경
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-red-600 text-red-400 hover:bg-red-900/20"
+                      >
+                        예약 취소
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })
           )}
         </div>
       </div>

@@ -30,6 +30,13 @@ class ReservationViewSet(viewsets.ModelViewSet):
     queryset = Reservation.objects.all()
     serializer_class = ReservationSerializer
 
+    def get_queryset(self):
+        # Admin/staff can view all reservations; regular users only their own.
+        user = self.request.user
+        if user.is_staff or user.is_superuser:
+            return Reservation.objects.all()
+        return Reservation.objects.filter(user=user)
+
 class StartSessionView(APIView):
     permission_classes = [IsAuthenticated]
 

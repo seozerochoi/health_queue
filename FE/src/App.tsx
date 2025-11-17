@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AuthInitial } from "./components/AuthInitial";
 import SignUp from "./components/SignUp";
 import { SignUpUserInfo } from "./components/SignUpUserInfo";
@@ -24,13 +24,22 @@ import { BottomNavigation } from "./components/BottomNavigation";
 // Types moved to separate files
 interface Reservation {
   id: string;
-  equipmentId: string;
-  equipmentName: string;
-  reservationTime: string;
-  duration: number;
-  status: "confirmed" | "waiting";
+  equipmentId?: string | number;
+  equipment_id?: string | number;
+  equipmentName?: string;
+  equipment?: string;
+  equipment_image?: string;
+  equipmentImage?: string;
+  reservationTime?: string;
+  duration?: number;
+  equipment_allocated_time?: number;
+  equipmentAllocatedTime?: number;
+  status: "confirmed" | "waiting" | string;
   waitingPosition?: number;
-  createdAt: Date;
+  waiting_position?: number;
+  waitingCount?: number;
+  waiting_count?: number;
+  createdAt?: Date;
 }
 
 interface RegisteredUser {
@@ -431,6 +440,106 @@ export default function App() {
     setReservations((prev) => [...prev, ...newReservations]);
     setCurrentView("reservation-status");
   };
+
+  // Fetch reservations from backend for the current user. Will attempt
+  // to refresh access token on 401 using stored refresh_token.
+  const fetchReservations = async () => {
+    const base = process.env.REACT_APP_API_BASE || "http://43.201.88.27";
+    const access = localStorage.getItem("access_token");
+    const refresh = localStorage.getItem("refresh_token");
+
+    const doFetch = async (token: string | null) => {
+      const headers: any = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${base}/api/reservations/`, { headers });
+      return res;
+    };
+
+    try {
+      // If there's no access token and no refresh token, skip calling protected API
+      if (!access && !refresh) {
+        console.warn(
+          "No access or refresh token present - skipping reservations fetch"
+        );
+        setReservations([]);
+        return;
+      }
+
+      let res = await doFetch(access);
+      if (res.status === 401) {
+        if (refresh) {
+          // try refresh
+          const rres = await fetch(`${base}/api/token/refresh/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ refresh }),
+          });
+          if (rres.ok) {
+            const rdata = await rres.json();
+            if (rdata.access) {
+              localStorage.setItem("access_token", rdata.access);
+              res = await doFetch(rdata.access);
+            }
+          } else {
+            // refresh failed -> logout
+            handleLogout();
+            return;
+          }
+        } else {
+          // no refresh token -> logout
+          handleLogout();
+          return;
+        }
+      }
+
+      if (!res.ok) {
+        console.error("Failed to fetch reservations", res.status);
+        return;
+      }
+
+      const data = await res.json();
+      // map backend reservation objects to front Reservation type and include new fields
+      const mapped: Reservation[] = (data || []).map((r: any) => {
+        const status =
+          r.status === "NOTIFIED" || r.status === "COMPLETED"
+            ? "confirmed"
+            : "waiting";
+        const reservationTime = r.created_at
+          ? new Date(r.created_at).toLocaleString()
+          : r.reservation_time || "";
+        return {
+          id: String(r.id),
+          equipment_id: r.equipment_id ?? r.equipment ?? undefined,
+          equipmentId: r.equipment_id ?? r.equipment ?? undefined,
+          equipmentName: r.equipment || r.equipment_name || "",
+          equipment_image: r.equipment_image ?? r.equipmentImage ?? null,
+          reservationTime,
+          duration: r.allocated_duration_minutes ?? r.duration ?? 0,
+          equipment_allocated_time:
+            r.equipment_allocated_time ??
+            r.equipment_allocated_time ??
+            r.allocated_duration_minutes ??
+            null,
+          status: status as "confirmed" | "waiting",
+          waitingPosition: r.position ?? r.waiting_position ?? undefined,
+          waiting_position: r.waiting_position ?? r.position ?? undefined,
+          waitingCount: r.waiting_count ?? r.waitingCount ?? undefined,
+          createdAt: r.created_at ? new Date(r.created_at) : new Date(),
+        };
+      });
+
+      setReservations(mapped);
+    } catch (e) {
+      console.error("Error fetching reservations:", e);
+    }
+  };
+
+  // When entering reservation-status view, load reservations from server
+  useEffect(() => {
+    if (currentView === "reservation-status") {
+      fetchReservations();
+    }
+  }, [currentView]);
 
   const handleSingleReservation = (
     equipment: Equipment,

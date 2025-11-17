@@ -151,8 +151,8 @@ REST_FRAMEWORK = {
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    # 액세스 토큰 유효 시간 (예: 30분)
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
+    # 액세스 토큰 유효 시간 (예: 150분)
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=150),
     # 리프레시 토큰 유효 시간 (예: 7일)
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     # 리프레시 토큰 회전 사용 여부 (회전 사용 시 추가 구현 권장)
