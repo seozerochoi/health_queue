@@ -63,6 +63,13 @@ type LoginResult = {
   role?: "user" | "admin";
 };
 
+type ReservationNotification = {
+  reservationId: string;
+  equipmentName: string;
+  expiresAt: string | null;
+  secondsLeft: number;
+};
+
 type AppView =
   | "auth-initial"
   | "signup"
@@ -98,14 +105,7 @@ export default function App() {
   const [userName, setUserName] = useState<string>("");
   const [userGym, setUserGym] = useState<string>("");
   const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [notifications, setNotifications] = useState<
-    Array<{
-      reservationId: string;
-      equipmentName: string;
-      expiresAt: string | null; // ISO
-      secondsLeft: number;
-    }>
-  >([]);
+  const [notifications, setNotifications] = useState<ReservationNotification[]>([]);
   const shownNotificationsRef = useRef<Record<string, boolean>>({});
   const [tempUserId, setTempUserId] = useState<string>("");
   const [tempPassword, setTempPassword] = useState<string>("");
@@ -306,6 +306,7 @@ export default function App() {
     setUserName(name);
     setUserNickname(name);
     setUserRole(role);
+    localStorage.setItem("current_user", userId);
 
     console.log("설정된 role:", role);
     console.log("설정된 name:", name);
@@ -394,6 +395,18 @@ export default function App() {
     console.log("=================================================");
   };
 
+  const addNotification = (entry: ReservationNotification) => {
+    setNotifications((prev) => {
+      if (
+        entry.reservationId &&
+        prev.some((n) => n.reservationId === entry.reservationId)
+      ) {
+        return prev;
+      }
+      return [...prev, entry];
+    });
+  };
+
   const handleLogout = () => {
     // clear user-related state and go back to auth-initial
     setUserName("");
@@ -403,6 +416,7 @@ export default function App() {
     setSelectedMode(null);
     setReservations([]);
     setCurrentView("auth-initial");
+    localStorage.removeItem("current_user");
   };
 
   const handleModeSelect = (mode: "user" | "admin") => {
@@ -728,6 +742,63 @@ export default function App() {
     return () => {
       mounted = false;
       if (timer) clearInterval(timer);
+    };
+  }, [userName]);
+
+  useEffect(() => {
+    const token = localStorage.getItem("access_token");
+    const currentUser = localStorage.getItem("current_user");
+    if (!token || !currentUser) return;
+
+    const base = getApiBase();
+    let es: EventSource | null = null;
+
+    const handlePayload = (payload: any) => {
+      if (!payload || payload.notified_username !== currentUser) return;
+
+      const reservationId = payload.notified_reservation_id
+        ? String(payload.notified_reservation_id)
+        : "";
+      const equipmentName =
+        payload.equipment_name || payload.name || "기구";
+      const timeoutSeconds = payload.notification_timeout_seconds
+        ? Number(payload.notification_timeout_seconds)
+        : Math.max(1, payload.notification_timeout ?? 15);
+      const expiresAt =
+        payload.notification_expires_at ||
+        new Date(Date.now() + timeoutSeconds * 1000).toISOString();
+
+      addNotification({
+        reservationId,
+        equipmentName,
+        expiresAt,
+        secondsLeft: timeoutSeconds,
+      });
+    };
+
+    try {
+      es = new EventSource(
+        `${base}/api/equipment/stream?access_token=${encodeURIComponent(
+          token
+        )}`
+      );
+      const handleEvent = (event: MessageEvent) => {
+        try {
+          const payload = JSON.parse(event.data);
+          handlePayload(payload);
+        } catch (err) {
+          console.warn("Failed to parse SSE payload", err);
+        }
+      };
+      es.addEventListener("message", handleEvent);
+      es.addEventListener("update", handleEvent);
+      es.addEventListener("initial", handleEvent);
+    } catch (err) {
+      console.warn("Failed to connect to equipment stream", err);
+    }
+
+    return () => {
+      es?.close();
     };
   }, []);
 

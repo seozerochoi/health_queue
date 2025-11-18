@@ -5,6 +5,18 @@ import { Badge } from "./ui/badge";
 import { Progress } from "./ui/progress";
 import { ArrowLeft, Clock, Play, Square, Nfc, Star } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
+const API_BASE = (() => {
+  try {
+    const meta = import.meta as any;
+    return (
+      meta?.env?.VITE_API_BASE ||
+      meta?.env?.REACT_APP_API_BASE ||
+      "http://43.201.88.27"
+    );
+  } catch {
+    return "http://43.201.88.27";
+  }
+})();
 
 interface Equipment {
   id: string;
@@ -43,6 +55,8 @@ export function EquipmentReservation({
   const [showFeedback, setShowFeedback] = useState(false);
   const [extendedTime, setExtendedTime] = useState(false);
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
+  const [queueLength, setQueueLength] = useState<number | null>(null);
+  const waitingDisplay = queueLength ?? equipment.waitingCount ?? 0;
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -67,23 +81,68 @@ export function EquipmentReservation({
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
+  const fetchQueueStatus = async () => {
+    const token = localStorage.getItem("access_token");
+    if (!token) return;
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/reservations/?equipment_id=${encodeURIComponent(
+          equipment.id
+        )}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      if (!response.ok) {
+        throw new Error("queue status fetch failed");
+      }
+
+      const reservations = await response.json();
+      const waitingReservations = reservations.filter(
+        (item: any) => item.status === "WAITING" || item.status === "NOTIFIED"
+      );
+      const currentUser = localStorage.getItem("current_user");
+      const mine = currentUser
+        ? waitingReservations.find((item: any) => item.user === currentUser)
+        : null;
+
+      if (mine) {
+        setIsReserved(true);
+        setQueuePosition(mine.waiting_position ?? mine.position ?? null);
+      } else {
+        setIsReserved(false);
+        setQueuePosition(null);
+      }
+
+      setQueueLength(
+        waitingReservations.length || equipment.waitingCount || null
+      );
+    } catch (err) {
+      console.error("Failed to load queue status", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchQueueStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [equipment.id]);
+
   const handleReserve = () => {
     const token = localStorage.getItem("access_token");
     if (equipment.status === "available") {
       // try to start session immediately via API
-      fetch(
-        `${
-          process.env.REACT_APP_API_BASE || "http://43.201.88.27"
-        }/api/workouts/start/`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ equipment_id: equipment.id }),
-        }
-      )
+      fetch(`${API_BASE}/api/workouts/start/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ equipment_id: equipment.id }),
+      })
         .then(async (res) => {
           if (!res.ok) {
             const txt = await res.text();
@@ -107,29 +166,26 @@ export function EquipmentReservation({
     } else {
       // join queue
       const token = localStorage.getItem("access_token");
-      fetch(
-        `${
-          process.env.REACT_APP_API_BASE || "http://43.201.88.27"
-        }/api/workouts/join-queue/`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ equipment_id: Number(equipment.id) }),
-        }
-      )
+      fetch(`${API_BASE}/api/workouts/join-queue/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ equipment_id: Number(equipment.id) }),
+      })
         .then(async (res) => {
           const json = await res.json();
           if (!res.ok) throw new Error(JSON.stringify(json));
           setIsReserved(true);
           setQueuePosition(json.position || (equipment.waitingCount || 0) + 1);
+          setQueueLength(json.waiting_count ?? equipment.waitingCount ?? null);
           onReservationComplete(
             equipment,
             "waiting",
             json.position || (equipment.waitingCount || 0) + 1
           );
+          fetchQueueStatus();
           onQueueUpdate?.();
         })
         .catch((err) => {
@@ -142,19 +198,14 @@ export function EquipmentReservation({
   const handleStartUsing = () => {
     // For NFC simulation in UI: attempt to start via API (if not already started)
     const token = localStorage.getItem("access_token");
-    fetch(
-      `${
-        process.env.REACT_APP_API_BASE || "http://43.201.88.27"
-      }/api/workouts/start/`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ equipment_id: equipment.id }),
-      }
-    )
+    fetch(`${API_BASE}/api/workouts/start/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ equipment_id: equipment.id }),
+    })
       .then(async (res) => {
         if (!res.ok) {
           const txt = await res.text();
@@ -271,7 +322,7 @@ export function EquipmentReservation({
                 )}
                 {equipment.status === "waiting" && (
                   <Badge className="bg-red-100 text-red-700">
-                    현재 {equipment.waitingCount}명 대기중
+                    현재 {waitingDisplay}명 대기중
                   </Badge>
                 )}
               </div>
@@ -291,7 +342,7 @@ export function EquipmentReservation({
                 <p className="text-gray-300">
                   {equipment.status === "available"
                     ? "NFC 태깅으로 즉시 시작할 수 있습니다."
-                    : `현재 ${equipment.waitingCount}명이 대기 중입니다.`}
+                    : `현재 ${waitingDisplay}명이 대기 중입니다.`}
                 </p>
                 <Button
                   onClick={handleReserve}
@@ -373,17 +424,12 @@ export function EquipmentReservation({
                   onClick={() => {
                     // call end API then show feedback
                     const token = localStorage.getItem("access_token");
-                    fetch(
-                      `${
-                        process.env.REACT_APP_API_BASE || "http://43.201.88.27"
-                      }/api/workouts/end/`,
-                      {
-                        method: "POST",
-                        headers: {
-                          Authorization: `Bearer ${token}`,
-                        },
-                      }
-                    )
+                    fetch(`${API_BASE}/api/workouts/end/`, {
+                      method: "POST",
+                      headers: {
+                        Authorization: `Bearer ${token}`,
+                      },
+                    })
                       .then(async (res) => {
                         if (!res.ok) {
                           const txt = await res.text();
