@@ -242,7 +242,8 @@ class HeartbeatView(APIView):
                 session.last_heartbeat = timezone.now()
                 session.save()
         except UsageSession.DoesNotExist:
-            return Response({'error': '진행 중인 운동 세션이 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+            logger.warning("Heartbeat skipped: no active session for user %s", user.username)
+            return Response({'message': 'no active session'}, status=status.HTTP_200_OK)
 
         cleanup_stale_sessions()
         return Response({'message': 'heartbeat recorded'}, status=status.HTTP_200_OK)

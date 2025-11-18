@@ -148,6 +148,7 @@ REST_FRAMEWORK = {
 }
 
 WORKOUT_HEARTBEAT_TIMEOUT_SECONDS = 45
+WORKOUT_HEARTBEAT_START_GRACE_SECONDS = 15
 
 # Simple JWT 설정: 액세스/리프레시 토큰 수명 연장
 from datetime import timedelta

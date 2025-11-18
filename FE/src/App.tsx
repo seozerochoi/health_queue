@@ -112,6 +112,46 @@ export default function App() {
   // 사용자가 NFC 과정을 거치지 않고 바로 타이머로 진입했는지 여부
   const [directWorkout, setDirectWorkout] = useState<boolean>(false);
 
+  const getApiBase = () => {
+    try {
+      const viteBase = (import.meta as any)?.env?.VITE_API_BASE;
+      if (viteBase) return viteBase;
+    } catch (e) {
+      /* ignore */
+    }
+    try {
+      if (typeof process !== "undefined" && process?.env?.REACT_APP_API_BASE)
+        return process.env.REACT_APP_API_BASE;
+    } catch (e) {
+      /* ignore */
+    }
+    return "http://43.201.88.27";
+  };
+
+  const sendImmediateHeartbeat = async (equipmentId?: string | number) => {
+    const token = localStorage.getItem("access_token");
+    if (!token) return;
+
+    const payload: Record<string, number> = {};
+    if (equipmentId !== undefined && equipmentId !== null) {
+      payload.equipment_id = Number(equipmentId);
+    }
+
+    try {
+      await fetch(`${getApiBase()}/api/workouts/heartbeat/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+        keepalive: true as any,
+      });
+    } catch (err) {
+      console.warn("initial heartbeat failed", err);
+    }
+  };
+
   const handleAuthNavigate = (view: "signup" | "login") => {
     setCurrentView(view);
   };
@@ -421,9 +461,10 @@ export default function App() {
         const sessionData = await response.json();
         console.log("세션 시작 성공:", sessionData);
 
-        setWorkoutStartTime(new Date());
-        setDirectWorkout(true);
-        setCurrentView("workout-timer");
+  setWorkoutStartTime(new Date());
+  setDirectWorkout(true);
+  await sendImmediateHeartbeat(equipment.id);
+  setCurrentView("workout-timer");
       } catch (error) {
         console.error("세션 시작 중 오류:", error);
         alert("운동 세션 시작 중 오류가 발생했습니다.");
