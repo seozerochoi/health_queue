@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ArrowLeft, Square } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
@@ -47,6 +47,9 @@ export function WorkoutTimer({
   // 요구사항: 이용 시간 중에는 일시정지 기능 제거
   const [isPaused] = useState(false);
 
+  const heartbeatIntervalRef = useRef<number | null>(null);
+  const consecutiveHeartbeatFailures = useRef(0);
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
 
@@ -55,7 +58,8 @@ export function WorkoutTimer({
         setTimeRemaining((prev) => {
           if (prev <= 1) {
             setIsRunning(false);
-            onWorkoutComplete();
+            // When timer runs out, call end API then notify parent
+            endSession().finally(() => onWorkoutComplete());
             return 0;
           }
           return prev - 1;
@@ -64,7 +68,8 @@ export function WorkoutTimer({
     }
 
     return () => clearInterval(interval);
-  }, [isRunning, isPaused, timeRemaining, onWorkoutComplete]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRunning, isPaused, timeRemaining]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -93,19 +98,7 @@ export function WorkoutTimer({
     setIsRunning(false);
 
     try {
-      const response = await fetch(`${getApiBase()}/api/workouts/end/`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`서버 응답 ${response.status}: ${errorText}`);
-      }
-
+      await endSession();
       onWorkoutComplete();
     } catch (error) {
       console.error("운동 종료 실패:", error);
@@ -117,6 +110,123 @@ export function WorkoutTimer({
       setIsEnding(false);
     }
   };
+
+  // endSession is used by manual stop, timer expiry, and forced stop on heartbeat failure
+  const endSession = async () => {
+    const token = localStorage.getItem("access_token");
+    if (!token) throw new Error("no-token");
+
+    try {
+      const response = await fetch(`${getApiBase()}/api/workouts/end/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        // include equipment id for server-side correlation if supported
+        body: JSON.stringify({ equipment_id: Number(equipment.id) }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`server ${response.status}: ${errorText}`);
+      }
+
+      // stop heartbeat when ended
+      if (heartbeatIntervalRef.current) {
+        window.clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
+    } catch (err) {
+      throw err;
+    }
+  };
+
+  // Heartbeat logic: send every 60s, on 2 consecutive failures -> force end
+  useEffect(() => {
+    const sendHeartbeat = async () => {
+      const token = localStorage.getItem("access_token");
+      if (!token) return;
+
+      try {
+        const res = await fetch(`${getApiBase()}/api/workouts/heartbeat/`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ equipment_id: Number(equipment.id) }),
+          keepalive: true as any,
+        });
+
+        if (!res.ok) {
+          consecutiveHeartbeatFailures.current += 1;
+          console.warn("Heartbeat failed", res.status);
+        } else {
+          consecutiveHeartbeatFailures.current = 0;
+        }
+
+        if (consecutiveHeartbeatFailures.current >= 2) {
+          console.warn("Consecutive heartbeat failures - forcing session end");
+          try {
+            await endSession();
+          } catch (e) {
+            console.error("Forced end failed", e);
+          } finally {
+            onWorkoutComplete();
+          }
+        }
+      } catch (e) {
+        consecutiveHeartbeatFailures.current += 1;
+        console.error("Heartbeat network error", e);
+        if (consecutiveHeartbeatFailures.current >= 2) {
+          try {
+            await endSession();
+          } catch (err) {
+            console.error("Forced end failed", err);
+          } finally {
+            onWorkoutComplete();
+          }
+        }
+      }
+    };
+
+    // start immediately then every 20s
+    sendHeartbeat();
+    heartbeatIntervalRef.current = window.setInterval(sendHeartbeat, 20 * 1000);
+
+    // try to end session on unload (best-effort)
+    const handleBeforeUnload = (_e: BeforeUnloadEvent) => {
+      const token = localStorage.getItem("access_token");
+      if (!token) return;
+
+      const payload = JSON.stringify({ equipment_id: Number(equipment.id) });
+      try {
+        fetch(`${getApiBase()}/api/workouts/end/`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: payload,
+          keepalive: true as any,
+        });
+      } catch (_) {
+        // ignore best-effort failure
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      if (heartbeatIntervalRef.current) {
+        window.clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const getMotivationalMessage = () => {
     const remainingPercent = (timeRemaining / totalTime) * 100;

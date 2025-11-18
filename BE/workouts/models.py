@@ -9,6 +9,7 @@ class UsageSession(models.Model):
     equipment = models.ForeignKey(Equipment, on_delete=models.CASCADE)
     start_time = models.DateTimeField(auto_now_add=True)
     end_time = models.DateTimeField(null=True, blank=True)
+    last_heartbeat = models.DateTimeField(null=True, blank=True, db_index=True)
     allocated_duration_minutes = models.IntegerField()
     
     SESSION_TYPE_CHOICES = [

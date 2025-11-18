@@ -2,21 +2,12 @@ from celery import shared_task
 from django.utils import timezone
 from django.db import transaction
 from datetime import timedelta
-from .models import Reservation
+from .models import Reservation, UsageSession
+from .session_management import cleanup_stale_sessions, finalize_session
+from equipment.event_bus import publish_equipment_update_by_id
+from typing import Optional
 
-from .models import UsageSession
-from equipment.models import Equipment
-from equipment.event_bus import publish_equipment_update, publish_equipment_update_by_id
 
-
-def _schedule_equipment_publish(equipment):
-    if equipment is None:
-        return
-
-    def _emit():
-        publish_equipment_update(equipment)
-
-    transaction.on_commit(_emit)
 from .constants import DEFAULT_NOTIFICATION_TIMEOUT_MINUTES
 
 
@@ -108,29 +99,17 @@ def expire_active_sessions(self, batch_size: int = 50):
                 try:
                     expected_end = s.start_time + timedelta(minutes=s.allocated_duration_minutes)
                     if expected_end <= now:
-                        s.end_time = now
-                        s.save()
+                        finalize_session(s, now=now)
                         ended += 1
-
-                        # update equipment and notify next waiting
-                        eq = Equipment.objects.select_for_update().get(pk=s.equipment.pk)
-                        eq.status = 'AVAILABLE'
-                        eq.save()
-                        _schedule_equipment_publish(eq)
-
-                        next_r = (
-                            Reservation.objects.select_for_update(skip_locked=True)
-                            .filter(equipment=eq, status='WAITING')
-                            .order_by('created_at')
-                            .first()
-                        )
-                        if next_r:
-                            next_r.status = 'NOTIFIED'
-                            next_r.notified_at = timezone.now()
-                            next_r.save()
-                            notified += 1
                 except Exception:
                     # if any row-specific error occurs, skip to next
                     continue
 
     return {'ended': ended, 'notified': notified}
+
+
+@shared_task(bind=True)
+def expire_stale_sessions(self, timeout_seconds: Optional[int] = None, batch_size: int = 20):
+    """End sessions that have not sent a heartbeat within the configured timeout."""
+    cleaned = cleanup_stale_sessions(timeout_seconds=timeout_seconds, batch_size=batch_size)
+    return {'cleaned': cleaned}

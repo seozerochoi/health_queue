@@ -25,7 +25,7 @@ class UsageSessionSerializer(serializers.ModelSerializer):
         model = UsageSession
         fields = (
             'id', 'user', 'equipment', 'equipment_id', 'start_time', 'end_time',
-            'allocated_duration_minutes', 'session_type'
+            'allocated_duration_minutes', 'session_type', 'last_heartbeat'
         )
 
 

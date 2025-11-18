@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 # workouts/views.py (이 코드로 덮어쓰세요)
 from .models import UsageSession, Reservation
 from .serializers import UsageSessionSerializer, ReservationSerializer
+from .session_management import cleanup_stale_sessions, finalize_session, notify_equipment_change
 from equipment.models import Equipment # Equipment 모델 import
 from users.models import UserProfile # UserProfile 모델 import
 from django.utils import timezone
@@ -16,8 +17,6 @@ from django.db import transaction
 import datetime
 import logging
 
-from equipment.event_bus import publish_equipment_update
-
 # "AI 두뇌 사용설명서"에서 예측 함수를 가져옵니다.
 # NOTE: Lazy import ai_model to avoid loading heavy ML dependencies at startup
 # from ai_model.prediction_utils import get_ai_recommendation
@@ -25,16 +24,6 @@ from .constants import DEFAULT_NOTIFICATION_TIMEOUT_MINUTES
 
 logger = logging.getLogger(__name__)
 
-
-def _notify_equipment_change(equipment):
-    """Schedule an SSE update after the current transaction commits."""
-    if not equipment:
-        return
-
-    def _emit():
-        publish_equipment_update(equipment)
-
-    transaction.on_commit(_emit)
 
 class UsageSessionViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated] # <- 이 줄 추가
@@ -85,23 +74,7 @@ class StartSessionView(APIView):
             # If the user already has an active session, end it immediately (simulate switching machines)
             existing_session = UsageSession.objects.select_for_update().filter(user=user, end_time__isnull=True).first()
             if existing_session:
-                # end previous session
-                existing_session.end_time = timezone.now()
-                existing_session.save()
-
-                prev_equipment = existing_session.equipment
-                # mark previous equipment available
-                prev_equipment = Equipment.objects.select_for_update().get(pk=prev_equipment.pk)
-                prev_equipment.status = 'AVAILABLE'
-                prev_equipment.save()
-                _notify_equipment_change(prev_equipment)
-
-                # notify next waiting on previous equipment
-                next_prev = Reservation.objects.select_for_update().filter(equipment=prev_equipment, status='WAITING').order_by('created_at').first()
-                if next_prev:
-                    next_prev.status = 'NOTIFIED'
-                    next_prev.notified_at = timezone.now()
-                    next_prev.save()
+                finalize_session(existing_session, now=timezone.now())
 
             # Check queue: if other users in queue, only NOTIFIED user may start
             # Treat only recent NOTIFIED reservations (within the notification timeout) as blocking.
@@ -213,13 +186,14 @@ class StartSessionView(APIView):
 
                 equipment.status = 'IN_USE'
                 equipment.save()
-                _notify_equipment_change(equipment)
+                notify_equipment_change(equipment)
 
                 session = UsageSession.objects.create(
                     user=user,
                     equipment=equipment,
                     allocated_duration_minutes=allocated_time,
-                    session_type=session_type
+                    session_type=session_type,
+                    last_heartbeat=timezone.now()
                 )
 
         except Exception as e:
@@ -246,37 +220,32 @@ class EndSessionView(APIView):
 
     def post(self, request, *args, **kwargs):
         user = request.user
-        # 트랜잭션과 row-level lock을 사용해 레이스 컨디션을 방지합니다.
-        from django.db import transaction
-
         try:
             with transaction.atomic():
-                # 진행중인 세션과 관련된 행들을 select_for_update로 잠급니다.
                 current_session = UsageSession.objects.select_for_update().get(user=user, end_time__isnull=True)
-
-                # 종료 시간 기록
-                current_session.end_time = timezone.now()
-                current_session.save()
-
-                # 장비 상태를 잠그고 AVAILABLE로 변경
-                equipment = Equipment.objects.select_for_update().get(pk=current_session.equipment.pk)
-                equipment.status = 'AVAILABLE'
-                equipment.save()
-                _notify_equipment_change(equipment)
-
-
-                # 다음 대기자에게 알림 보내기 (해당 행도 트랜잭션 내에서 처리)
-                next_reservation = Reservation.objects.select_for_update(skip_locked=True).filter(equipment=equipment, status='WAITING').order_by('created_at').first()
-                if next_reservation:
-                    next_reservation.status = 'NOTIFIED'
-                    next_reservation.notified_at = timezone.now()
-                    next_reservation.save()
-                    # TODO: 다음 사용자에게 FCM 푸시 알림을 보내는 로직 추가
+                finalize_session(current_session, now=timezone.now())
 
         except UsageSession.DoesNotExist:
             return Response({'error': '현재 진행 중인 운동 세션이 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
 
         return Response({'message': '운동이 성공적으로 종료되었습니다.'}, status=status.HTTP_200_OK)
+
+
+class HeartbeatView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        user = request.user
+        try:
+            with transaction.atomic():
+                session = UsageSession.objects.select_for_update().get(user=user, end_time__isnull=True)
+                session.last_heartbeat = timezone.now()
+                session.save()
+        except UsageSession.DoesNotExist:
+            return Response({'error': '진행 중인 운동 세션이 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+
+        cleanup_stale_sessions()
+        return Response({'message': 'heartbeat recorded'}, status=status.HTTP_200_OK)
 
 
 class JoinQueueView(APIView):
@@ -323,7 +292,7 @@ class JoinQueueView(APIView):
         # position은 대기열에서의 순번 (마지막에 추가되었으므로 waiting_count)
         position = waiting_count
 
-        _notify_equipment_change(equipment)
+        notify_equipment_change(equipment)
 
         return Response({'reservation_id': reservation.id, 'equipment_id': equipment.id, 'position': position, 'waiting_count': waiting_count}, status=status.HTTP_201_CREATED)
 
@@ -369,5 +338,5 @@ class LeaveQueueView(APIView):
             # TODO: FCM 푸시 알림 전송
 
         waiting_count = Reservation.objects.filter(equipment=equipment, status='WAITING').count()
-        _notify_equipment_change(equipment)
+        notify_equipment_change(equipment)
         return Response({'message': '대기열에서 탈퇴 처리되었습니다.', 'waiting_count': waiting_count}, status=status.HTTP_200_OK)

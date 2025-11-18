@@ -147,6 +147,8 @@ REST_FRAMEWORK = {
     )
 }
 
+WORKOUT_HEARTBEAT_TIMEOUT_SECONDS = 45
+
 # Simple JWT 설정: 액세스/리프레시 토큰 수명 연장
 from datetime import timedelta
 
@@ -185,6 +187,11 @@ CELERY_BEAT_SCHEDULE = {
     'expire-reservations-every-15s': {
         'task': 'workouts.tasks.expire_notified_reservations',
         'schedule': 15.0,  # seconds (recommended)
+        'args': (),
+    },
+    'expire-stale-sessions-every-15s': {
+        'task': 'workouts.tasks.expire_stale_sessions',
+        'schedule': 15.0,
         'args': (),
     },
 }
