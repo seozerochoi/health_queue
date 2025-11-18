@@ -8,7 +8,6 @@ from .views import (
     ReservationViewSet,
     StartSessionView,
     EndSessionView,
-    HeartbeatView,
     JoinQueueView,
     LeaveQueueView,
 )
@@ -21,7 +20,6 @@ urlpatterns = [
     # '/api/workouts/start/' 주소를 추가합니다.
     path('workouts/start/', StartSessionView.as_view(), name='start-session'),
     path('workouts/end/', EndSessionView.as_view(), name='end-session'),
-    path('workouts/heartbeat/', HeartbeatView.as_view(), name='session-heartbeat'),
     path('workouts/join-queue/', JoinQueueView.as_view(), name='join-queue'),
     path('workouts/leave-queue/', LeaveQueueView.as_view(), name='leave-queue'),
     # 기존 router.urls는 그대로 둡니다.
