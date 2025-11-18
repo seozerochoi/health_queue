@@ -32,8 +32,15 @@ class Reservation(models.Model):
         ('EXPIRED', 'Expired'),
         ('COMPLETED', 'Completed'),
     ]
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='WAITING')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='WAITING', db_index=True)
     notified_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        # Composite index for fast equipment waiting count queries
+        indexes = [
+            models.Index(fields=['equipment', 'status'], name='res_equip_status_idx'),
+            models.Index(fields=['status', 'notified_at'], name='res_status_notified_idx'),
+        ]
 
     def __str__(self):
         return f'{self.user.username} reserved {self.equipment.name}'

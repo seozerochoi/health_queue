@@ -11,14 +11,30 @@ from .serializers import UsageSessionSerializer, ReservationSerializer
 from equipment.models import Equipment # Equipment 모델 import
 from users.models import UserProfile # UserProfile 모델 import
 from django.utils import timezone
+from django.conf import settings
 from django.db import transaction
 import datetime
 import logging
 
+from equipment.event_bus import publish_equipment_update
+
 # "AI 두뇌 사용설명서"에서 예측 함수를 가져옵니다.
-from ai_model.prediction_utils import get_ai_recommendation
+# NOTE: Lazy import ai_model to avoid loading heavy ML dependencies at startup
+# from ai_model.prediction_utils import get_ai_recommendation
+from .constants import DEFAULT_NOTIFICATION_TIMEOUT_MINUTES
 
 logger = logging.getLogger(__name__)
+
+
+def _notify_equipment_change(equipment):
+    """Schedule an SSE update after the current transaction commits."""
+    if not equipment:
+        return
+
+    def _emit():
+        publish_equipment_update(equipment)
+
+    transaction.on_commit(_emit)
 
 class UsageSessionViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated] # <- 이 줄 추가
@@ -78,6 +94,7 @@ class StartSessionView(APIView):
                 prev_equipment = Equipment.objects.select_for_update().get(pk=prev_equipment.pk)
                 prev_equipment.status = 'AVAILABLE'
                 prev_equipment.save()
+                _notify_equipment_change(prev_equipment)
 
                 # notify next waiting on previous equipment
                 next_prev = Reservation.objects.select_for_update().filter(equipment=prev_equipment, status='WAITING').order_by('created_at').first()
@@ -87,8 +104,30 @@ class StartSessionView(APIView):
                     next_prev.save()
 
             # Check queue: if other users in queue, only NOTIFIED user may start
-            other_in_queue = Reservation.objects.filter(equipment=equipment, status__in=['WAITING', 'NOTIFIED']).exclude(user=user).exists()
-            reservation = Reservation.objects.select_for_update().filter(equipment=equipment, user=user, status='NOTIFIED').first()
+            # Treat only recent NOTIFIED reservations (within the notification timeout) as blocking.
+            minutes_default = getattr(settings, 'WORKOUT_NOTIFICATION_TIMEOUT_MINUTES', None)
+            if minutes_default is None:
+                minutes_default = DEFAULT_NOTIFICATION_TIMEOUT_MINUTES
+            try:
+                minutes_default = float(minutes_default)
+            except Exception:
+                minutes_default = DEFAULT_NOTIFICATION_TIMEOUT_MINUTES or 0.25
+
+            notified_cutoff = timezone.now() - datetime.timedelta(minutes=minutes_default)
+
+            # Expire any stale NOTIFIED reservations for this equipment so they don't block a Start
+            stale_qs = Reservation.objects.select_for_update().filter(equipment=equipment, status='NOTIFIED', notified_at__lt=notified_cutoff)
+            if stale_qs.exists():
+                for stale in list(stale_qs):
+                    stale.status = 'EXPIRED'
+                    stale.save()
+
+            other_waiting = Reservation.objects.filter(equipment=equipment, status='WAITING').exclude(user=user).exists()
+            other_recent_notified = Reservation.objects.filter(equipment=equipment, status='NOTIFIED', notified_at__gte=notified_cutoff).exclude(user=user).exists()
+            other_in_queue = other_waiting or other_recent_notified
+
+            # Reservation for this user is only valid if it's a recent NOTIFIED one
+            reservation = Reservation.objects.select_for_update().filter(equipment=equipment, user=user, status='NOTIFIED', notified_at__gte=notified_cutoff).first()
             if other_in_queue and not reservation:
                 return Response({'error': '대기열이 있습니다. 알림 받은 사용자만 시작할 수 있습니다.'}, status=status.HTTP_409_CONFLICT)
 
@@ -105,6 +144,9 @@ class StartSessionView(APIView):
             # --- AI 추천 로직 시작 ---
             # 예약자가 아닐 경우 (비어있는 기구 사용)
             try:
+                # Lazy import to avoid loading ML libs at startup
+                from ai_model.prediction_utils import get_ai_recommendation
+                
                 user_profile = UserProfile.objects.get(user=user)
                 
                 # 1. 최근 24시간 운동 기록을 DB에서 조회
@@ -171,6 +213,7 @@ class StartSessionView(APIView):
 
                 equipment.status = 'IN_USE'
                 equipment.save()
+                _notify_equipment_change(equipment)
 
                 session = UsageSession.objects.create(
                     user=user,
@@ -219,6 +262,7 @@ class EndSessionView(APIView):
                 equipment = Equipment.objects.select_for_update().get(pk=current_session.equipment.pk)
                 equipment.status = 'AVAILABLE'
                 equipment.save()
+                _notify_equipment_change(equipment)
 
 
                 # 다음 대기자에게 알림 보내기 (해당 행도 트랜잭션 내에서 처리)
@@ -279,6 +323,8 @@ class JoinQueueView(APIView):
         # position은 대기열에서의 순번 (마지막에 추가되었으므로 waiting_count)
         position = waiting_count
 
+        _notify_equipment_change(equipment)
+
         return Response({'reservation_id': reservation.id, 'equipment_id': equipment.id, 'position': position, 'waiting_count': waiting_count}, status=status.HTTP_201_CREATED)
 
 
@@ -323,4 +369,5 @@ class LeaveQueueView(APIView):
             # TODO: FCM 푸시 알림 전송
 
         waiting_count = Reservation.objects.filter(equipment=equipment, status='WAITING').count()
+        _notify_equipment_change(equipment)
         return Response({'message': '대기열에서 탈퇴 처리되었습니다.', 'waiting_count': waiting_count}, status=status.HTTP_200_OK)

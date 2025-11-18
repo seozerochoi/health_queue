@@ -167,11 +167,10 @@ SIMPLE_JWT = {
 # 6. AI 모델 로드 설정 (파일 맨 아래)
 # (이전에 추가했던 AI 모델 로더도 여기에 포함되어야 합니다)
 # ==========================================================
-try:
-    from ai_model.prediction_utils import load_ai_model
-    load_ai_model()
-except ImportError:
-    print("AI 모델 유틸리티를 로드하는 중 오류 발생 (무시하고 진행)")
+# NOTE: Do NOT eagerly load AI models at settings import time. Loading
+# large ML models here slows down process start/restart (gunicorn workers).
+# The ai_model module exposes a lazy loader; the model will be loaded on
+# first use inside the prediction utilities.
 
 # ==========================================================
 # Celery 설정
@@ -180,13 +179,20 @@ except ImportError:
 CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default=CELERY_BROKER_URL)
 
-# Beat 스케줄: expire task를 1분마다 실행하여 NOTIFIED 예약 만료 처리를 수행합니다.
+# Beat 스케줄: expire task를 주기적으로 실행하여 NOTIFIED 예약 만료 처리를 수행합니다.
+# 권장: 알림 타임아웃(예: 15초)과 맞추기 위해 15초 간격으로 실행하는 것을 권장합니다.
 CELERY_BEAT_SCHEDULE = {
-    'expire-reservations-every-minute': {
+    'expire-reservations-every-15s': {
         'task': 'workouts.tasks.expire_notified_reservations',
-        'schedule': 60.0,  # seconds
+        'schedule': 15.0,  # seconds (recommended)
         'args': (),
     },
 }
+
+# SSE polling frequency used by the simple equipment_stream prototype. Lower
+# values make the UI more responsive but increase DB load. Tune for your
+# deployment; we recommend 2-5 seconds for small deployments, 10+ for larger.
+# INCREASED TO 30s TO REDUCE DB LOAD - Real-time updates handled by client polling instead
+EQUIPMENT_SSE_POLL_INTERVAL_SECONDS = 30
 
 

@@ -2,6 +2,14 @@
 
 from rest_framework import serializers
 from .models import UsageSession, Reservation
+from django.utils import timezone
+from django.conf import settings
+from datetime import timedelta
+try:
+    # Import the default timeout from constants (not tasks) to avoid loading Celery
+    from .constants import DEFAULT_NOTIFICATION_TIMEOUT_MINUTES
+except Exception:
+    DEFAULT_NOTIFICATION_TIMEOUT_MINUTES = None
 
 
 class UsageSessionSerializer(serializers.ModelSerializer):
@@ -67,3 +75,38 @@ class ReservationSerializer(serializers.ModelSerializer):
             'id', 'user', 'equipment', 'equipment_id', 'equipment_image', 'equipment_allocated_time',
             'created_at', 'status', 'notified_at', 'waiting_position', 'waiting_count'
         )
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # If this reservation has been notified, expose an expires_at timestamp so FE can countdown
+
+        if instance.status == 'NOTIFIED' and instance.notified_at:
+            # configurable timeout in seconds; prefer explicit seconds setting, then tasks constant,
+            # then an optional minutes setting in settings, finally fall back to 15 seconds.
+            timeout_seconds = getattr(settings, 'WORKOUT_NOTIFICATION_TIMEOUT_SECONDS', None)
+            if timeout_seconds is None:
+                if DEFAULT_NOTIFICATION_TIMEOUT_MINUTES is not None:
+                    try:
+                        timeout_seconds = int(float(DEFAULT_NOTIFICATION_TIMEOUT_MINUTES) * 60)
+                    except Exception:
+                        timeout_seconds = 15
+                else:
+                    # try minutes-based setting in Django settings, if present
+                    minutes_setting = getattr(settings, 'WORKOUT_NOTIFICATION_TIMEOUT_MINUTES', None)
+                    if minutes_setting is not None:
+                        try:
+                            timeout_seconds = int(float(minutes_setting) * 60)
+                        except Exception:
+                            timeout_seconds = 15
+                    else:
+                        timeout_seconds = 15
+
+            expires_at = instance.notified_at + timedelta(seconds=timeout_seconds)
+            # ensure timezone-aware ISO format
+            data['notification_expires_at'] = expires_at.isoformat()
+            data['notification_timeout_seconds'] = timeout_seconds
+        else:
+            data['notification_expires_at'] = None
+            data['notification_timeout_seconds'] = None
+
+        return data

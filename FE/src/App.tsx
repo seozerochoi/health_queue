@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { AuthInitial } from "./components/AuthInitial";
 import SignUp from "./components/SignUp";
 import { SignUpUserInfo } from "./components/SignUpUserInfo";
@@ -40,6 +40,9 @@ interface Reservation {
   waitingCount?: number;
   waiting_count?: number;
   createdAt?: Date;
+  notified_at?: string | null;
+  notification_expires_at?: string | null;
+  notification_timeout_seconds?: number | null;
 }
 
 interface RegisteredUser {
@@ -95,6 +98,15 @@ export default function App() {
   const [userName, setUserName] = useState<string>("");
   const [userGym, setUserGym] = useState<string>("");
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [notifications, setNotifications] = useState<
+    Array<{
+      reservationId: string;
+      equipmentName: string;
+      expiresAt: string | null; // ISO
+      secondsLeft: number;
+    }>
+  >([]);
+  const shownNotificationsRef = useRef<Record<string, boolean>>({});
   const [tempUserId, setTempUserId] = useState<string>("");
   const [tempPassword, setTempPassword] = useState<string>("");
   // 사용자가 NFC 과정을 거치지 않고 바로 타이머로 진입했는지 여부
@@ -248,6 +260,9 @@ export default function App() {
     const name = additionalData?.name || userId;
     const role = additionalData?.role || "user";
 
+    console.log("받은 role:", additionalData?.role);
+    console.log("최종 설정할 role:", role);
+
     setUserName(name);
     setUserNickname(name);
     setUserRole(role);
@@ -323,6 +338,11 @@ export default function App() {
     }
 
     // 화면 전환 - role에 따라 다른 페이지로 이동
+    console.log("============ 화면 전환 시작 ============");
+    console.log("현재 role 값:", role);
+    console.log("role === 'admin' ?", role === "admin");
+    console.log("typeof role:", typeof role);
+
     if (role === "admin") {
       console.log("→ admin-dashboard로 이동 (role=admin)");
       setCurrentView("admin-dashboard");
@@ -330,6 +350,7 @@ export default function App() {
       console.log("→ equipment-list로 이동 (role=user)");
       setCurrentView("equipment-list");
     }
+    console.log("화면 전환 명령 완료");
     console.log("=================================================");
   };
 
@@ -444,7 +465,21 @@ export default function App() {
   // Fetch reservations from backend for the current user. Will attempt
   // to refresh access token on 401 using stored refresh_token.
   const fetchReservations = async () => {
-    const base = process.env.REACT_APP_API_BASE || "http://43.201.88.27";
+    const base = (() => {
+      try {
+        const vite = (import.meta as any)?.env?.VITE_API_BASE;
+        if (vite) return vite;
+      } catch (e) {
+        /* ignore */
+      }
+      try {
+        if (typeof process !== "undefined" && process?.env?.REACT_APP_API_BASE)
+          return process.env.REACT_APP_API_BASE;
+      } catch (e) {
+        /* ignore */
+      }
+      return "http://43.201.88.27";
+    })();
     const access = localStorage.getItem("access_token");
     const refresh = localStorage.getItem("refresh_token");
 
@@ -524,15 +559,95 @@ export default function App() {
           waitingPosition: r.position ?? r.waiting_position ?? undefined,
           waiting_position: r.waiting_position ?? r.position ?? undefined,
           waitingCount: r.waiting_count ?? r.waitingCount ?? undefined,
+          notified_at: r.notified_at ?? null,
+          notification_expires_at: r.notification_expires_at ?? null,
+          notification_timeout_seconds: r.notification_timeout_seconds ?? null,
           createdAt: r.created_at ? new Date(r.created_at) : new Date(),
         };
       });
 
       setReservations(mapped);
+      return mapped;
     } catch (e) {
       console.error("Error fetching reservations:", e);
     }
   };
+
+  // Poll reservations in background to detect NOTIFIED reservations and show popup
+  useEffect(() => {
+    let mounted = true;
+    let timer: any = null;
+
+    const poll = async () => {
+      try {
+        const data = await fetchReservations();
+        if (!mounted || !data) return;
+        // find notified reservations
+        const now = new Date();
+        for (const r of data) {
+          if (r.status === "NOTIFIED" && r.notified_at) {
+            const id = String(r.id);
+            if (shownNotificationsRef.current[id]) continue; // already shown
+
+            // compute expiresAt from serializer if provided
+            const expiresAt = (r as any).notification_expires_at || null;
+            let secondsLeft = 15;
+            if (expiresAt) {
+              const exp = new Date(expiresAt);
+              secondsLeft = Math.max(
+                0,
+                Math.floor((exp.getTime() - now.getTime()) / 1000)
+              );
+            } else if (r.notified_at) {
+              const notif = new Date(r.notified_at);
+              secondsLeft = Math.max(
+                0,
+                Math.floor((notif.getTime() + 15000 - now.getTime()) / 1000)
+              );
+            }
+
+            if (secondsLeft <= 0) continue; // already expired
+
+            // add notification
+            shownNotificationsRef.current[id] = true;
+            setNotifications((prev) => [
+              ...prev,
+              {
+                reservationId: id,
+                equipmentName: r.equipment || r.equipmentName || "",
+                expiresAt,
+                secondsLeft,
+              },
+            ]);
+          }
+        }
+      } catch (err) {
+        // ignore poll errors
+      }
+    };
+
+    // start immediately and then interval
+    poll();
+    timer = setInterval(poll, 3000);
+
+    return () => {
+      mounted = false;
+      if (timer) clearInterval(timer);
+    };
+  }, []);
+
+  // decrement countdowns for notifications
+  useEffect(() => {
+    if (notifications.length === 0) return;
+    const iv = setInterval(() => {
+      setNotifications((prev) =>
+        prev
+          .map((n) => ({ ...n, secondsLeft: n.secondsLeft - 1 }))
+          .filter((n) => n.secondsLeft > 0)
+      );
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [notifications.length]);
 
   // When entering reservation-status view, load reservations from server
   useEffect(() => {
@@ -790,6 +905,42 @@ export default function App() {
           onNavigate={handleBottomNavigation}
         />
       )}
+      {/* Notification toasts for NOTIFIED reservations */}
+      <div className="fixed top-4 right-4 z-50 space-y-3">
+        {notifications.map((n) => (
+          <div
+            key={n.reservationId}
+            className="bg-blue-900/90 text-white rounded-lg p-3 shadow-lg w-80"
+          >
+            <div className="flex justify-between items-start">
+              <div>
+                <div className="font-semibold">
+                  {n.equipmentName || "기구"} - 지금 차례입니다
+                </div>
+                <div className="text-sm text-gray-200">
+                  15초 내에 태깅하세요
+                </div>
+              </div>
+              <div className="text-2xl font-mono ml-2">{n.secondsLeft}s</div>
+            </div>
+            <div className="mt-2 flex justify-end">
+              <button
+                className="bg-white text-blue-900 px-3 py-1 rounded"
+                onClick={() => {
+                  // navigate to reservation status page
+                  setCurrentView("reservation-status");
+                  // remove this notification
+                  setNotifications((prev) =>
+                    prev.filter((x) => x.reservationId !== n.reservationId)
+                  );
+                }}
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

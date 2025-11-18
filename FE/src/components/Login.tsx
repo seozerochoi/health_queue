@@ -40,8 +40,12 @@ export function Login({ onBack, onLoginComplete }: LoginProps) {
       }
 
       const data = await response.json();
-      console.log("로그인 성공:", data);
-      console.log("로그인 응답에서 받은 role:", data.role);
+      console.log("============ Login.tsx 로그인 성공 ============");
+      console.log("전체 응답 데이터:", data);
+      console.log("data.role:", data.role);
+      console.log("data.access:", data.access);
+      console.log("data.refresh:", data.refresh);
+      console.log("============================================");
 
       // access 토큰 저장
       if (data.access) {
@@ -55,7 +59,10 @@ export function Login({ onBack, onLoginComplete }: LoginProps) {
 
       // role 매핑: OPERATOR -> admin, MEMBER -> user
       const mappedRole = data.role === "OPERATOR" ? "admin" : "user";
+      console.log("============ Role 매핑 ============");
+      console.log("원본 role:", data.role);
       console.log("매핑된 role:", mappedRole);
+      console.log("==================================");
 
       try {
         // 사용자의 헬스장 정보 가져오기
@@ -90,22 +97,26 @@ export function Login({ onBack, onLoginComplete }: LoginProps) {
           };
           console.log("전달할 gymInfo:", gymInfo);
           console.log("전달할 role:", mappedRole);
+          console.log("============ onLoginComplete 호출 ============");
 
-          onLoginComplete(userId, { 
+          onLoginComplete(userId, {
             gymInfo,
             role: mappedRole,
             name: data.name || data.username,
           });
+
+          console.log("onLoginComplete 호출 완료");
+          console.log("==========================================");
         } else if (gymResponse.status === 404) {
           // 헬스장 정보가 없는 경우도 로그인은 성공 처리
           console.log("등록된 헬스장 정보가 없습니다.");
-          onLoginComplete(userId, { 
+          onLoginComplete(userId, {
             role: mappedRole,
             name: data.name || data.username,
           });
         } else {
           console.error("헬스장 정보 가져오기 실패");
-          onLoginComplete(userId, { 
+          onLoginComplete(userId, {
             role: mappedRole,
             name: data.name || data.username,
           });
@@ -113,7 +124,7 @@ export function Login({ onBack, onLoginComplete }: LoginProps) {
       } catch (error) {
         console.error("헬스장 정보 가져오기 에러:", error);
         // 에러가 발생해도 로그인은 성공 처리
-        onLoginComplete(userId, { 
+        onLoginComplete(userId, {
           role: mappedRole,
           name: data.name || data.username,
         });

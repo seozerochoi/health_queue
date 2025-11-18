@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -40,6 +40,112 @@ interface EquipmentListProps {
   onEquipmentSelect: (equipment: Equipment) => void;
 }
 
+// Memoized equipment item to avoid unnecessary re-renders.
+interface EquipmentItemProps {
+  eq: Equipment;
+  onSelect: (eq: Equipment) => void;
+  flashing?: boolean;
+}
+
+const EquipmentItemInner = ({ eq, onSelect, flashing }: EquipmentItemProps) => {
+  const getStatusBadgeLocal = (eq: Equipment) => {
+    switch (eq.status) {
+      case "available":
+        return (
+          <Badge className="bg-green-100 text-green-700">바로 사용 가능</Badge>
+        );
+      case "in-use":
+        return (
+          <Badge className="bg-yellow-100 text-yellow-700">
+            사용 중 ({eq.timeRemaining}분 남음)
+          </Badge>
+        );
+      case "waiting":
+        return (
+          <Badge className="bg-red-100 text-red-700">
+            현재 {eq.waitingCount}명 대기중
+          </Badge>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <Card
+      className="hover:shadow-lg transition-shadow cursor-pointer border-gray-600 bg-card"
+      onClick={() => onSelect(eq)}
+    >
+      <CardContent className="p-4">
+        <div className="flex space-x-4">
+          <div className="w-24 h-24 rounded-lg overflow-hidden">
+            <ImageWithFallback
+              src={eq.image}
+              alt={eq.name}
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <div className="flex-1 space-y-2">
+            <div className="flex items-start justify-between">
+              <h3
+                className={`font-semibold text-white`}
+                style={{
+                  transition: "filter 0.7s ease",
+                  filter: flashing ? "brightness(2)" : "none",
+                }}
+              >
+                {eq.name}
+              </h3>
+              {getStatusBadgeLocal(eq)}
+            </div>
+
+            <div className="flex items-center space-x-1 text-sm text-gray-300">
+              <Clock className="h-3 w-3" />
+              <span>기본 할당시간: {eq.allocatedTime}분</span>
+            </div>
+
+            {(eq.status === "in-use" || eq.status === "waiting") && (
+              <div>
+                <Button
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect(eq);
+                  }}
+                  className="mt-1 bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1 px-3 py-1"
+                >
+                  <Users className="h-4 w-4" />
+                  줄서기
+                  {typeof eq.waitingCount === "number" &&
+                    eq.waitingCount > 0 && (
+                      <span className="text-xs ml-1">
+                        ({eq.waitingCount}명)
+                      </span>
+                    )}
+                </Button>
+              </div>
+            )}
+
+            {eq.currentUser && (
+              <div className="flex items-center space-x-1 text-sm text-gray-300">
+                <Users className="h-3 w-3" />
+                <span>사용자: {eq.currentUser}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+const EquipmentItem = React.memo(EquipmentItemInner, (prev, next) => {
+  // Skip re-render if eq object reference is equal and flashing flag unchanged
+  return (
+    prev.eq === next.eq && (prev.flashing ?? false) === (next.flashing ?? false)
+  );
+});
+
 export function EquipmentList({
   gymName,
   onBack,
@@ -60,9 +166,280 @@ export function EquipmentList({
   console.log("EquipmentList gymName:", gymName);
 
   // 컴포넌트 마운트 시 운동기구 목록 가져오기
+  // flashing state for item highlight (id -> boolean)
+  const [flashing, setFlashing] = useState<Record<string, boolean>>({});
+  const timeoutsRef = useRef<number[]>([]);
+  // ref to store SSE cleanup function so effect cleanup can call it
+  const sseCleanupRef = useRef<(() => void) | null>(null);
+  const pollCleanupRef = useRef<(() => void) | null>(null);
+  const accessTokenRef = useRef<string | null>(null);
+
+  const sseEnabled = useMemo(() => {
+    try {
+      const raw = (import.meta as any)?.env?.VITE_ENABLE_EQUIPMENT_SSE;
+      return raw === "true";
+    } catch (e) {
+      return false;
+    }
+  }, []);
+
+  const pollIntervalMs = useMemo(() => {
+    try {
+      const raw = (import.meta as any)?.env?.VITE_EQUIPMENT_POLL_INTERVAL_MS;
+      if (raw) return Math.max(parseInt(raw, 10) || 0, 3000);
+    } catch (e) {
+      /* ignore */
+    }
+    return 5000;
+  }, []);
+
   useEffect(() => {
-    const fetchEquipment = async () => {
-      // "헬스장 예제"인 경우 하드코딩 데이터 사용
+    const base = (() => {
+      // Vite exposes env vars on import.meta.env (VITE_...); guard process for other bundlers
+      try {
+        const vite = (import.meta as any)?.env?.VITE_API_BASE;
+        if (vite) return vite;
+      } catch (e) {
+        /* ignore */
+      }
+      try {
+        if (typeof process !== "undefined" && process?.env?.REACT_APP_API_BASE)
+          return process.env.REACT_APP_API_BASE;
+      } catch (e) {
+        /* ignore */
+      }
+      return "http://43.201.88.27";
+    })();
+
+    const getEquipmentImage = (name: string, type: string): string => {
+      const nameLower = (name || "").toLowerCase();
+      if (
+        nameLower.includes("러닝") ||
+        nameLower.includes("런닝") ||
+        nameLower.includes("treadmill")
+      )
+        return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+      if (
+        nameLower.includes("사이클") ||
+        nameLower.includes("cycle") ||
+        nameLower.includes("bike")
+      )
+        return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+      if (nameLower.includes("일립티컬") || nameLower.includes("elliptical"))
+        return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+      if (nameLower.includes("로잉") || nameLower.includes("rowing"))
+        return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+      if (nameLower.includes("벤치") || nameLower.includes("bench"))
+        return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+      if (nameLower.includes("스쿼트") || nameLower.includes("squat"))
+        return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+      if (nameLower.includes("덤벨") || nameLower.includes("dumbbell"))
+        return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+      if (nameLower.includes("스텝") || nameLower.includes("step"))
+        return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+      if ((type || "").toLowerCase() === "cardio")
+        return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+      return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+    };
+
+    const normalizeEquipment = (eq: any): Equipment => {
+      if (!eq) {
+        return {
+          id: "unknown",
+          name: "기구",
+          type: "cardio",
+          status: "available",
+          image: getEquipmentImage("기구", "cardio"),
+          allocatedTime: 30,
+          waitingCount: 0,
+        };
+      }
+
+      const status =
+        eq.status === "AVAILABLE"
+          ? "available"
+          : eq.status === "IN_USE"
+          ? "in-use"
+          : eq.status === "WAITING"
+          ? "waiting"
+          : "available";
+
+      const imageUrl =
+        eq.image_url ||
+        eq.image ||
+        eq.imageUrl ||
+        eq.photo ||
+        eq.picture_url ||
+        getEquipmentImage(eq.name || "기구", eq.type || "cardio");
+
+      return {
+        id: String(eq.id ?? eq.equipment_id ?? eq.pk ?? eq.equipmentId ?? ""),
+        name: eq.name || eq.equipment || "기구",
+        type: (eq.type || "cardio").toLowerCase(),
+        status,
+        image: imageUrl,
+        allocatedTime: eq.base_session_time_minutes || eq.allocatedTime || 30,
+        waitingCount:
+          eq.waiting_count ?? eq.waitingCount ?? eq.queue_length ?? undefined,
+        currentUser: eq.current_user ?? eq.currentUser ?? undefined,
+        timeRemaining: eq.time_remaining ?? eq.timeRemaining ?? undefined,
+      };
+    };
+
+    const mergeEquipmentFromServer = (
+      rawItems: any[] | any,
+      opts?: { suppressFlash?: boolean }
+    ) => {
+      const items = Array.isArray(rawItems) ? rawItems : [rawItems];
+      const formatted = items
+        .map(normalizeEquipment)
+        .filter((item) => item.id !== "");
+
+      setEquipment((prev) => {
+        const prevById = new Map(prev.map((item) => [String(item.id), item]));
+        const changedIds: string[] = [];
+        const next = formatted.map((item) => {
+          const prevItem = prevById.get(item.id);
+          if (!prevItem) {
+            changedIds.push(item.id);
+            return item;
+          }
+          const hasChange =
+            prevItem.status !== item.status ||
+            (prevItem.waitingCount ?? 0) !== (item.waitingCount ?? 0) ||
+            prevItem.currentUser !== item.currentUser ||
+            prevItem.timeRemaining !== item.timeRemaining;
+          if (hasChange) {
+            changedIds.push(item.id);
+            return { ...prevItem, ...item };
+          }
+          return prevItem;
+        });
+
+        if (!opts?.suppressFlash && changedIds.length > 0) {
+          setFlashing((prevFlash) => {
+            const updated = { ...prevFlash };
+            changedIds.forEach((id) => {
+              updated[id] = true;
+            });
+            return updated;
+          });
+          const timeoutId = window.setTimeout(() => {
+            setFlashing((prevFlash) => {
+              const updated = { ...prevFlash };
+              changedIds.forEach((id) => {
+                updated[id] = false;
+              });
+              return updated;
+            });
+          }, 700);
+          timeoutsRef.current.push(timeoutId);
+        }
+
+        return next;
+      });
+    };
+
+    const startPolling = (initialToken: string | null) => {
+      const fetchSnapshot = async () => {
+        let access = accessTokenRef.current ?? initialToken;
+        const refresh = localStorage.getItem("refresh_token");
+
+        const callFetch = async (token: string | null) => {
+          const headers: any = { "Content-Type": "application/json" };
+          if (token) headers["Authorization"] = `Bearer ${token}`;
+          return await fetch(`${base}/api/equipment/`, { headers });
+        };
+
+        try {
+          let res = await callFetch(access);
+          if (res.status === 401 && refresh) {
+            const rres = await fetch(`${base}/api/token/refresh/`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ refresh }),
+            });
+            if (rres.ok) {
+              const rdata = await rres.json();
+              if (rdata.access) {
+                access = rdata.access;
+                accessTokenRef.current = access;
+                localStorage.setItem("access_token", access);
+                res = await callFetch(access);
+              }
+            } else {
+              console.warn("Access token refresh failed during polling");
+              return;
+            }
+          }
+
+          if (!res.ok) {
+            console.warn("Equipment polling failed", res.status);
+            return;
+          }
+
+          const data = await res.json();
+          mergeEquipmentFromServer(data);
+        } catch (err) {
+          console.warn("Equipment polling error", err);
+        }
+      };
+
+      fetchSnapshot();
+      const timer = window.setInterval(fetchSnapshot, pollIntervalMs);
+      return () => {
+        window.clearInterval(timer);
+      };
+    };
+
+    const openSSE = (accessToken: string | null) => {
+      let es: EventSource | null = null;
+      try {
+        const tokenParam = accessToken
+          ? `?access_token=${encodeURIComponent(accessToken)}`
+          : "";
+        // avoid accidental double-slash before query
+        es = new EventSource(`${base}/api/equipment/stream${tokenParam}`);
+        console.log("SSE: connecting to equipment stream...");
+
+        // Listen to default message events (if server emits plain messages)
+        es.onmessage = (ev) => {
+          try {
+            const payload = JSON.parse(ev.data);
+            mergeEquipmentFromServer(payload);
+          } catch (err) {
+            console.error("SSE message parse error", err);
+          }
+        };
+
+        // Some servers emit a named event for the initial snapshot ("initial").
+        // Add a listener so we correctly receive that payload and initialize the list.
+        es.addEventListener("initial", (ev: MessageEvent) => {
+          try {
+            const payload = JSON.parse((ev as any).data);
+            if (payload) {
+              mergeEquipmentFromServer(payload, { suppressFlash: true });
+            }
+          } catch (err) {
+            console.error("SSE initial event parse error", err);
+          }
+        });
+
+        es.onerror = (err) => {
+          console.warn("SSE error", err);
+        };
+      } catch (err) {
+        console.warn("SSE not available", err);
+      }
+
+      // return cleanup
+      return () => {
+        if (es) es.close();
+      };
+    };
+
+    const doInitial = async () => {
+      // mock shortcut for example gym
       if (gymName === "헬스장 예제" || !gymName) {
         console.log("헬스장 예제: 하드코딩 데이터 사용");
         const mockEquipment: Equipment[] = [
@@ -72,7 +449,7 @@ export function EquipmentList({
             type: "cardio",
             status: "available",
             image:
-              "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
+              "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
             allocatedTime: 30,
           },
           {
@@ -81,47 +458,9 @@ export function EquipmentList({
             type: "cardio",
             status: "in-use",
             image:
-              "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
+              "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
             allocatedTime: 45,
             timeRemaining: 25,
-          },
-          {
-            id: "3",
-            name: "벤치프레스",
-            type: "strength",
-            status: "available",
-            image:
-              "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-            allocatedTime: 30,
-          },
-          {
-            id: "4",
-            name: "스쿼트 랙",
-            type: "strength",
-            status: "in-use",
-            image:
-              "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-            allocatedTime: 60,
-            timeRemaining: 40,
-          },
-          {
-            id: "5",
-            name: "덤벨",
-            type: "strength",
-            status: "available",
-            image:
-              "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-            allocatedTime: 20,
-          },
-          {
-            id: "6",
-            name: "스텝밀",
-            type: "cardio",
-            status: "waiting",
-            image:
-              "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-            allocatedTime: 30,
-            waitingCount: 2,
           },
         ];
         setEquipment(mockEquipment);
@@ -129,83 +468,55 @@ export function EquipmentList({
         return;
       }
 
-      // 실제 헬스장인 경우 API에서 데이터 가져오기
-      console.log("실제 헬스장: API에서 운동기구 데이터 가져오기");
+      setLoading(true);
       try {
-        setLoading(true);
-        const token = localStorage.getItem("access_token");
+        let access = localStorage.getItem("access_token");
+        const refresh = localStorage.getItem("refresh_token");
 
-        if (!token) {
-          throw new Error("로그인이 필요합니다.");
-        }
-
-        const response = await fetch("http://43.201.88.27/api/equipment/", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error("운동기구 목록을 불러올 수 없습니다.");
-        }
-
-        const data = await response.json();
-        console.log("Fetched equipment data:", data);
-
-        // 운동기구 이름 또는 타입에 따라 이미지 URL 매핑하는 함수
-        const getEquipmentImage = (name: string, type: string): string => {
-          const nameLower = name.toLowerCase();
-
-          // 이름 기반 매칭
-          if (
-            nameLower.includes("러닝") ||
-            nameLower.includes("런닝") ||
-            nameLower.includes("treadmill")
-          ) {
-            return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
-          }
-          if (
-            nameLower.includes("사이클") ||
-            nameLower.includes("cycle") ||
-            nameLower.includes("bike")
-          ) {
-            return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
-          }
-          if (
-            nameLower.includes("일립티컬") ||
-            nameLower.includes("elliptical")
-          ) {
-            return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
-          }
-          if (nameLower.includes("로잉") || nameLower.includes("rowing")) {
-            return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
-          }
-          if (nameLower.includes("벤치") || nameLower.includes("bench")) {
-            return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
-          }
-          if (nameLower.includes("스쿼트") || nameLower.includes("squat")) {
-            return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
-          }
-          if (nameLower.includes("덤벨") || nameLower.includes("dumbbell")) {
-            return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
-          }
-          if (nameLower.includes("스텝") || nameLower.includes("step")) {
-            return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
-          }
-
-          // 타입 기반 기본 이미지
-          if (type.toLowerCase() === "cardio") {
-            return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
-          }
-
-          // 기본 이미지
-          return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBneW0lMjBlcXVpcG1lbnR8ZW58MXx8fHwxNzU5MjkwNjA4fDA&ixlib=rb-4.1.0&q=80&w=1080";
+        const callFetch = async (token: string | null) => {
+          const headers: any = { "Content-Type": "application/json" };
+          if (token) headers["Authorization"] = `Bearer ${token}`;
+          return await fetch(`${base}/api/equipment/`, { headers });
         };
 
-        // 백엔드 응답을 프론트엔드 형식으로 변환
+        console.debug("doInitial: starting equipment fetch", {
+          access: !!access,
+          refresh: !!refresh,
+        });
+        let res = await callFetch(access);
+        console.debug("doInitial: initial fetch response status", res.status);
+        if (res.status === 401 && refresh) {
+          // try refresh
+          const rres = await fetch(`${base}/api/token/refresh/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ refresh }),
+          });
+          console.debug("doInitial: refresh response status", rres.status);
+          if (rres.ok) {
+            const rdata = await rres.json();
+            if (rdata.access) {
+              access = rdata.access;
+              localStorage.setItem("access_token", access);
+              res = await callFetch(access);
+              console.debug(
+                "doInitial: fetch after refresh status",
+                res.status
+              );
+            }
+          } else {
+            throw new Error("인증 필요: 로그인 후 다시 시도하세요.");
+          }
+        }
+
+        if (!res.ok) throw new Error("운동기구 목록을 불러올 수 없습니다.");
+
+        const data = await res.json();
+        console.debug(
+          "doInitial: fetched equipment count",
+          Array.isArray(data) ? data.length : typeof data
+        );
         const formattedEquipment: Equipment[] = data.map((eq: any) => {
-          // 백엔드에서 이미지 URL 가져오기 (여러 가능한 필드명 체크)
           const imageUrl =
             eq.image_url ||
             eq.image ||
@@ -213,49 +524,60 @@ export function EquipmentList({
             eq.photo ||
             eq.picture_url ||
             getEquipmentImage(eq.name, eq.type);
-
           return {
             id: eq.id.toString(),
             name: eq.name,
-            type: eq.type.toLowerCase(), // CARDIO -> cardio, STRENGTH -> strength
+            type: (eq.type || "").toLowerCase(),
             status:
               eq.status === "AVAILABLE"
                 ? "available"
                 : eq.status === "IN_USE"
                 ? "in-use"
+                : eq.status === "WAITING"
+                ? "waiting"
                 : "available",
             image: imageUrl,
             allocatedTime: eq.base_session_time_minutes || 30,
-            waitingCount: 0, // TODO: 백엔드에서 대기열 정보 가져오기
-            currentUser: undefined, // TODO: 백엔드에서 현재 사용자 정보 가져오기
-            timeRemaining: undefined, // TODO: 백엔드에서 남은 시간 정보 가져오기
+            waitingCount: eq.waiting_count ?? 0,
+            currentUser: eq.current_user ?? undefined,
+            timeRemaining: eq.time_remaining ?? undefined,
           };
         });
 
         setEquipment(formattedEquipment);
         setError(null);
+        setLoading(false);
+
+        // open SSE only after successful initial fetch
+        accessTokenRef.current = access;
+
+        if (sseEnabled) {
+          const cleanup = openSSE(access);
+          sseCleanupRef.current = cleanup;
+        } else {
+          const cleanup = startPolling(access);
+          pollCleanupRef.current = cleanup;
+        }
       } catch (err) {
-        console.error("운동기구 목록 로딩 실패:", err);
-        setError(
-          err instanceof Error
-            ? err.message
-            : "운동기구 목록을 불러오는데 실패했습니다."
-        );
+        console.error("Initial equipment fetch failed:", err);
+        setError(err instanceof Error ? err.message : String(err));
         setEquipment([]);
-      } finally {
         setLoading(false);
       }
     };
 
-    fetchEquipment();
-    // 5초마다 자동 새로고침 (실시간 상태 반영)
-    const interval = setInterval(() => {
-      console.log("🔄 기구 목록 자동 새로고침 (3초)");
-      fetchEquipment();
-    }, 3000);
+    doInitial();
 
-    return () => clearInterval(interval);
-  }, [gymName]);
+    return () => {
+      // cleanup SSE and timeouts
+      if (sseCleanupRef.current) sseCleanupRef.current();
+      if (pollCleanupRef.current) pollCleanupRef.current();
+      timeoutsRef.current.forEach((id) => clearTimeout(id));
+      timeoutsRef.current = [];
+      sseCleanupRef.current = null;
+      pollCleanupRef.current = null;
+    };
+  }, [gymName, pollIntervalMs, sseEnabled]);
 
   const categories = [
     { id: "all", name: "전체" },
@@ -326,29 +648,6 @@ export function EquipmentList({
     selectedCategory === "all"
       ? equipment
       : equipment.filter((eq) => eq.type === selectedCategory);
-
-  const getStatusBadge = (eq: Equipment) => {
-    switch (eq.status) {
-      case "available":
-        return (
-          <Badge className="bg-green-100 text-green-700">바로 사용 가능</Badge>
-        );
-      case "in-use":
-        return (
-          <Badge className="bg-yellow-100 text-yellow-700">
-            사용 중 ({eq.timeRemaining}분 남음)
-          </Badge>
-        );
-      case "waiting":
-        return (
-          <Badge className="bg-red-100 text-red-700">
-            현재 {eq.waitingCount}명 대기중
-          </Badge>
-        );
-      default:
-        return null;
-    }
-  };
 
   return (
     <div className="min-h-screen bg-background p-4 pb-20">
@@ -429,64 +728,12 @@ export function EquipmentList({
         {!loading && !error && filteredEquipment.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredEquipment.map((eq) => (
-              <Card
+              <EquipmentItem
                 key={eq.id}
-                className="hover:shadow-lg transition-shadow cursor-pointer border-gray-600 bg-card"
-                onClick={() => onEquipmentSelect(eq)}
-              >
-                <CardContent className="p-4">
-                  <div className="flex space-x-4">
-                    <div className="w-24 h-24 rounded-lg overflow-hidden">
-                      <ImageWithFallback
-                        src={eq.image}
-                        alt={eq.name}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-start justify-between">
-                        <h3 className="font-semibold text-white">{eq.name}</h3>
-                        {getStatusBadge(eq)}
-                      </div>
-
-                      <div className="flex items-center space-x-1 text-sm text-gray-300">
-                        <Clock className="h-3 w-3" />
-                        <span>기본 할당시간: {eq.allocatedTime}분</span>
-                      </div>
-
-                      {/* 이용 중 또는 대기 중일 때 줄서기 버튼 표시 */}
-                      {(eq.status === "in-use" || eq.status === "waiting") && (
-                        <div>
-                          <Button
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onEquipmentSelect(eq);
-                            }}
-                            className="mt-1 bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1 px-3 py-1"
-                          >
-                            <Users className="h-4 w-4" />
-                            줄서기
-                            {typeof eq.waitingCount === "number" &&
-                              eq.waitingCount > 0 && (
-                                <span className="text-xs ml-1">
-                                  ({eq.waitingCount}명)
-                                </span>
-                              )}
-                          </Button>
-                        </div>
-                      )}
-
-                      {eq.currentUser && (
-                        <div className="flex items-center space-x-1 text-sm text-gray-300">
-                          <Users className="h-3 w-3" />
-                          <span>사용자: {eq.currentUser}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                eq={eq}
+                onSelect={onEquipmentSelect}
+                flashing={!!flashing[String(eq.id)]}
+              />
             ))}
           </div>
         )}

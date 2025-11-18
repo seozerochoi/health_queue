@@ -18,17 +18,13 @@ from django.contrib import admin
 from django.urls import path, include
 # Simple JWT가 제공하는 View들을 import 합니다.
 from rest_framework_simplejwt.views import TokenRefreshView
-# 우리가 만든 RegisterView, get_current_user, MyTokenObtainPairView를 import 합니다.
-from users.views import RegisterView, get_current_user, MyTokenObtainPairView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
 
-    # 회원가입, 로그인, 토큰 갱신 API
-    path('api/register/', RegisterView.as_view(), name='register'),
-    path('api/login/', MyTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    # 회원가입, 로그인, 토큰 갱신 API - moved to users/urls.py to avoid eager import
+    # These paths now use include() which defers view imports until request time
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path('api/user/me/', get_current_user, name='current_user'),
     
     # 기존에 만들었던 다른 앱들의 URL들
     path('api/', include('users.urls')), # users.urls를 'api/' 하위로 변경
