@@ -340,8 +340,24 @@ export function MyPage({
           </Button>
         </div>
 
-        {/* 프로필 카드: 우측 버튼은 "마이페이지"(편집)로 변경 */}
-        {/* 프로필 카드 제거 */}
+        {/* 프로필 카드 */}
+        <Card className="bg-card border-border">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-full bg-blue-500 flex items-center justify-center text-white text-2xl font-bold">
+                {userNickname ? userNickname[0].toUpperCase() : userName ? userName[0].toUpperCase() : "U"}
+              </div>
+              <div className="flex-1">
+                <div className="text-xl font-semibold text-foreground">
+                  {userNickname || userName || "사용자"}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  스마트짐
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* 단순화된 폼: 운동 목적만 */}
         <Card className="bg-card border-border">
