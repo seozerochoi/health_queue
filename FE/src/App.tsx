@@ -449,7 +449,53 @@ export default function App() {
     setCurrentView("satisfaction-survey");
   };
 
-  const handleSurveyComplete = () => {
+  const handleSurveyComplete = async () => {
+    // 운동기구 상태를 AVAILABLE로 변경
+    if (selectedEquipment) {
+      const token = localStorage.getItem("access_token");
+      const apiBase = (() => {
+        try {
+          const vite = (import.meta as any)?.env?.VITE_API_BASE;
+          if (vite) return vite;
+        } catch (e) {
+          /* ignore */
+        }
+        try {
+          if (typeof process !== "undefined" && process?.env?.REACT_APP_API_BASE)
+            return process.env.REACT_APP_API_BASE;
+        } catch (e) {
+          /* ignore */
+        }
+        return "http://43.201.88.27";
+      })();
+
+      if (token) {
+        try {
+          const response = await fetch(
+            `${apiBase}/api/equipment/${selectedEquipment.id}/`,
+            {
+              method: "PATCH",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                equipment_status: "AVAILABLE",
+              }),
+            }
+          );
+
+          if (!response.ok) {
+            console.error("기구 상태 업데이트 실패:", response.status);
+          } else {
+            console.log("기구 상태가 AVAILABLE로 변경되었습니다.");
+          }
+        } catch (error) {
+          console.error("기구 상태 업데이트 중 오류:", error);
+        }
+      }
+    }
+
     setCurrentView("equipment-list");
     setSelectedEquipment(null);
     setWorkoutStartTime(null);
