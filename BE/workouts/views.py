@@ -50,7 +50,6 @@ class StartSessionView(APIView):
         equipment_id = request.data.get('equipment_id')
         user = request.user
 
-        # Validate input: allow equipment lookup by nfc_tag_id or equipment_id
         if not nfc_tag_id and not equipment_id:
             return Response({'error': 'nfc_tag_id 또는 equipment_id 중 하나가 필요합니다.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -62,22 +61,21 @@ class StartSessionView(APIView):
         except Equipment.DoesNotExist:
             return Response({'error': '해당 기구를 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Use DB transaction and row-level lock to avoid races
-        # Keep the whole start flow in one transaction so equipment.status and
-        # reservation/session updates are atomic and cannot be lost due to races.
         with transaction.atomic():
             equipment = Equipment.objects.select_for_update().get(pk=equipment.pk)
 
             if equipment.status != 'AVAILABLE':
                 return Response({'error': '현재 사용할 수 없는 기구입니다.'}, status=status.HTTP_409_CONFLICT)
 
-            # If the user already has an active session, end it immediately (simulate switching machines)
             existing_session = UsageSession.objects.select_for_update().filter(user=user, end_time__isnull=True).first()
             if existing_session:
-                finalize_session(existing_session, now=timezone.now())
+                finalize_session(existing_session, now=timezone.now(), reason='user_start_new_session')
+                logger.info(
+                    "Ended existing session %s for user %s before starting a new one",
+                    existing_session.pk,
+                    user.username,
+                )
 
-            # Check queue: if other users in queue, only NOTIFIED user may start
-            # Treat only recent NOTIFIED reservations (within the notification timeout) as blocking.
             minutes_default = getattr(settings, 'WORKOUT_NOTIFICATION_TIMEOUT_MINUTES', None)
             if minutes_default is None:
                 minutes_default = DEFAULT_NOTIFICATION_TIMEOUT_MINUTES
@@ -88,7 +86,6 @@ class StartSessionView(APIView):
 
             notified_cutoff = timezone.now() - datetime.timedelta(minutes=minutes_default)
 
-            # Expire any stale NOTIFIED reservations for this equipment so they don't block a Start
             stale_qs = Reservation.objects.select_for_update().filter(equipment=equipment, status='NOTIFIED', notified_at__lt=notified_cutoff)
             if stale_qs.exists():
                 for stale in list(stale_qs):
@@ -99,89 +96,79 @@ class StartSessionView(APIView):
             other_recent_notified = Reservation.objects.filter(equipment=equipment, status='NOTIFIED', notified_at__gte=notified_cutoff).exclude(user=user).exists()
             other_in_queue = other_waiting or other_recent_notified
 
-            # Reservation for this user is only valid if it's a recent NOTIFIED one
             reservation = Reservation.objects.select_for_update().filter(equipment=equipment, user=user, status='NOTIFIED', notified_at__gte=notified_cutoff).first()
             if other_in_queue and not reservation:
                 return Response({'error': '대기열이 있습니다. 알림 받은 사용자만 시작할 수 있습니다.'}, status=status.HTTP_409_CONFLICT)
 
-        allocated_time = 0
+        allocated_time = equipment.base_session_time_minutes
         session_type = ''
 
-        # If the user was notified (reservation exists), give them base time and mark reservation completed.
         if reservation:
             allocated_time = equipment.base_session_time_minutes
             session_type = 'BASE'
             reservation.status = 'COMPLETED'
             reservation.save()
         else:
-            # --- AI 추천 로직 시작 ---
-            # 예약자가 아닐 경우 (비어있는 기구 사용)
             try:
-                # Lazy import to avoid loading ML libs at startup
                 from ai_model.prediction_utils import get_ai_recommendation
-                
+
                 user_profile = UserProfile.objects.get(user=user)
-                
-                # 1. 최근 24시간 운동 기록을 DB에서 조회
+
                 now = timezone.now()
                 recent_sessions = UsageSession.objects.filter(
-                    user=user, 
+                    user=user,
                     start_time__gte=now - datetime.timedelta(hours=24),
-                    end_time__isnull=False # 완료된 세션만
+                    end_time__isnull=False,
                 )
 
-                # 2. 상/하체 운동 비율 계산
                 total_duration_minutes = 0
                 upper_duration_minutes = 0
                 lower_duration_minutes = 0
-                
+
                 for session in recent_sessions:
-                    # 운동 시간을 분 단위로 계산
                     duration = (session.end_time - session.start_time).total_seconds() / 60
                     total_duration_minutes += duration
-                    
-                    # equipment/models.py에 추가한 body_part 필드 사용
                     if session.equipment.body_part == 'UPPER':
                         upper_duration_minutes += duration
                     elif session.equipment.body_part == 'LOWER':
                         lower_duration_minutes += duration
-                
-                # 3. 비율(ratio) 계산 (0으로 나누기 방지)
+
                 upper_ratio = (upper_duration_minutes / total_duration_minutes) if total_duration_minutes > 0 else 0
                 lower_ratio = (lower_duration_minutes / total_duration_minutes) if total_duration_minutes > 0 else 0
-                
-                ratios = {'upper_ratio': upper_ratio, 'lower_ratio': lower_ratio}
-                
-                print(f"DB 기반 비율 계산: 상체 {upper_ratio:.2f}, 하체 {lower_ratio:.2f}")
 
-                # 4. AI 모델 호출
+                ratios = {'upper_ratio': upper_ratio, 'lower_ratio': lower_ratio}
+
                 allocated_time = get_ai_recommendation(
                     user_profile,
-                    equipment.ai_model_id, # DB에 저장된 AI용 기구 ID 전달
-                    ratios
+                    equipment.ai_model_id,
+                    ratios,
                 )
                 session_type = 'AI_RECOMMENDED'
-
             except UserProfile.DoesNotExist:
-                # 유저 프로필이 없는 경우
+                logger.warning(
+                    "UserProfile missing for %s, falling back to base time",
+                    user.username,
+                )
                 allocated_time = equipment.base_session_time_minutes
                 session_type = 'BASE'
             except Exception as e:
-                # 기타 AI 예측 오류 발생 시
-                print(f"!!! AI 추천 중 오류 발생: {e}")
-                allocated_time = equipment.base_session_time_minutes # 오류 시 기본 시간
+                logger.exception(
+                    "AI recommendation failed for user %s equipment %s",
+                    user.username,
+                    equipment.pk,
+                )
+                allocated_time = equipment.base_session_time_minutes
                 session_type = 'BASE'
-            # --- AI 추천 로직 끝 ---
 
-            # --- AI 추천 로직 끝 ---
+        allocated_time = max(1, int(round(allocated_time)))
 
-        # 5. 새로운 운동 세션 생성 — do this inside a short transaction and log outcomes
         try:
             with transaction.atomic():
-                # re-lock equipment row and double-check availability
                 equipment = Equipment.objects.select_for_update().get(pk=equipment.pk)
                 if equipment.status != 'AVAILABLE' and not reservation:
-                    logger.warning(f"Equipment {equipment.pk} not available at commit time: {equipment.status}")
+                    logger.warning(
+                        f"Equipment {equipment.pk} not available at commit time: {equipment.status}"
+                    )
                     return Response({'error': '기구가 사용 불가 상태입니다.'}, status=status.HTTP_409_CONFLICT)
 
                 equipment.status = 'IN_USE'
@@ -195,21 +182,17 @@ class StartSessionView(APIView):
                     session_type=session_type,
                     last_heartbeat=timezone.now()
                 )
-
         except Exception as e:
             logger.exception("Failed to create UsageSession or update Equipment status")
             return Response({'error': '서버 에러: 세션 생성 실패'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         serializer = UsageSessionSerializer(session)
-        # Include current equipment info for FE debugging (so FE can immediately
-        # reflect server-side equipment.status without extra fetch).
         response_data = serializer.data
         try:
             response_data['equipment_status'] = equipment.status
             response_data['equipment_id'] = equipment.id
             response_data['equipment_name'] = equipment.name
         except Exception:
-            # Defensive: if equipment is not present for any reason, don't break the response
             pass
 
         return Response(response_data, status=status.HTTP_201_CREATED)
@@ -223,7 +206,12 @@ class EndSessionView(APIView):
         try:
             with transaction.atomic():
                 current_session = UsageSession.objects.select_for_update().get(user=user, end_time__isnull=True)
-                finalize_session(current_session, now=timezone.now())
+                finalize_session(current_session, now=timezone.now(), reason='user_end_session')
+                logger.info(
+                    "User %s explicitly ended session %s",
+                    user.username,
+                    current_session.pk,
+                )
 
         except UsageSession.DoesNotExist:
             return Response({'error': '현재 진행 중인 운동 세션이 없습니다.'}, status=status.HTTP_404_NOT_FOUND)

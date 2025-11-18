@@ -99,7 +99,7 @@ def expire_active_sessions(self, batch_size: int = 50):
                 try:
                     expected_end = s.start_time + timedelta(minutes=s.allocated_duration_minutes)
                     if expected_end <= now:
-                        finalize_session(s, now=now)
+                        finalize_session(s, now=now, reason='duration_expired')
                         ended += 1
                 except Exception:
                     # if any row-specific error occurs, skip to next

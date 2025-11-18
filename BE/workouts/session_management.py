@@ -51,7 +51,7 @@ def _release_equipment_to_available(equipment: Equipment, now=None):
     return equipment
 
 
-def finalize_session(session: UsageSession, now=None) -> Optional[Equipment]:
+def finalize_session(session: UsageSession, now=None, *, reason: Optional[str] = None) -> Optional[Equipment]:
     if now is None:
         now = timezone.now()
 
@@ -62,7 +62,14 @@ def finalize_session(session: UsageSession, now=None) -> Optional[Equipment]:
     session.save()
 
     equipment = Equipment.objects.select_for_update().get(pk=session.equipment.pk)
-    return _release_equipment_to_available(equipment, now=now)
+    released = _release_equipment_to_available(equipment, now=now)
+    logger.info(
+        "Finalized session %s (equipment %s) reason=%s",
+        session.pk,
+        session.equipment_id,
+        reason or 'unspecified',
+    )
+    return released
 
 
 def cleanup_stale_sessions(timeout_seconds: Optional[int] = None, grace_seconds: Optional[int] = None, batch_size: int = 20) -> int:
@@ -95,7 +102,7 @@ def cleanup_stale_sessions(timeout_seconds: Optional[int] = None, grace_seconds:
 
             for session in sessions:
                 try:
-                    finalize_session(session, now=timezone.now())
+                    finalize_session(session, now=timezone.now(), reason='heartbeat_timeout')
                 except Exception as exc:
                     logger.exception("Failed to finalize stale session %s", session.pk, exc_info=exc)
                     continue
@@ -119,6 +126,10 @@ def cleanup_stale_sessions(timeout_seconds: Optional[int] = None, grace_seconds:
             for equipment in stuck_equipment:
                 try:
                     _release_equipment_to_available(equipment, now=timezone.now())
+                    logger.info(
+                        "Released stuck IN_USE equipment %s without active session",
+                        equipment.pk,
+                    )
                 except Exception as exc:
                     logger.exception("Failed to release stuck equipment %s", equipment.pk, exc_info=exc)
                     continue

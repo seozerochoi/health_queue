@@ -461,10 +461,10 @@ export default function App() {
         const sessionData = await response.json();
         console.log("세션 시작 성공:", sessionData);
 
-  setWorkoutStartTime(new Date());
-  setDirectWorkout(true);
-  await sendImmediateHeartbeat(equipment.id);
-  setCurrentView("workout-timer");
+        setWorkoutStartTime(new Date());
+        setDirectWorkout(true);
+        await sendImmediateHeartbeat(equipment.id);
+        setCurrentView("workout-timer");
       } catch (error) {
         console.error("세션 시작 중 오류:", error);
         alert("운동 세션 시작 중 오류가 발생했습니다.");
@@ -502,7 +502,10 @@ export default function App() {
           /* ignore */
         }
         try {
-          if (typeof process !== "undefined" && process?.env?.REACT_APP_API_BASE)
+          if (
+            typeof process !== "undefined" &&
+            process?.env?.REACT_APP_API_BASE
+          )
             return process.env.REACT_APP_API_BASE;
         } catch (e) {
           /* ignore */
@@ -546,6 +549,11 @@ export default function App() {
   const handleReservationComplete = (newReservations: Reservation[]) => {
     // AI 루틴에서 생성된 예약을 추가하고 즉시 예약 현황 화면으로 이동
     setReservations((prev) => [...prev, ...newReservations]);
+    setCurrentView("reservation-status");
+  };
+
+  const handleQueueUpdate = async () => {
+    await fetchReservations();
     setCurrentView("reservation-status");
   };
 
@@ -898,6 +906,7 @@ export default function App() {
             onBack={navigateBack}
             onStartNFC={handleStartNFC}
             onReservationComplete={handleSingleReservation}
+            onQueueUpdate={handleQueueUpdate}
           />
         ) : null;
 
