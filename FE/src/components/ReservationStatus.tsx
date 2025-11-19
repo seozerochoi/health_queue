@@ -148,27 +148,18 @@ export function ReservationStatus({
                     </div>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    <div className="flex space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="border-gray-600 text-gray-300 hover:bg-gray-700"
-                      >
-                        예약 변경
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="border-red-600 text-red-400 hover:bg-red-900/20"
-                        onClick={() => {
-                          if (onCancelReservation && eqId) {
-                            onCancelReservation(reservation.id, eqId, waitingCount);
-                          }
-                        }}
-                      >
-                        예약 취소
-                      </Button>
-                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-red-600 text-red-400 hover:bg-red-900/20"
+                      onClick={() => {
+                        if (onCancelReservation && eqId) {
+                          onCancelReservation(reservation.id, eqId, waitingCount);
+                        }
+                      }}
+                    >
+                      예약 취소
+                    </Button>
                   </CardContent>
                 </Card>
               );
