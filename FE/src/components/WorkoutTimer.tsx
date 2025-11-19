@@ -99,15 +99,13 @@ export function WorkoutTimer({
 
     try {
       await endSession();
-      onWorkoutComplete();
     } catch (error) {
       console.error("운동 종료 실패:", error);
-      alert("운동 종료 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.");
-      if (timeRemaining > 0) {
-        setIsRunning(true);
-      }
+      // 백엔드 에러여도 프론트엔드에서는 계속 진행
     } finally {
       setIsEnding(false);
+      // 항상 평가 화면으로 이동
+      onWorkoutComplete();
     }
   };
 
@@ -124,12 +122,16 @@ export function WorkoutTimer({
           "Content-Type": "application/json",
         },
         // include equipment id for server-side correlation if supported
-        body: JSON.stringify({ equipment_id: Number(equipment.id) }),
+        body: JSON.stringify({ 
+          equipment_id: Number(equipment.id)
+        }),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`server ${response.status}: ${errorText}`);
+        console.error("운동 종료 API 실패:", response.status, errorText);
+        // 백엔드 에러여도 프론트엔드에서는 계속 진행 (기구 상태는 satisfaction-survey에서 변경)
+        console.warn("백엔드 에러 무시하고 계속 진행");
       }
 
       // stop heartbeat when ended
@@ -138,7 +140,9 @@ export function WorkoutTimer({
         heartbeatIntervalRef.current = null;
       }
     } catch (err) {
-      throw err;
+      console.error("endSession 에러:", err);
+      // 네트워크 에러여도 프론트엔드에서는 계속 진행
+      console.warn("에러 무시하고 계속 진행");
     }
   };
 

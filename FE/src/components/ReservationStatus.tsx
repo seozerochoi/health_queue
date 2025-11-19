@@ -28,12 +28,14 @@ interface ReservationStatusProps {
   onBack: () => void;
   gymName: string;
   reservations: Reservation[];
+  onCancelReservation?: (reservationId: string, equipmentId: string | number, waitingCount: number) => void;
 }
 
 export function ReservationStatus({
   onBack,
   gymName,
   reservations,
+  onCancelReservation,
 }: ReservationStatusProps) {
   const getStatusBadge = (status: string, position?: number | null) => {
     switch (status) {
@@ -103,6 +105,8 @@ export function ReservationStatus({
                 null;
               const eqId =
                 reservation.equipment_id ?? reservation.equipmentId ?? null;
+              const waitingCount =
+                reservation.waitingCount ?? reservation.waiting_count ?? 0;
 
               return (
                 <Card key={reservation.id} className="bg-card border-border">
@@ -156,6 +160,11 @@ export function ReservationStatus({
                         variant="outline"
                         size="sm"
                         className="border-red-600 text-red-400 hover:bg-red-900/20"
+                        onClick={() => {
+                          if (onCancelReservation && eqId) {
+                            onCancelReservation(reservation.id, eqId, waitingCount);
+                          }
+                        }}
                       >
                         예약 취소
                       </Button>

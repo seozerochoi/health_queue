@@ -566,6 +566,63 @@ export default function App() {
     setCurrentView("reservation-status");
   };
 
+  const handleCancelReservation = async (reservationId: string, equipmentId: string | number, waitingCount: number) => {
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        alert("로그인이 필요합니다.");
+        return;
+      }
+
+      const apiBase = (() => {
+        try {
+          const vite = (import.meta as any)?.env?.VITE_API_BASE;
+          if (vite) return vite;
+        } catch (e) { /* ignore */ }
+        try {
+          if (typeof process !== "undefined" && process?.env?.REACT_APP_API_BASE)
+            return process.env.REACT_APP_API_BASE;
+        } catch (e) { /* ignore */ }
+        return "http://43.201.88.27";
+      })();
+
+      // 1. 예약 취소 API 호출
+      const deleteResponse = await fetch(`${apiBase}/api/reservations/${reservationId}/`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      });
+
+      if (!deleteResponse.ok) {
+        throw new Error("예약 취소 실패");
+      }
+
+      // 2. 예약 현황에서 삭제
+      setReservations((prev) =>
+        prev.filter((reservation) => reservation.id !== reservationId)
+      );
+
+      // 3. 줄서기 인원이 1명 이하면 기구 상태를 AVAILABLE로 변경
+      if (waitingCount <= 1) {
+        await fetch(`${apiBase}/api/equipment/${equipmentId}/`, {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ equipment_status: "AVAILABLE" })
+        });
+      }
+
+      alert("예약이 취소되었습니다.");
+    } catch (error) {
+      console.error("예약 취소 중 오류:", error);
+      alert("예약 취소에 실패했습니다. 관리자에게 문의하세요.");
+    }
+  };
+
   const handleQueueUpdate = async () => {
     await fetchReservations();
     setCurrentView("reservation-status");
@@ -1034,6 +1091,7 @@ export default function App() {
             onBack={navigateBack}
             gymName={selectedGym?.gym_name || ""}
             reservations={reservations}
+            onCancelReservation={handleCancelReservation}
           />
         );
 
