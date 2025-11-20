@@ -121,17 +121,31 @@ export function WorkoutTimer({
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        // include equipment id for server-side correlation if supported
-        body: JSON.stringify({ 
-          equipment_id: Number(equipment.id)
-        }),
+        // 백엔드는 user의 활성 세션을 자동으로 찾으므로 body는 빈 객체
+        body: JSON.stringify({}),
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error("운동 종료 API 실패:", response.status, errorText);
-        // 백엔드 에러여도 프론트엔드에서는 계속 진행 (기구 상태는 satisfaction-survey에서 변경)
-        console.warn("백엔드 에러 무시하고 계속 진행");
+        let errorMessage = "알 수 없는 오류";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorData.message || JSON.stringify(errorData);
+        } catch {
+          errorMessage = await response.text();
+        }
+        
+        console.error("운동 종료 API 실패:", response.status, errorMessage);
+        
+        // 404 에러 (세션이 없음)는 이미 종료되었을 가능성이 있으므로 무시하고 계속 진행
+        if (response.status === 404) {
+          console.warn("세션이 이미 종료되었거나 존재하지 않음 - 계속 진행");
+        } else {
+          // 다른 에러는 로그만 남기고 계속 진행
+          console.warn("백엔드 에러 무시하고 계속 진행");
+        }
+      } else {
+        const data = await response.json();
+        console.log("운동 종료 성공:", data.message);
       }
 
       // stop heartbeat when ended
@@ -140,9 +154,9 @@ export function WorkoutTimer({
         heartbeatIntervalRef.current = null;
       }
     } catch (err) {
-      console.error("endSession 에러:", err);
+      console.error("endSession 네트워크 에러:", err);
       // 네트워크 에러여도 프론트엔드에서는 계속 진행
-      console.warn("에러 무시하고 계속 진행");
+      console.warn("네트워크 에러 무시하고 계속 진행");
     }
   };
 
@@ -204,7 +218,6 @@ export function WorkoutTimer({
       const token = localStorage.getItem("access_token");
       if (!token) return;
 
-      const payload = JSON.stringify({ equipment_id: Number(equipment.id) });
       try {
         fetch(`${getApiBase()}/api/workouts/end/`, {
           method: "POST",
@@ -212,7 +225,7 @@ export function WorkoutTimer({
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-          body: payload,
+          body: JSON.stringify({}),
           keepalive: true as any,
         });
       } catch (_) {
