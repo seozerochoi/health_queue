@@ -20,6 +20,7 @@ class Equipment(models.Model):
     STATUS_CHOICES = [
         ('AVAILABLE', 'Available'),
         ('IN_USE', 'In Use'),
+        ('WAITING', 'Waiting'),
         ('OUT_OF_ORDER', 'Out of Order'),
     ]
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='AVAILABLE')

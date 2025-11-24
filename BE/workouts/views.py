@@ -8,11 +8,15 @@ from rest_framework.permissions import IsAuthenticated
 # workouts/views.py (이 코드로 덮어쓰세요)
 from .models import UsageSession, Reservation
 from .serializers import UsageSessionSerializer, ReservationSerializer
-from .session_management import cleanup_stale_sessions, finalize_session, notify_equipment_change
+from .session_management import (
+    cleanup_stale_sessions,
+    finalize_session,
+    notify_equipment_change,
+    notify_next_waiter,
+)
 from equipment.models import Equipment # Equipment 모델 import
 from users.models import UserProfile # UserProfile 모델 import
 from django.utils import timezone
-from django.conf import settings
 from django.db import transaction
 import datetime
 import logging
@@ -20,7 +24,7 @@ import logging
 # "AI 두뇌 사용설명서"에서 예측 함수를 가져옵니다.
 # NOTE: Lazy import ai_model to avoid loading heavy ML dependencies at startup
 # from ai_model.prediction_utils import get_ai_recommendation
-from .constants import DEFAULT_NOTIFICATION_TIMEOUT_MINUTES
+from .utils import get_notification_timeout_minutes
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +68,7 @@ class StartSessionView(APIView):
         with transaction.atomic():
             equipment = Equipment.objects.select_for_update().get(pk=equipment.pk)
 
-            if equipment.status != 'AVAILABLE':
+            if equipment.status not in ('AVAILABLE', 'WAITING'):
                 return Response({'error': '현재 사용할 수 없는 기구입니다.'}, status=status.HTTP_409_CONFLICT)
 
             existing_session = UsageSession.objects.select_for_update().filter(user=user, end_time__isnull=True).first()
@@ -76,21 +80,38 @@ class StartSessionView(APIView):
                     user.username,
                 )
 
-            minutes_default = getattr(settings, 'WORKOUT_NOTIFICATION_TIMEOUT_MINUTES', None)
-            if minutes_default is None:
-                minutes_default = DEFAULT_NOTIFICATION_TIMEOUT_MINUTES
-            try:
-                minutes_default = float(minutes_default)
-            except Exception:
-                minutes_default = DEFAULT_NOTIFICATION_TIMEOUT_MINUTES or 0.25
+            minutes_default = get_notification_timeout_minutes()
 
             notified_cutoff = timezone.now() - datetime.timedelta(minutes=minutes_default)
 
-            stale_qs = Reservation.objects.select_for_update().filter(equipment=equipment, status='NOTIFIED', notified_at__lt=notified_cutoff)
+            stale_qs = Reservation.objects.select_for_update().filter(
+                equipment=equipment,
+                status='NOTIFIED',
+                notified_at__lt=notified_cutoff,
+            )
+            promoted_reservation = None
+            stale_expired = False
+            status_changed = False
             if stale_qs.exists():
                 for stale in list(stale_qs):
                     stale.status = 'EXPIRED'
                     stale.save()
+                    stale_expired = True
+
+                promoted_reservation = notify_next_waiter(equipment, now=timezone.now())
+
+                queue_exists = Reservation.objects.filter(
+                    equipment=equipment,
+                    status__in=['WAITING', 'NOTIFIED'],
+                ).exists()
+                desired_status = 'WAITING' if queue_exists else 'AVAILABLE'
+                if equipment.status != 'IN_USE' and equipment.status != desired_status:
+                    equipment.status = desired_status
+                    equipment.save()
+                    status_changed = True
+
+                if stale_expired or promoted_reservation or status_changed:
+                    notify_equipment_change(equipment)
 
             other_waiting = Reservation.objects.filter(equipment=equipment, status='WAITING').exclude(user=user).exists()
             other_recent_notified = Reservation.objects.filter(equipment=equipment, status='NOTIFIED', notified_at__gte=notified_cutoff).exclude(user=user).exists()
@@ -300,32 +321,44 @@ class LeaveQueueView(APIView):
         reservation_id = request.data.get('reservation_id')
         equipment_id = request.data.get('equipment_id')
 
-        reservation = None
-        if reservation_id:
-            try:
-                reservation = Reservation.objects.get(id=reservation_id, user=user)
-            except Reservation.DoesNotExist:
-                return Response({'error': '해당 예약을 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
-        elif equipment_id:
-            reservation = Reservation.objects.filter(user=user, equipment_id=equipment_id, status__in=['WAITING', 'NOTIFIED']).first()
-            if not reservation:
-                return Response({'error': '해당 장비에 대한 대기/알림 예약이 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
-        else:
-            return Response({'error': 'reservation_id 또는 equipment_id를 제공해주세요.'}, status=status.HTTP_400_BAD_REQUEST)
+        with transaction.atomic():
+            if reservation_id:
+                try:
+                    reservation = Reservation.objects.select_for_update().get(id=reservation_id, user=user)
+                except Reservation.DoesNotExist:
+                    return Response({'error': '해당 예약을 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+            elif equipment_id:
+                reservation = (
+                    Reservation.objects.select_for_update()
+                    .filter(user=user, equipment_id=equipment_id, status__in=['WAITING', 'NOTIFIED'])
+                    .first()
+                )
+                if not reservation:
+                    return Response({'error': '해당 장비에 대한 대기/알림 예약이 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+            else:
+                return Response({'error': 'reservation_id 또는 equipment_id를 제공해주세요.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 예약을 만료시키거나 삭제 처리
-        reservation.status = 'EXPIRED'
-        reservation.save()
+            reservation.status = 'EXPIRED'
+            reservation.save()
 
-        # 남아 있는 대기자 중 가장 앞사람을 알림 상태로 변경
-        equipment = reservation.equipment
-        next_reservation = Reservation.objects.filter(equipment=equipment, status='WAITING').order_by('created_at').first()
-        if next_reservation:
-            next_reservation.status = 'NOTIFIED'
-            next_reservation.notified_at = timezone.now()
-            next_reservation.save()
-            # TODO: FCM 푸시 알림 전송
+            equipment = Equipment.objects.select_for_update().get(pk=reservation.equipment_id)
 
-        waiting_count = Reservation.objects.filter(equipment=equipment, status='WAITING').count()
+            next_reservation = None
+            if equipment.status != 'IN_USE':
+                next_reservation = notify_next_waiter(equipment, now=timezone.now())
+
+            queue_exists = Reservation.objects.filter(
+                equipment=equipment,
+                status__in=['WAITING', 'NOTIFIED'],
+            ).exists()
+
+            waiting_count = Reservation.objects.filter(equipment=equipment, status='WAITING').count()
+
+            if equipment.status != 'IN_USE':
+                desired_status = 'WAITING' if queue_exists else 'AVAILABLE'
+                if equipment.status != desired_status:
+                    equipment.status = desired_status
+                    equipment.save()
+
         notify_equipment_change(equipment)
         return Response({'message': '대기열에서 탈퇴 처리되었습니다.', 'waiting_count': waiting_count}, status=status.HTTP_200_OK)

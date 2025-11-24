@@ -2,13 +2,18 @@ from celery import shared_task
 from django.utils import timezone
 from django.db import transaction
 from datetime import timedelta
-from .models import Reservation, UsageSession
-from .session_management import cleanup_stale_sessions, finalize_session
-from equipment.event_bus import publish_equipment_update_by_id
 from typing import Optional
 
+from equipment.event_bus import publish_equipment_update_by_id
+from equipment.models import Equipment
 
-from .constants import DEFAULT_NOTIFICATION_TIMEOUT_MINUTES
+from .models import Reservation, UsageSession
+from .session_management import (
+    cleanup_stale_sessions,
+    finalize_session,
+    mark_reservation_notified,
+)
+from .utils import get_notification_timeout_minutes
 
 
 @shared_task(bind=True)
@@ -17,9 +22,9 @@ def expire_notified_reservations(self, timeout_minutes: float = None, batch_size
     Expire NOTIFIED reservations older than timeout_minutes and notify next waiting users.
     This task is intended to be run periodically (or scheduled per-reservation).
     """
-    # Use the module-level DEFAULT_NOTIFICATION_TIMEOUT_MINUTES when caller doesn't pass a value
+    # Use the shared helper when caller doesn't pass a specific timeout
     if timeout_minutes is None:
-        timeout_minutes = DEFAULT_NOTIFICATION_TIMEOUT_MINUTES
+        timeout_minutes = get_notification_timeout_minutes()
     cutoff = timezone.now() - timedelta(minutes=timeout_minutes)
     expired_total = 0
     notified_total = 0
@@ -44,21 +49,34 @@ def expire_notified_reservations(self, timeout_minutes: float = None, batch_size
                 expired_total += 1
                 touched_eq_ids.add(r.equipment_id)
 
-                # notify next waiting
+                # notify next waiting (if any)
                 next_r = (
                     Reservation.objects.filter(equipment=r.equipment, status='WAITING')
                     .order_by('created_at')
                     .first()
                 )
                 if next_r:
-                    next_r.status = 'NOTIFIED'
-                    next_r.notified_at = timezone.now()
-                    next_r.save()
+                    mark_reservation_notified(next_r, now=timezone.now())
                     notified_total += 1
                     touched_eq_ids.add(next_r.equipment_id)
-                    # TODO: enqueue/send FCM push notification for next_r.user
 
             if touched_eq_ids:
+                equipments = list(
+                    Equipment.objects.select_for_update()
+                    .filter(pk__in=list(touched_eq_ids))
+                )
+                for eq in equipments:
+                    if eq.status == 'IN_USE':
+                        continue
+                    queue_exists = Reservation.objects.filter(
+                        equipment=eq,
+                        status__in=['WAITING', 'NOTIFIED'],
+                    ).exists()
+                    desired_status = 'WAITING' if queue_exists else 'AVAILABLE'
+                    if eq.status != desired_status:
+                        eq.status = desired_status
+                        eq.save()
+
                 def _emit(ids):
                     for eq_id in ids:
                         publish_equipment_update_by_id(eq_id)

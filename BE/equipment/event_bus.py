@@ -1,6 +1,7 @@
 import json
 import threading
 from collections import deque
+from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
 from django.utils import timezone
@@ -87,3 +88,37 @@ def publish_equipment_update_by_id(equipment_id: int):
     except Equipment.DoesNotExist:
         return
     publish_equipment_update(equipment)
+
+
+def publish_reservation_event(reservation, *, timeout_seconds: Optional[int] = None):
+    """Emit an SSE payload that includes reservation notification metadata."""
+
+    if reservation is None:
+        return
+
+    equipment = reservation.equipment
+
+    if timeout_seconds is None:
+        try:
+            from workouts.utils import get_notification_timeout_seconds  # lazy import
+
+            timeout_seconds = get_notification_timeout_seconds()
+        except Exception:
+            timeout_seconds = 15
+
+    notified_at = reservation.notified_at or timezone.now()
+    expires_at = notified_at + timedelta(seconds=timeout_seconds)
+
+    extra = {
+        "payload_kind": "reservation",
+        "equipment_name": equipment.name,
+        "notified_reservation_id": reservation.id,
+        "notified_user_id": reservation.user_id,
+        "notified_username": getattr(reservation.user, "username", None),
+        "notified_at": notified_at.isoformat(),
+        "notification_timeout_seconds": timeout_seconds,
+        "notification_expires_at": expires_at.isoformat(),
+        "reservation_status": reservation.status,
+    }
+
+    publish_equipment_update(equipment, extra=extra)

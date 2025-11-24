@@ -7,10 +7,11 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from equipment.event_bus import publish_equipment_update
+from equipment.event_bus import publish_equipment_update, publish_reservation_event
 from equipment.models import Equipment
 
 from .models import Reservation, UsageSession
+from .utils import get_notification_timeout_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +29,25 @@ def notify_equipment_change(equipment: Optional[Equipment]):
     transaction.on_commit(_emit)
 
 
-def _release_equipment_to_available(equipment: Equipment, now=None):
+def mark_reservation_notified(reservation: Optional[Reservation], now=None) -> Optional[Reservation]:
+    if reservation is None:
+        return None
+
     if now is None:
         now = timezone.now()
 
-    equipment.status = 'AVAILABLE'
-    equipment.save()
+    reservation.status = 'NOTIFIED'
+    reservation.notified_at = now
+    reservation.save()
 
+    publish_reservation_event(
+        reservation,
+        timeout_seconds=get_notification_timeout_seconds(),
+    )
+    return reservation
+
+
+def notify_next_waiter(equipment: Equipment, now=None) -> Optional[Reservation]:
     next_waiting = (
         Reservation.objects.select_for_update(skip_locked=True)
         .filter(equipment=equipment, status='WAITING')
@@ -42,10 +55,24 @@ def _release_equipment_to_available(equipment: Equipment, now=None):
         .first()
     )
 
+    if not next_waiting:
+        return None
+
+    return mark_reservation_notified(next_waiting, now=now)
+
+
+def _release_equipment_to_available(equipment: Equipment, now=None):
+    if now is None:
+        now = timezone.now()
+
+    next_waiting = notify_next_waiter(equipment, now=now)
+
     if next_waiting:
-        next_waiting.status = 'NOTIFIED'
-        next_waiting.notified_at = now
-        next_waiting.save()
+        equipment.status = 'WAITING'
+    else:
+        equipment.status = 'AVAILABLE'
+
+    equipment.save()
 
     notify_equipment_change(equipment)
     return equipment
