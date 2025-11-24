@@ -531,24 +531,55 @@ export default function App() {
 
       if (token) {
         try {
-          const response = await fetch(
-            `${apiBase}/api/equipment/${selectedEquipment.id}/`,
+          // 백엔드가 세션 종료를 처리할 시간을 주기 위해 짧은 대기
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // 먼저 대기열 상태 확인
+          const queueRes = await fetch(
+            `${apiBase}/api/reservations/?equipment_id=${encodeURIComponent(selectedEquipment.id)}`,
             {
-              method: "PATCH",
               headers: {
                 Authorization: `Bearer ${token}`,
                 "Content-Type": "application/json",
               },
-              body: JSON.stringify({
-                equipment_status: "AVAILABLE",
-              }),
             }
           );
 
-          if (!response.ok) {
-            console.error("기구 상태 업데이트 실패:", response.status);
+          let hasWaitingUsers = false;
+          if (queueRes.ok) {
+            const reservations = await queueRes.json();
+            const waiting = reservations.filter(
+              (r: any) => r.status === "WAITING" || r.status === "NOTIFIED"
+            );
+            hasWaitingUsers = waiting.length > 0;
+            console.log(`대기중인 사용자: ${waiting.length}명`);
+          }
+
+          // 대기자가 없으면 AVAILABLE로 변경
+          if (!hasWaitingUsers) {
+            const response = await fetch(
+              `${apiBase}/api/equipment/${selectedEquipment.id}/`,
+              {
+                method: "PATCH",
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  equipment_status: "AVAILABLE",
+                }),
+              }
+            );
+
+            if (!response.ok) {
+              console.error("기구 상태 업데이트 실패:", response.status);
+            } else {
+              console.log("기구 상태가 AVAILABLE로 변경되었습니다.");
+              // SSE가 업데이트를 전파할 시간 제공
+              await new Promise(resolve => setTimeout(resolve, 300));
+            }
           } else {
-            console.log("기구 상태가 AVAILABLE로 변경되었습니다.");
+            console.log("대기자가 있어 기구 상태 유지");
           }
         } catch (error) {
           console.error("기구 상태 업데이트 중 오류:", error);
