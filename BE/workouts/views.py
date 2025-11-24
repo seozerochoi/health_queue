@@ -24,7 +24,7 @@ import logging
 # "AI 두뇌 사용설명서"에서 예측 함수를 가져옵니다.
 # NOTE: Lazy import ai_model to avoid loading heavy ML dependencies at startup
 # from ai_model.prediction_utils import get_ai_recommendation
-from .utils import get_notification_timeout_minutes
+from .utils import get_notification_timeout_minutes, get_waiting_position
 
 logger = logging.getLogger(__name__)
 
@@ -282,29 +282,44 @@ class JoinQueueView(APIView):
         except Equipment.DoesNotExist:
             return Response({'error': '해당 기구가 존재하지 않습니다.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # 이미 대기열/알림 상태로 등록되어 있는지 확인
-        existing = Reservation.objects.filter(user=user, equipment=equipment, status__in=['WAITING', 'NOTIFIED']).first()
-        if existing:
-            # 이미 등록되어 있으면 현재 순번을 계산해 반환
-            if existing.status == 'NOTIFIED':
-                position = 1
+        created_new = False
+        with transaction.atomic():
+            equipment = Equipment.objects.select_for_update().get(pk=equipment.pk)
+
+            existing = (
+                Reservation.objects.select_for_update()
+                .filter(user=user, equipment=equipment, status__in=['WAITING', 'NOTIFIED'])
+                .order_by('-created_at')
+                .first()
+            )
+
+            if existing:
+                reservation = existing
             else:
-                # 앞에 있는 WAITING 수 + 1
-                position = list(Reservation.objects.filter(equipment=equipment, status='WAITING').order_by('created_at')).index(existing) + 1
-            waiting_count = Reservation.objects.filter(equipment=equipment, status='WAITING').count()
-            return Response({'detail': '이미 대기열에 등록되어 있습니다.', 'reservation_id': existing.id, 'position': position, 'waiting_count': waiting_count}, status=status.HTTP_200_OK)
+                reservation = Reservation.objects.create(user=user, equipment=equipment, status='WAITING')
+                created_new = True
 
-        # 새 예약(대기) 생성
-        reservation = Reservation.objects.create(user=user, equipment=equipment, status='WAITING')
+            waiting_count = Reservation.objects.filter(
+                equipment=equipment,
+                status__in=['WAITING', 'NOTIFIED'],
+            ).count()
+            position = get_waiting_position(reservation) or 1
 
-        # 대기 중인 사람 수(생성 후 포함)
-        waiting_count = Reservation.objects.filter(equipment=equipment, status='WAITING').count()
-        # position은 대기열에서의 순번 (마지막에 추가되었으므로 waiting_count)
-        position = waiting_count
+        if created_new:
+            notify_equipment_change(equipment)
 
-        notify_equipment_change(equipment)
+        response_payload = {
+            'reservation_id': reservation.id,
+            'equipment_id': equipment.id,
+            'position': position,
+            'waiting_count': waiting_count,
+        }
 
-        return Response({'reservation_id': reservation.id, 'equipment_id': equipment.id, 'position': position, 'waiting_count': waiting_count}, status=status.HTTP_201_CREATED)
+        if created_new:
+            return Response(response_payload, status=status.HTTP_201_CREATED)
+
+        response_payload['detail'] = '이미 대기열에 등록되어 있습니다.'
+        return Response(response_payload, status=status.HTTP_200_OK)
 
 
 class LeaveQueueView(APIView):
@@ -352,7 +367,10 @@ class LeaveQueueView(APIView):
                 status__in=['WAITING', 'NOTIFIED'],
             ).exists()
 
-            waiting_count = Reservation.objects.filter(equipment=equipment, status='WAITING').count()
+            waiting_count = Reservation.objects.filter(
+                equipment=equipment,
+                status__in=['WAITING', 'NOTIFIED'],
+            ).count()
 
             if equipment.status != 'IN_USE':
                 desired_status = 'WAITING' if queue_exists else 'AVAILABLE'

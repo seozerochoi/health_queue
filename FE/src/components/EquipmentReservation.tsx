@@ -18,6 +18,18 @@ const API_BASE = (() => {
   }
 })();
 
+const QUEUE_DEBUG_ENABLED = (() => {
+  try {
+    const meta = import.meta as any;
+    return (
+      String(meta?.env?.VITE_DEBUG_QUEUE_STATE || "false").toLowerCase() ===
+      "true"
+    );
+  } catch {
+    return false;
+  }
+})();
+
 interface Equipment {
   id: string;
   name: string;
@@ -105,6 +117,20 @@ export function EquipmentReservation({
       const waitingReservations = reservations.filter(
         (item: any) => item.status === "WAITING" || item.status === "NOTIFIED"
       );
+
+      if (QUEUE_DEBUG_ENABLED) {
+        console.debug("[queue-debug] snapshot", {
+          equipmentId: equipment.id,
+          fetchedAt: new Date().toISOString(),
+          entries: waitingReservations.map((item: any) => ({
+            id: item.id,
+            user: item.user,
+            status: item.status,
+            position: item.waiting_position ?? item.position,
+            notified_at: item.notified_at,
+          })),
+        });
+      }
       const currentUser = localStorage.getItem("current_user");
       const mine = currentUser
         ? waitingReservations.find((item: any) => item.user === currentUser)
@@ -176,6 +202,13 @@ export function EquipmentReservation({
       })
         .then(async (res) => {
           const json = await res.json();
+          if (QUEUE_DEBUG_ENABLED) {
+            console.debug("[queue-debug] join-response", {
+              equipmentId: equipment.id,
+              httpStatus: res.status,
+              payload: json,
+            });
+          }
           if (!res.ok) throw new Error(JSON.stringify(json));
           setIsReserved(true);
           setQueuePosition(json.position || (equipment.waitingCount || 0) + 1);

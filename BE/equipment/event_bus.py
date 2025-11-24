@@ -70,7 +70,10 @@ def publish_equipment_update(equipment, waiting_count: Optional[int] = None, ext
         from workouts.models import Reservation  # lazy import
 
         waiting_count = (
-            Reservation.objects.filter(equipment=equipment, status="WAITING").count()
+            Reservation.objects.filter(
+                equipment=equipment,
+                status__in=["WAITING", "NOTIFIED"],
+            ).count()
         )
 
     payload["waiting_count"] = waiting_count

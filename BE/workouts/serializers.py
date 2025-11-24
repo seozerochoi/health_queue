@@ -8,6 +8,7 @@ from datetime import timedelta
 try:
     # Import the default timeout from constants (not tasks) to avoid loading Celery
     from .constants import DEFAULT_NOTIFICATION_TIMEOUT_MINUTES
+    from .utils import get_waiting_position
 except Exception:
     DEFAULT_NOTIFICATION_TIMEOUT_MINUTES = None
 
@@ -53,21 +54,13 @@ class ReservationSerializer(serializers.ModelSerializer):
         return getattr(obj.equipment, 'base_session_time_minutes', None)
 
     def get_waiting_count(self, obj):
-        return Reservation.objects.filter(equipment=obj.equipment, status='WAITING').count()
+        return Reservation.objects.filter(
+            equipment=obj.equipment,
+            status__in=['WAITING', 'NOTIFIED'],
+        ).count()
 
     def get_waiting_position(self, obj):
-        # If user has been notified, treat as position 1
-        if obj.status == 'NOTIFIED':
-            return 1
-
-        # Build ordered waiting list and find index
-        waiting_qs = Reservation.objects.filter(equipment=obj.equipment, status='WAITING').order_by('created_at')
-        waiting_list = list(waiting_qs)
-        try:
-            return waiting_list.index(obj) + 1
-        except ValueError:
-            # Not in waiting list (maybe status changed)
-            return None
+        return get_waiting_position(obj)
 
     class Meta:
         model = Reservation

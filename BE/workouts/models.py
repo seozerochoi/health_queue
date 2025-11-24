@@ -42,6 +42,13 @@ class Reservation(models.Model):
             models.Index(fields=['equipment', 'status'], name='res_equip_status_idx'),
             models.Index(fields=['status', 'notified_at'], name='res_status_notified_idx'),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'equipment'],
+                condition=models.Q(status__in=['WAITING', 'NOTIFIED']),
+                name='res_unique_active_per_user_equipment',
+            )
+        ]
 
     def __str__(self):
         return f'{self.user.username} reserved {self.equipment.name}'

@@ -162,4 +162,38 @@ def cleanup_stale_sessions(timeout_seconds: Optional[int] = None, grace_seconds:
                     continue
                 cleaned += 1
 
+    while True:
+        with transaction.atomic():
+            waiting_qs = (
+                Equipment.objects.select_for_update(skip_locked=True)
+                .filter(status='WAITING')
+                .exclude(
+                    pk__in=Reservation.objects.filter(
+                        status__in=['WAITING', 'NOTIFIED']
+                    ).values('equipment_id')
+                )
+            )[:batch_size]
+
+            waiting_equipment = list(waiting_qs)
+            if not waiting_equipment:
+                break
+
+            for equipment in waiting_equipment:
+                try:
+                    equipment.status = 'AVAILABLE'
+                    equipment.save()
+                    notify_equipment_change(equipment)
+                    logger.info(
+                        "Released WAITING equipment %s with empty queue",
+                        equipment.pk,
+                    )
+                except Exception as exc:
+                    logger.exception(
+                        "Failed to release empty-queue equipment %s",
+                        equipment.pk,
+                        exc_info=exc,
+                    )
+                    continue
+                cleaned += 1
+
     return cleaned

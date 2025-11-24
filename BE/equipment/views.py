@@ -43,7 +43,7 @@ class EquipmentViewSet(viewsets.ModelViewSet):
         qs = self.get_queryset().annotate(
             waiting_count=Count(
                 'reservation',
-                filter=Q(reservation__status='WAITING'),
+                filter=Q(reservation__status__in=['WAITING', 'NOTIFIED']),
                 distinct=True
             )
         )
@@ -193,7 +193,7 @@ def equipment_stream(request):
         equipments = Equipment.objects.all().annotate(
             waiting_count=Count(
                 'reservation',
-                filter=Q(reservation__status='WAITING'),
+                filter=Q(reservation__status__in=['WAITING', 'NOTIFIED']),
                 distinct=True
             )
         )
