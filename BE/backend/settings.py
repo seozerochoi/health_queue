@@ -85,9 +85,28 @@ TEMPLATES = [
     },
 ]
 
-CORS_ALLOWED_ORIGINS = [ # 수정 FE(이 단락 전체)
-    "http://localhost:5173",  # Vite 개발 환경의 프론트엔드 도메인
-    "http://43.201.88.27",    # AWS 서버 IP
+# ------------------------------------------------------------------
+# CORS / SSE 설정
+# ------------------------------------------------------------------
+# 프론트엔드 배포 지점이 수시로 바뀌어도 막히지 않도록 기본값은 모든
+# 오리진을 허용하고, 인증은 JWT Authorization 헤더/쿼리 파라미터로 처리.
+CORS_ALLOW_ALL_ORIGINS = True
+# EventSource에서 cache-control, authorization 등을 허용하도록 헤더 화이트리스트
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+    "cache-control",
+]
+CORS_EXPOSE_HEADERS = [
+    "Content-Type",
+    "X-CSRFToken",
 ]
 
 WSGI_APPLICATION = 'backend.wsgi.application'
