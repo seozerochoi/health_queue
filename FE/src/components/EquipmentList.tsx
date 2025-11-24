@@ -305,6 +305,7 @@ export function EquipmentList({
           if (!prevItem) {
             changedIds.push(item.id);
             didChange = true;
+            console.log(`🆕 새 기구 추가: ${item.name} (${item.status.toUpperCase()})`);
             return item;
           }
           const hasChange =
@@ -315,6 +316,22 @@ export function EquipmentList({
           if (hasChange) {
             changedIds.push(item.id);
             didChange = true;
+            
+            // 상태 변경 상세 로그
+            if (prevItem.status !== item.status) {
+              const statusText = {
+                'available': 'AVAILABLE (사용 가능)',
+                'in-use': 'IN_USE (사용 중)',
+                'waiting': 'WAITING (대기 중)'
+              };
+              console.log(
+                `🔄 ${item.name}: ${statusText[prevItem.status] || prevItem.status} → ${statusText[item.status] || item.status}`
+              );
+            }
+            if ((prevItem.waitingCount ?? 0) !== (item.waitingCount ?? 0)) {
+              console.log(`👥 ${item.name}: 대기자 ${prevItem.waitingCount ?? 0}명 → ${item.waitingCount ?? 0}명`);
+            }
+            
             return { ...prevItem, ...item };
           }
           return prevItem;
@@ -408,7 +425,6 @@ export function EquipmentList({
           : "";
         // avoid accidental double-slash before query
         es = new EventSource(`${base}/api/equipment/stream${tokenParam}`);
-        console.log("SSE: connecting to equipment stream...");
 
         // Listen to default message events (if server emits plain messages)
         es.onmessage = (ev) => {
@@ -553,6 +569,19 @@ export function EquipmentList({
         });
 
         setEquipment(formattedEquipment);
+        
+        // 초기 로딩 시 모든 기구 상태 출력
+        console.log("📋 ===== 초기 기구 목록 로딩 =====");
+        formattedEquipment.forEach(eq => {
+          const statusText = {
+            'available': 'AVAILABLE (사용 가능)',
+            'in-use': 'IN_USE (사용 중)',
+            'waiting': 'WAITING (대기 중)'
+          };
+          console.log(`  ${eq.name}: ${statusText[eq.status] || eq.status}${eq.waitingCount ? ` (대기자 ${eq.waitingCount}명)` : ''}`);
+        });
+        console.log("=============================");
+        
         setError(null);
         setLoading(false);
 
