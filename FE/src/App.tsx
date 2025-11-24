@@ -105,7 +105,9 @@ export default function App() {
   const [userName, setUserName] = useState<string>("");
   const [userGym, setUserGym] = useState<string>("");
   const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [notifications, setNotifications] = useState<ReservationNotification[]>([]);
+  const [notifications, setNotifications] = useState<ReservationNotification[]>(
+    []
+  );
   const shownNotificationsRef = useRef<Record<string, boolean>>({});
   const [tempUserId, setTempUserId] = useState<string>("");
   const [tempPassword, setTempPassword] = useState<string>("");
@@ -566,7 +568,11 @@ export default function App() {
     setCurrentView("reservation-status");
   };
 
-  const handleCancelReservation = async (reservationId: string, equipmentId: string | number, waitingCount: number) => {
+  const handleCancelReservation = async (
+    reservationId: string,
+    equipmentId: string | number,
+    waitingCount: number
+  ) => {
     try {
       const token = localStorage.getItem("access_token");
       if (!token) {
@@ -578,22 +584,32 @@ export default function App() {
         try {
           const vite = (import.meta as any)?.env?.VITE_API_BASE;
           if (vite) return vite;
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+          /* ignore */
+        }
         try {
-          if (typeof process !== "undefined" && process?.env?.REACT_APP_API_BASE)
+          if (
+            typeof process !== "undefined" &&
+            process?.env?.REACT_APP_API_BASE
+          )
             return process.env.REACT_APP_API_BASE;
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+          /* ignore */
+        }
         return "http://43.201.88.27";
       })();
 
       // 1. 예약 취소 API 호출
-      const deleteResponse = await fetch(`${apiBase}/api/reservations/${reservationId}/`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json"
+      const deleteResponse = await fetch(
+        `${apiBase}/api/reservations/${reservationId}/`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
         }
-      });
+      );
 
       if (!deleteResponse.ok) {
         throw new Error("예약 취소 실패");
@@ -610,9 +626,9 @@ export default function App() {
           method: "PATCH",
           headers: {
             Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
           },
-          body: JSON.stringify({ equipment_status: "AVAILABLE" })
+          body: JSON.stringify({ equipment_status: "AVAILABLE" }),
         });
       }
 
@@ -794,7 +810,7 @@ export default function App() {
 
     // start immediately and then interval
     poll();
-    timer = setInterval(poll, 3000);
+    timer = setInterval(poll, 5000);
 
     return () => {
       mounted = false;
@@ -816,8 +832,7 @@ export default function App() {
       const reservationId = payload.notified_reservation_id
         ? String(payload.notified_reservation_id)
         : "";
-      const equipmentName =
-        payload.equipment_name || payload.name || "기구";
+      const equipmentName = payload.equipment_name || payload.name || "기구";
       const timeoutSeconds = payload.notification_timeout_seconds
         ? Number(payload.notification_timeout_seconds)
         : Math.max(1, payload.notification_timeout ?? 15);
@@ -835,9 +850,7 @@ export default function App() {
 
     try {
       es = new EventSource(
-        `${base}/api/equipment/stream?access_token=${encodeURIComponent(
-          token
-        )}`
+        `${base}/api/equipment/stream?access_token=${encodeURIComponent(token)}`
       );
       const handleEvent = (event: MessageEvent) => {
         try {
@@ -966,6 +979,15 @@ export default function App() {
     setCurrentView(view as AppView);
   };
 
+  useEffect(() => {
+    if (currentView === "equipment-list") {
+      console.log("Rendering EquipmentList with selectedGym:", selectedGym);
+    }
+    if (currentView === "my-page") {
+      console.log("Rendering MyPage with selectedGym:", selectedGym);
+    }
+  }, [currentView, selectedGym]);
+
   const renderCurrentView = () => {
     switch (currentView) {
       case "auth-initial":
@@ -1018,7 +1040,6 @@ export default function App() {
         );
 
       case "equipment-list":
-        console.log("Rendering EquipmentList with selectedGym:", selectedGym);
         return (
           <EquipmentList
             gymName={selectedGym?.gym_name || ""}
@@ -1096,7 +1117,6 @@ export default function App() {
         );
 
       case "my-page":
-        console.log("Rendering MyPage with selectedGym:", selectedGym);
         return (
           <MyPage
             onBack={navigateBack}

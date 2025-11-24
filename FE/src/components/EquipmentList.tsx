@@ -163,7 +163,7 @@ export function EquipmentList({
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
   // 디버깅: gymName 확인
-  console.log("EquipmentList gymName:", gymName);
+  // console.log("EquipmentList gymName:", gymName);
 
   // 컴포넌트 마운트 시 운동기구 목록 가져오기
   // flashing state for item highlight (id -> boolean)
@@ -298,10 +298,13 @@ export function EquipmentList({
       setEquipment((prev) => {
         const prevById = new Map(prev.map((item) => [String(item.id), item]));
         const changedIds: string[] = [];
+        let didChange = prev.length !== formatted.length;
+
         const next = formatted.map((item) => {
           const prevItem = prevById.get(item.id);
           if (!prevItem) {
             changedIds.push(item.id);
+            didChange = true;
             return item;
           }
           const hasChange =
@@ -311,10 +314,15 @@ export function EquipmentList({
             prevItem.timeRemaining !== item.timeRemaining;
           if (hasChange) {
             changedIds.push(item.id);
+            didChange = true;
             return { ...prevItem, ...item };
           }
           return prevItem;
         });
+
+        if (!didChange) {
+          return prev;
+        }
 
         if (!opts?.suppressFlash && changedIds.length > 0) {
           setFlashing((prevFlash) => {
