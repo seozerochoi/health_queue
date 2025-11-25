@@ -217,11 +217,19 @@ def equipment_stream(request):
         last_state = {item['id']: item for item in serialized}
         heartbeat = getattr(settings, 'EQUIPMENT_SSE_HEARTBEAT_SECONDS', 10)  # 10초로 단축
         last_seq = 0
+        iteration_count = 0
+
+        logger.info(f"🚀 [SSE] Event stream started - heartbeat: {heartbeat}s")
 
         try:
             while True:
+                iteration_count += 1
                 try:
                     events, last_seq, timed_out = equipment_event_bus.wait_for_events(last_seq, timeout=heartbeat)
+                    
+                    if iteration_count % 6 == 0:  # 매 60초마다 로그
+                        logger.info(f"⏰ [SSE] Stream alive - iterations: {iteration_count}, last_seq: {last_seq}")
+                    
                     if events:
                         logger.info(f"📨 [SSE] {len(events)}개 이벤트 전송")
                         for event in events:
@@ -235,12 +243,15 @@ def equipment_stream(request):
                         # heartbeat keeps the connection alive while there are no events
                         yield "event: heartbeat\ndata: {}\n\n"
                 except Exception as e:
-                    logger.exception("❌ [SSE] event_stream error - 연결 유지 시도")
+                    logger.exception("❌ [SSE] event_stream inner loop error - 연결 유지 시도")
                     # 예외 발생 시에도 커넥션을 유지하며 heartbeat 전송
                     yield "event: heartbeat\ndata: {}\n\n"
         except GeneratorExit:
             # client disconnected
-            logger.info("🔌 [SSE] 클라이언트 연결 종료 (GeneratorExit)")
+            logger.info(f"🔌 [SSE] 클라이언트 연결 종료 (GeneratorExit) - iterations: {iteration_count}")
+            return
+        except Exception as e:
+            logger.exception(f"❌ [SSE] event_stream outer error - iterations: {iteration_count}")
             return
 
     response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
