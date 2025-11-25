@@ -794,37 +794,41 @@ export default function App() {
 
       const data = await res.json();
       // map backend reservation objects to front Reservation type and include new fields
-      const mapped: Reservation[] = (data || []).map((r: any) => {
-        const status =
-          r.status === "NOTIFIED" || r.status === "COMPLETED"
-            ? "confirmed"
-            : "waiting";
-        const reservationTime = r.created_at
-          ? new Date(r.created_at).toLocaleString()
-          : r.reservation_time || "";
-        return {
-          id: String(r.id),
-          equipment_id: r.equipment_id ?? r.equipment ?? undefined,
-          equipmentId: r.equipment_id ?? r.equipment ?? undefined,
-          equipmentName: r.equipment || r.equipment_name || "",
-          equipment_image: r.equipment_image ?? r.equipmentImage ?? null,
-          reservationTime,
-          duration: r.allocated_duration_minutes ?? r.duration ?? 0,
-          equipment_allocated_time:
-            r.equipment_allocated_time ??
-            r.equipment_allocated_time ??
-            r.allocated_duration_minutes ??
-            null,
-          status: status as "confirmed" | "waiting",
-          waitingPosition: r.position ?? r.waiting_position ?? undefined,
-          waiting_position: r.waiting_position ?? r.position ?? undefined,
-          waitingCount: r.waiting_count ?? r.waitingCount ?? undefined,
-          notified_at: r.notified_at ?? null,
-          notification_expires_at: r.notification_expires_at ?? null,
-          notification_timeout_seconds: r.notification_timeout_seconds ?? null,
-          createdAt: r.created_at ? new Date(r.created_at) : new Date(),
-        };
-      });
+      // EXPIRED 상태인 예약은 제외하고 WAITING, NOTIFIED, COMPLETED만 표시
+      const mapped: Reservation[] = (data || [])
+        .filter((r: any) => r.status !== "EXPIRED")
+        .map((r: any) => {
+          const status =
+            r.status === "NOTIFIED" || r.status === "COMPLETED"
+              ? "confirmed"
+              : "waiting";
+          const reservationTime = r.created_at
+            ? new Date(r.created_at).toLocaleString()
+            : r.reservation_time || "";
+          return {
+            id: String(r.id),
+            equipment_id: r.equipment_id ?? r.equipment ?? undefined,
+            equipmentId: r.equipment_id ?? r.equipment ?? undefined,
+            equipmentName: r.equipment || r.equipment_name || "",
+            equipment_image: r.equipment_image ?? r.equipmentImage ?? null,
+            reservationTime,
+            duration: r.allocated_duration_minutes ?? r.duration ?? 0,
+            equipment_allocated_time:
+              r.equipment_allocated_time ??
+              r.equipment_allocated_time ??
+              r.allocated_duration_minutes ??
+              null,
+            status: status as "confirmed" | "waiting",
+            waitingPosition: r.position ?? r.waiting_position ?? undefined,
+            waiting_position: r.waiting_position ?? r.position ?? undefined,
+            waitingCount: r.waiting_count ?? r.waitingCount ?? undefined,
+            notified_at: r.notified_at ?? null,
+            notification_expires_at: r.notification_expires_at ?? null,
+            notification_timeout_seconds:
+              r.notification_timeout_seconds ?? null,
+            createdAt: r.created_at ? new Date(r.created_at) : new Date(),
+          };
+        });
 
       setReservations(mapped);
       return mapped;

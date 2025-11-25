@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 from django.shortcuts import render, get_object_or_404
 # equipment/views.py
 
@@ -185,11 +187,9 @@ def equipment_stream(request):
             return HttpResponse(status=401)
 
     def event_stream():
-        # initial snapshot: send all equipments as a single event
-        # CRITICAL OPTIMIZATION: Use annotate to compute waiting_count in a SINGLE query
         from workouts.models import Reservation  # lazy import
         from django.db.models import Count, Q
-        
+
         equipments = Equipment.objects.all().annotate(
             waiting_count=Count(
                 'reservation',
@@ -197,7 +197,7 @@ def equipment_stream(request):
                 distinct=True
             )
         )
-        
+
         serialized = []
         for eq in equipments:
             serialized.append({
@@ -211,28 +211,32 @@ def equipment_stream(request):
             })
 
         yield f"event: initial\ndata: {json.dumps(serialized)}\n\n"
-        # build last-seen snapshot to detect changes
-        last_state = {item['id']: item for item in serialized}
+        # 최초 연결 직후 heartbeat도 바로 전송
+        yield "event: heartbeat\ndata: {}\n\n"
 
-        heartbeat = getattr(settings, 'EQUIPMENT_SSE_HEARTBEAT_SECONDS', 30)
+        last_state = {item['id']: item for item in serialized}
+        heartbeat = getattr(settings, 'EQUIPMENT_SSE_HEARTBEAT_SECONDS', 10)  # 10초로 단축
         last_seq = 0
 
         try:
             while True:
-                events, last_seq, timed_out = equipment_event_bus.wait_for_events(last_seq, timeout=heartbeat)
-
-                if events:
-                    for event in events:
-                        payload = event.get('payload', {})
-                        eq_id = payload.get('id')
-                        if eq_id:
-                            last_state[eq_id] = payload
-                        event_type = event.get('type') or 'update'
-                        yield f"event: {event_type}\ndata: {json.dumps(payload)}\n\n"
-                else:
-                    # heartbeat keeps the connection alive while there are no events
+                try:
+                    events, last_seq, timed_out = equipment_event_bus.wait_for_events(last_seq, timeout=heartbeat)
+                    if events:
+                        for event in events:
+                            payload = event.get('payload', {})
+                            eq_id = payload.get('id')
+                            if eq_id:
+                                last_state[eq_id] = payload
+                            event_type = event.get('type') or 'update'
+                            yield f"event: {event_type}\ndata: {json.dumps(payload)}\n\n"
+                    else:
+                        # heartbeat keeps the connection alive while there are no events
+                        yield "event: heartbeat\ndata: {}\n\n"
+                except Exception as e:
+                    logger.exception("SSE event_stream error")
+                    # 예외 발생 시에도 커넥션을 유지하며 heartbeat 전송
                     yield "event: heartbeat\ndata: {}\n\n"
-
         except GeneratorExit:
             # client disconnected
             return
