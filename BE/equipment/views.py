@@ -244,17 +244,19 @@ def equipment_stream(request):
                     #    redis_subscribe_generator() 자체가 블록하므로 heartbeat 주기 전에만 빠져나오도록 설계.
                     #    한 사이클 당 하나만 전송 후 루프 재진입 (과도한 backlog 방지)
                     got_redis = False
-                    for _ in range(1):
+                    # consume up to 5 messages per loop to avoid backlog while keeping heartbeat cadence
+                    for _ in range(5):
                         msg = next(redis_gen)
-                        if msg:
-                            payload = msg.get('payload', {})
-                            eq_id = payload.get('id')
-                            if eq_id:
-                                last_state[eq_id] = payload
-                            evt_type = msg.get('type', 'update')
-                            yield f"event: {evt_type}\ndata: {json.dumps(payload)}\n\n"
-                            last_activity = time.time()
-                            got_redis = True
+                        if not msg:
+                            break
+                        payload = msg.get('payload', {})
+                        eq_id = payload.get('id')
+                        if eq_id:
+                            last_state[eq_id] = payload
+                        evt_type = msg.get('type', 'update')
+                        yield f"event: {evt_type}\ndata: {json.dumps(payload)}\n\n"
+                        last_activity = time.time()
+                        got_redis = True
 
                     # 3) 주기적 상태 로그
                     if iteration_count % 12 == 0:  # 약 120초 간격
@@ -264,6 +266,9 @@ def equipment_stream(request):
                     if time.time() - last_activity >= heartbeat:
                         yield "event: heartbeat\ndata: {}\n\n"
                         last_activity = time.time()
+                    elif not got_redis:
+                        # prevent busy-spin when idle
+                        time.sleep(0.05)
                 except StopIteration:
                     # Redis generator ended unexpectedly -> recreate
                     logger.warning("⚠️ [SSE] Redis generator ended; recreating")

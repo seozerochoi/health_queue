@@ -196,14 +196,16 @@ def redis_subscribe_generator(max_backoff_seconds: int = 30):
             continue
 
         try:
-            raw = next(pubsub.listen())  # may block until a message or subscription update
+            # Non-blocking message poll with short timeout to avoid stalling SSE heartbeat
+            raw = pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
         except Exception as e:
-            logger.warning(f"⚠️ [EventBus] listen() 오류: {e}")
+            logger.warning(f"⚠️ [EventBus] get_message() 오류: {e}")
             pubsub = None
             yield None
             continue
 
         if not raw:
+            # no message within timeout window
             yield None
             continue
 
@@ -223,7 +225,7 @@ def redis_subscribe_generator(max_backoff_seconds: int = 30):
             logger.exception("❌ [EventBus] Redis 메시지 파싱 실패")
             yield None
 
-        # 연결이 끊어졌는지 간단한 ping으로 주기적 확인 (저비용)
+    # 연결이 끊어졌는지 간단한 ping으로 주기적 확인 (저비용)
         try:
             if backoff_attempt == 0 and int(time.time()) % 60 == 0:  # roughly every 60s
                 _get_redis_client().ping()
