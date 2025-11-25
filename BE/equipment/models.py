@@ -1,6 +1,8 @@
 # equipment/models.py
 
 from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 from gyms.models import Gym
 
 class Equipment(models.Model):
@@ -58,3 +60,40 @@ class Equipment(models.Model):
 
     def __str__(self):
         return f'{self.gym.name} - {self.name}'
+
+
+# Signal to automatically publish SSE events when Equipment status changes
+@receiver(post_save, sender=Equipment)
+def equipment_post_save(sender, instance, created, update_fields, **kwargs):
+    """
+    Equipment 저장 시 자동으로 SSE 이벤트 발행
+    status 필드가 변경되었거나 새로 생성된 경우에만 이벤트 발행
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # status 필드가 변경되었는지 확인
+    should_notify = False
+    
+    if created:
+        # 새로 생성된 경우
+        should_notify = True
+        logger.info(f"📝 [Equipment] 새 기구 생성됨: {instance.id} ({instance.name})")
+    elif update_fields is not None:
+        # 특정 필드만 업데이트된 경우
+        if 'status' in update_fields or 'operational_state' in update_fields:
+            should_notify = True
+            logger.info(f"📝 [Equipment] 기구 상태 변경: {instance.id} ({instance.name}) - status: {instance.status}")
+    else:
+        # save() 호출 시 (update_fields가 None인 경우는 모든 필드 저장)
+        should_notify = True
+        logger.info(f"📝 [Equipment] 기구 저장됨: {instance.id} ({instance.name})")
+    
+    if should_notify:
+        # 즉시 이벤트 발행 (트랜잭션 외부에서도 작동)
+        from equipment.event_bus import publish_equipment_update
+        try:
+            publish_equipment_update(instance)
+            logger.info(f"✅ [Equipment Signal] SSE 이벤트 발행 성공: {instance.id}")
+        except Exception as e:
+            logger.exception(f"❌ [Equipment Signal] SSE 이벤트 발행 실패: {instance.id}")

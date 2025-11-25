@@ -23,11 +23,26 @@ def notify_equipment_change(equipment: Optional[Equipment]):
     if equipment is None:
         return
 
+    # 트랜잭션 커밋 후 이벤트 발행 (비동기 처리)
     def _emit():
         logger.info(f"🔔 [SSE] Equipment {equipment.id} ({equipment.name}) 상태 변경 이벤트 발행 - status: {equipment.status}")
         publish_equipment_update(equipment)
 
-    transaction.on_commit(_emit)
+    # 트랜잭션이 아직 진행 중인지 확인
+    try:
+        from django.db import connection
+        if connection.in_atomic_block:
+            # 트랜잭션 내부에서 호출됨 - 커밋 후 실행
+            transaction.on_commit(_emit)
+            logger.debug(f"🕒 [SSE] Equipment {equipment.id} 이벤트 예약됨 (트랜잭션 커밋 후 실행)")
+        else:
+            # 트랜잭션 외부에서 호출됨 - 즉시 실행
+            _emit()
+            logger.debug(f"⚡ [SSE] Equipment {equipment.id} 이벤트 즉시 발행됨")
+    except Exception as e:
+        logger.exception(f"❌ [SSE] Equipment {equipment.id} 이벤트 발행 실패")
+        # 실패해도 일단 시도
+        _emit()
 
 
 def cancel_active_reservation(reservation: Reservation, now=None) -> dict[str, Optional[int]]:
