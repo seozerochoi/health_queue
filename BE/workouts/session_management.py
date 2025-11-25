@@ -29,6 +29,61 @@ def notify_equipment_change(equipment: Optional[Equipment]):
     transaction.on_commit(_emit)
 
 
+def cancel_active_reservation(reservation: Reservation, now=None) -> dict[str, Optional[int]]:
+    """Mark a WAITING/NOTIFIED reservation as expired and promote the next user.
+
+    Returns a summary dict with the updated waiting_count and identifier of the
+    reservation that was promoted to NOTIFIED (if any).
+    """
+
+    if reservation is None:
+        return {"waiting_count": 0, "next_reservation_id": None, "status_was_active": False}
+
+    if now is None:
+        now = timezone.now()
+
+    with transaction.atomic():
+        # Re-lock the reservation and its equipment to avoid race conditions.
+        reservation = (
+            Reservation.objects.select_for_update()
+            .select_related("equipment")
+            .get(pk=reservation.pk)
+        )
+        equipment = Equipment.objects.select_for_update().get(pk=reservation.equipment_id)
+
+        status_was_active = reservation.status in ("WAITING", "NOTIFIED")
+        next_reservation = None
+
+        if status_was_active:
+            reservation.status = "EXPIRED"
+            reservation.save(update_fields=["status", "notified_at"])
+
+            if equipment.status != "IN_USE":
+                next_reservation = notify_next_waiter(equipment, now=now)
+
+        queue_qs = Reservation.objects.filter(
+            equipment=equipment,
+            status__in=["WAITING", "NOTIFIED"],
+        )
+        waiting_count = queue_qs.count()
+        queue_exists = waiting_count > 0
+
+        if equipment.status != "IN_USE":
+            desired_status = "WAITING" if queue_exists else "AVAILABLE"
+            if equipment.status != desired_status:
+                equipment.status = desired_status
+                equipment.save(update_fields=["status"])
+
+        if status_was_active:
+            notify_equipment_change(equipment)
+
+    return {
+        "waiting_count": waiting_count,
+        "next_reservation_id": next_reservation.id if next_reservation else None,
+        "status_was_active": status_was_active,
+    }
+
+
 def mark_reservation_notified(reservation: Optional[Reservation], now=None) -> Optional[Reservation]:
     if reservation is None:
         return None

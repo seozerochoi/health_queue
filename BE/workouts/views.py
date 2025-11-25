@@ -9,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from .models import UsageSession, Reservation
 from .serializers import UsageSessionSerializer, ReservationSerializer
 from .session_management import (
+    cancel_active_reservation,
     cleanup_stale_sessions,
     finalize_session,
     notify_equipment_change,
@@ -45,6 +46,27 @@ class ReservationViewSet(viewsets.ModelViewSet):
         if user.is_staff or user.is_superuser:
             return Reservation.objects.all()
         return Reservation.objects.filter(user=user)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        user = request.user
+        if instance.user != user and not (user.is_staff or user.is_superuser):
+            return Response(
+                {"detail": "본인 예약만 취소할 수 있습니다."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        result = cancel_active_reservation(instance)
+        instance.delete()
+
+        return Response(
+            {
+                "message": "예약이 취소되었습니다.",
+                "waiting_count": result.get("waiting_count"),
+                "next_notified_reservation_id": result.get("next_reservation_id"),
+            },
+            status=status.HTTP_200_OK,
+        )
 
 class StartSessionView(APIView):
     permission_classes = [IsAuthenticated]
@@ -336,47 +358,30 @@ class LeaveQueueView(APIView):
         reservation_id = request.data.get('reservation_id')
         equipment_id = request.data.get('equipment_id')
 
-        with transaction.atomic():
-            if reservation_id:
-                try:
-                    reservation = Reservation.objects.select_for_update().get(id=reservation_id, user=user)
-                except Reservation.DoesNotExist:
-                    return Response({'error': '해당 예약을 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
-            elif equipment_id:
-                reservation = (
-                    Reservation.objects.select_for_update()
-                    .filter(user=user, equipment_id=equipment_id, status__in=['WAITING', 'NOTIFIED'])
-                    .first()
-                )
-                if not reservation:
-                    return Response({'error': '해당 장비에 대한 대기/알림 예약이 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
-            else:
-                return Response({'error': 'reservation_id 또는 equipment_id를 제공해주세요.'}, status=status.HTTP_400_BAD_REQUEST)
+        if reservation_id:
+            try:
+                reservation = Reservation.objects.get(id=reservation_id, user=user)
+            except Reservation.DoesNotExist:
+                return Response({'error': '해당 예약을 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+        elif equipment_id:
+            reservation = (
+                Reservation.objects
+                .filter(user=user, equipment_id=equipment_id, status__in=['WAITING', 'NOTIFIED'])
+                .first()
+            )
+            if not reservation:
+                return Response({'error': '해당 장비에 대한 대기/알림 예약이 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            return Response({'error': 'reservation_id 또는 equipment_id를 제공해주세요.'}, status=status.HTTP_400_BAD_REQUEST)
 
-            reservation.status = 'EXPIRED'
-            reservation.save()
+        result = cancel_active_reservation(reservation)
+        reservation.delete()
 
-            equipment = Equipment.objects.select_for_update().get(pk=reservation.equipment_id)
-
-            next_reservation = None
-            if equipment.status != 'IN_USE':
-                next_reservation = notify_next_waiter(equipment, now=timezone.now())
-
-            queue_exists = Reservation.objects.filter(
-                equipment=equipment,
-                status__in=['WAITING', 'NOTIFIED'],
-            ).exists()
-
-            waiting_count = Reservation.objects.filter(
-                equipment=equipment,
-                status__in=['WAITING', 'NOTIFIED'],
-            ).count()
-
-            if equipment.status != 'IN_USE':
-                desired_status = 'WAITING' if queue_exists else 'AVAILABLE'
-                if equipment.status != desired_status:
-                    equipment.status = desired_status
-                    equipment.save()
-
-        notify_equipment_change(equipment)
-        return Response({'message': '대기열에서 탈퇴 처리되었습니다.', 'waiting_count': waiting_count}, status=status.HTTP_200_OK)
+        return Response(
+            {
+                'message': '대기열에서 탈퇴 처리되었습니다.',
+                'waiting_count': result.get('waiting_count'),
+                'next_notified_reservation_id': result.get('next_reservation_id'),
+            },
+            status=status.HTTP_200_OK,
+        )
