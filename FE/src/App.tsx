@@ -1133,33 +1133,51 @@ export default function App() {
               fetchReservations();
             }
 
-            // 2. 장비 상태 업데이트 처리
+            // 2. 장비 상태 업데이트 처리 (이벤트 타입 별 분기)
             if (payload) {
-              // 'initial' 이벤트: 전체 목록 수신
+              // initial: 전체 목록
               if (event.type === "initial" && Array.isArray(payload)) {
-                console.log("🔄 [App] 초기 equipment 목록 수신");
-                const formattedEquipment = formatEquipmentData(payload);
-                setEquipmentList(formattedEquipment);
+                console.log("🔄 [App] initial 장비 전체 목록 수신 (replace)");
+                setEquipmentList(formatEquipmentData(payload));
                 return;
               }
 
-              // 'update' 또는 'message' 이벤트: 개별 equipment 업데이트
+              // refresh: 서버가 강제 전체 동기화 요청 (fallback)
+              if (event.type === "refresh" && Array.isArray(payload)) {
+                console.log("🔄 [App] refresh 이벤트 수신 - 전체 목록 교체");
+                setEquipmentList(formatEquipmentData(payload));
+                return;
+              }
+
+              // update/message/reservation: 개별 기구 변경
               const equipmentData = payload.equipment || payload;
               if (equipmentData && equipmentData.id) {
                 const formattedItem = formatSingleEquipment(equipmentData);
 
                 setEquipmentList((prev) => {
-                  const existingIndex = prev.findIndex(
-                    (eq) => eq.id === formattedItem.id
-                  );
+                  const map: Record<string, Equipment> = {};
+                  prev.forEach((e) => (map[e.id] = e));
 
-                  if (existingIndex >= 0) {
-                    const updated = [...prev];
-                    updated[existingIndex] = formattedItem;
-                    return updated;
+                  const existing = map[formattedItem.id];
+                  if (existing) {
+                    // 머지: 기존 필드 유지 + 신규값 우선 (timeRemaining / waitingCount 등 업데이트)
+                    const merged: Equipment = {
+                      ...existing,
+                      ...formattedItem,
+                      waitingCount:
+                        formattedItem.waitingCount !== undefined
+                          ? formattedItem.waitingCount
+                          : existing.waitingCount,
+                      timeRemaining:
+                        formattedItem.timeRemaining !== undefined
+                          ? formattedItem.timeRemaining
+                          : existing.timeRemaining,
+                    };
+                    map[formattedItem.id] = merged;
                   } else {
-                    return [...prev, formattedItem];
+                    map[formattedItem.id] = formattedItem;
                   }
+                  return Object.values(map);
                 });
               }
             }
@@ -1179,6 +1197,8 @@ export default function App() {
         es.addEventListener("message", handleEvent);
         es.addEventListener("update", handleEvent);
         es.addEventListener("initial", handleEvent);
+        es.addEventListener("refresh", handleEvent);
+        es.addEventListener("reservation", handleEvent);
 
         es.onerror = (err) => {
           console.log(`⚠️ [SSE] onerror 발생 - readyState: ${es?.readyState}`);

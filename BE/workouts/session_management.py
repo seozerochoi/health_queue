@@ -84,13 +84,17 @@ def cancel_active_reservation(reservation: Reservation, now=None) -> dict[str, O
         waiting_count = queue_qs.count()
         queue_exists = waiting_count > 0
 
+        status_changed = False
         if equipment.status != "IN_USE":
             desired_status = "WAITING" if queue_exists else "AVAILABLE"
             if equipment.status != desired_status:
                 equipment.status = desired_status
                 equipment.save(update_fields=["status"])
+                status_changed = True
 
-        if status_was_active:
+        # 장비 status가 변경된 경우에는 post_save signal이 이미 SSE 발행 -> 중복 방지를 위해 skip
+        # status 미변경이지만 대기열 변화가 있었다면 waiting_count 값 반영 위해 직접 발행
+        if status_was_active and not status_changed:
             notify_equipment_change(equipment)
 
     return {

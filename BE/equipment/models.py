@@ -1,6 +1,6 @@
 # equipment/models.py
 
-from django.db import models
+from django.db import models, transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from gyms.models import Gym
@@ -64,36 +64,46 @@ class Equipment(models.Model):
 
 # Signal to automatically publish SSE events when Equipment status changes
 @receiver(post_save, sender=Equipment)
-def equipment_post_save(sender, instance, created, update_fields, **kwargs):
-    """
-    Equipment 저장 시 자동으로 SSE 이벤트 발행
-    status 필드가 변경되었거나 새로 생성된 경우에만 이벤트 발행
+def equipment_post_save(sender, instance, created, **kwargs):
+    """Equipment 객체 저장 후 상태/운영 상태 변경 혹은 생성 시 SSE 업데이트 발행.
+
+    중복 발행 방지:
+    - created: 항상 발행
+    - update_fields 지정된 경우: status / operational_state 변경 시만 발행
+    - update_fields 미지정인 경우(일반 save): status 또는 operational_state가 실제로 변경되었는지 확인하려면
+      향후 dirty-field 추적 라이브러리 도입 고려. 현재는 보수적으로 전체 저장은 발행하지 않고 세션 관리 코드가
+      명시적으로 publish 하는 경우를 우선.
     """
     import logging
     logger = logging.getLogger(__name__)
-    
-    # status 필드가 변경되었는지 확인
+
+    update_fields = kwargs.get('update_fields')
     should_notify = False
-    
+
     if created:
-        # 새로 생성된 경우
         should_notify = True
-        logger.info(f"📝 [Equipment] 새 기구 생성됨: {instance.id} ({instance.name})")
-    elif update_fields is not None:
-        # 특정 필드만 업데이트된 경우
-        if 'status' in update_fields or 'operational_state' in update_fields:
+        logger.info(f"📝 [Equipment] 생성: id={instance.id} name={instance.name}")
+    elif update_fields:
+        fields_lower = {f.lower() for f in update_fields}
+        if 'status' in fields_lower or 'operational_state' in fields_lower:
             should_notify = True
-            logger.info(f"📝 [Equipment] 기구 상태 변경: {instance.id} ({instance.name}) - status: {instance.status}")
+            logger.info(f"📝 [Equipment] 상태변경: id={instance.id} status={instance.status} operational={instance.operational_state}")
     else:
-        # save() 호출 시 (update_fields가 None인 경우는 모든 필드 저장)
-        should_notify = True
-        logger.info(f"📝 [Equipment] 기구 저장됨: {instance.id} ({instance.name})")
-    
+        # update_fields 미지정: 다른 코드에서 이미 publish 했을 가능성 높음 -> 중복 방지 위해 무시
+        logger.debug(f"ℹ️ [Equipment] post_save (update_fields 없음) - 중복 방지로 SSE 미발행 id={instance.id}")
+
     if should_notify:
-        # 즉시 이벤트 발행 (트랜잭션 외부에서도 작동)
         from equipment.event_bus import publish_equipment_update
+        def _do_publish():
+            try:
+                publish_equipment_update(instance)
+                logger.info(f"✅ [Equipment Signal] 발행: id={instance.id}")
+            except Exception:
+                logger.exception(f"❌ [Equipment Signal] 발행 실패: id={instance.id}")
+
+        # DB 커밋 이후 발행 (트랜잭션 롤백 시 오발행 방지)
         try:
-            publish_equipment_update(instance)
-            logger.info(f"✅ [Equipment Signal] SSE 이벤트 발행 성공: {instance.id}")
-        except Exception as e:
-            logger.exception(f"❌ [Equipment Signal] SSE 이벤트 발행 실패: {instance.id}")
+            transaction.on_commit(_do_publish)
+        except Exception:
+            # on_commit 불가(비트랜잭션 상황) 시 즉시 실행
+            _do_publish()

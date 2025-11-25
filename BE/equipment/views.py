@@ -221,30 +221,56 @@ def equipment_stream(request):
 
         logger.info(f"🚀 [SSE] Event stream started - heartbeat: {heartbeat}s")
 
+        from equipment.event_bus import redis_subscribe_generator, local_buffer, REDIS_CHANNEL
+        import time
+        redis_gen = redis_subscribe_generator()
+        last_seq_local = 0
+        last_activity = time.time()
         try:
             while True:
                 iteration_count += 1
                 try:
-                    events, last_seq, timed_out = equipment_event_bus.wait_for_events(last_seq, timeout=heartbeat)
-                    
-                    if iteration_count % 6 == 0:  # 매 60초마다 로그
-                        logger.info(f"⏰ [SSE] Stream alive - iterations: {iteration_count}, last_seq: {last_seq}")
-                    
-                    if events:
-                        logger.info(f"📨 [SSE] {len(events)}개 이벤트 전송")
-                        for event in events:
-                            payload = event.get('payload', {})
+                    # 1) 먼저 local buffer 신규 이벤트 처리 (same-worker fast path)
+                    local_events, last_seq_local = local_buffer.pop_new(last_seq_local)
+                    for ev in local_events:
+                        payload = ev.get('payload', {})
+                        eq_id = payload.get('id')
+                        if eq_id:
+                            last_state[eq_id] = payload
+                        yield f"event: update\ndata: {json.dumps(payload)}\n\n"
+                        last_activity = time.time()
+
+                    # 2) Redis cross-worker 이벤트 (non-blocking next with timeout via generator blocking)
+                    #    redis_subscribe_generator() 자체가 블록하므로 heartbeat 주기 전에만 빠져나오도록 설계.
+                    #    한 사이클 당 하나만 전송 후 루프 재진입 (과도한 backlog 방지)
+                    got_redis = False
+                    for _ in range(1):
+                        msg = next(redis_gen)
+                        if msg:
+                            payload = msg.get('payload', {})
                             eq_id = payload.get('id')
                             if eq_id:
                                 last_state[eq_id] = payload
-                            event_type = event.get('type') or 'update'
-                            yield f"event: {event_type}\ndata: {json.dumps(payload)}\n\n"
-                    else:
-                        # heartbeat keeps the connection alive while there are no events
+                            evt_type = msg.get('type', 'update')
+                            yield f"event: {evt_type}\ndata: {json.dumps(payload)}\n\n"
+                            last_activity = time.time()
+                            got_redis = True
+
+                    # 3) 주기적 상태 로그
+                    if iteration_count % 12 == 0:  # 약 120초 간격
+                        logger.info(f"⏰ [SSE] alive iter={iteration_count} last_activity={int(time.time()-last_activity)}s")
+
+                    # 4) 최근 활동 없으면 heartbeat
+                    if time.time() - last_activity >= heartbeat:
                         yield "event: heartbeat\ndata: {}\n\n"
-                except Exception as e:
-                    logger.exception("❌ [SSE] event_stream inner loop error - 연결 유지 시도")
-                    # 예외 발생 시에도 커넥션을 유지하며 heartbeat 전송
+                        last_activity = time.time()
+                except StopIteration:
+                    # Redis generator ended unexpectedly -> recreate
+                    logger.warning("⚠️ [SSE] Redis generator ended; recreating")
+                    redis_gen = redis_subscribe_generator()
+                    yield "event: heartbeat\ndata: {}\n\n"
+                except Exception:
+                    logger.exception("❌ [SSE] loop error; sending heartbeat")
                     yield "event: heartbeat\ndata: {}\n\n"
         except GeneratorExit:
             # client disconnected
