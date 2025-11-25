@@ -4,7 +4,7 @@ from django.shortcuts import render
 from rest_framework import viewsets, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 # workouts/views.py (이 코드로 덮어쓰세요)
 from .models import UsageSession, Reservation
 from .serializers import UsageSessionSerializer, ReservationSerializer
@@ -20,6 +20,9 @@ from users.models import UserProfile # UserProfile 모델 import
 from django.utils import timezone
 from django.db import transaction
 import datetime
+from django.conf import settings
+from rest_framework_simplejwt.backends import TokenBackend
+from django.contrib.auth import get_user_model
 import logging
 
 # "AI 두뇌 사용설명서"에서 예측 함수를 가져옵니다.
@@ -385,3 +388,73 @@ class LeaveQueueView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class HeartbeatBeaconView(APIView):
+    """비동기 페이지 이탈 상황용: access_token을 쿼리나 body로 전달하여 heartbeat 기록.
+
+    권한: AllowAny (토큰을 직접 디코드). 실패 시 401.
+    예상 사용: navigator.sendBeacon('/api/workouts/heartbeat_beacon/?access_token=...&equipment_id=1')
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        token = request.GET.get('access_token') or request.data.get('access_token')
+        equipment_id = request.GET.get('equipment_id') or request.data.get('equipment_id')
+        if not token:
+            return Response({'detail': 'missing token'}, status=status.HTTP_401_UNAUTHORIZED)
+        try:
+            tb = TokenBackend(algorithm=settings.SIMPLE_JWT.get('ALGORITHM', 'HS256'), signing_key=settings.SIMPLE_JWT.get('SIGNING_KEY', settings.SECRET_KEY))
+            payload = tb.decode(token, verify=True)
+            user_id = payload.get('user_id') or payload.get('user')
+            if not user_id:
+                return Response({'detail': 'invalid token payload'}, status=status.HTTP_401_UNAUTHORIZED)
+            User = get_user_model()
+            user = User.objects.get(pk=user_id)
+        except Exception:
+            return Response({'detail': 'invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            with transaction.atomic():
+                session = UsageSession.objects.select_for_update().get(user=user, end_time__isnull=True)
+                session.last_heartbeat = timezone.now()
+                session.save()
+        except UsageSession.DoesNotExist:
+            # no active session; benign
+            return Response({'message': 'no active session'}, status=status.HTTP_200_OK)
+
+        # 장비 id가 전달되면 간단 검증(선택). 없어도 heartbeat만 갱신.
+        return Response({'message': 'heartbeat recorded (beacon)'}, status=status.HTTP_200_OK)
+
+
+class EndSessionBeaconView(APIView):
+    """페이지 종료 직전 best-effort 세션 종료용 비컨 엔드포인트.
+
+    access_token을 쿼리로 받아 세션 종료. 기존 EndSessionView와 동일하나
+    인증을 수동 처리하여 sendBeacon 시 Authorization 헤더 한계를 해결.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        token = request.GET.get('access_token') or request.data.get('access_token')
+        if not token:
+            return Response({'detail': 'missing token'}, status=status.HTTP_401_UNAUTHORIZED)
+        try:
+            tb = TokenBackend(algorithm=settings.SIMPLE_JWT.get('ALGORITHM', 'HS256'), signing_key=settings.SIMPLE_JWT.get('SIGNING_KEY', settings.SECRET_KEY))
+            payload = tb.decode(token, verify=True)
+            user_id = payload.get('user_id') or payload.get('user')
+            if not user_id:
+                return Response({'detail': 'invalid token payload'}, status=status.HTTP_401_UNAUTHORIZED)
+            User = get_user_model()
+            user = User.objects.get(pk=user_id)
+        except Exception:
+            return Response({'detail': 'invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            with transaction.atomic():
+                current_session = UsageSession.objects.select_for_update().get(user=user, end_time__isnull=True)
+                finalize_session(current_session, now=timezone.now(), reason='beacon_end_session')
+        except UsageSession.DoesNotExist:
+            return Response({'message': 'no active session'}, status=status.HTTP_200_OK)
+
+        return Response({'message': 'session ended (beacon)'}, status=status.HTTP_200_OK)

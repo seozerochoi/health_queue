@@ -120,9 +120,18 @@ def _release_equipment_to_available(equipment: Equipment, now=None):
     if now is None:
         now = timezone.now()
 
+    # 먼저 다음 대기자를 NOTIFIED로 승격 시도
     next_waiting = notify_next_waiter(equipment, now=now)
 
-    if next_waiting:
+    # 대기열 존재 여부를 WAITING/NOTIFIED 모두 포함해 재검사하여
+    # 장비 상태가 AVAILABLE로 잘못 떨어지는 것을 방지한다.
+    from .models import Reservation  # lazy import to avoid circular import at module load
+    queue_exists = Reservation.objects.filter(
+        equipment=equipment,
+        status__in=["WAITING", "NOTIFIED"],
+    ).exists()
+
+    if queue_exists or next_waiting:
         equipment.status = 'WAITING'
     else:
         equipment.status = 'AVAILABLE'

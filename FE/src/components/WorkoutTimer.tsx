@@ -48,6 +48,8 @@ export function WorkoutTimer({
   const [isPaused] = useState(false);
 
   const heartbeatIntervalRef = useRef<number | null>(null);
+  const workerRef = useRef<Worker | null>(null);
+  const usingWorkerRef = useRef<boolean>(false);
   const consecutiveHeartbeatFailures = useRef(0);
 
   useEffect(() => {
@@ -160,14 +162,15 @@ export function WorkoutTimer({
     }
   };
 
-  // Heartbeat logic: send every 60s, on 2 consecutive failures -> force end
+  // Heartbeat logic with Web Worker + visibility + beacon fallback
   useEffect(() => {
-    const sendHeartbeat = async () => {
-      const token = localStorage.getItem("access_token");
-      if (!token) return;
+    const apiBase = getApiBase();
+    const token = localStorage.getItem("access_token");
+    if (!token) return; // no authenticated heartbeat
 
+    const sendHeartbeatDirect = async () => {
       try {
-        const res = await fetch(`${getApiBase()}/api/workouts/heartbeat/`, {
+        const res = await fetch(`${apiBase}/api/workouts/heartbeat/`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -176,71 +179,144 @@ export function WorkoutTimer({
           body: JSON.stringify({ equipment_id: Number(equipment.id) }),
           keepalive: true as any,
         });
-
         if (!res.ok) {
           consecutiveHeartbeatFailures.current += 1;
           console.warn("Heartbeat failed", res.status);
         } else {
           consecutiveHeartbeatFailures.current = 0;
         }
-
-        if (consecutiveHeartbeatFailures.current >= 2) {
-          console.warn("Consecutive heartbeat failures - forcing session end");
-          try {
-            await endSession();
-          } catch (e) {
-            console.error("Forced end failed", e);
-          } finally {
-            onWorkoutComplete();
-          }
-        }
       } catch (e) {
         consecutiveHeartbeatFailures.current += 1;
         console.error("Heartbeat network error", e);
-        if (consecutiveHeartbeatFailures.current >= 2) {
-          try {
-            await endSession();
-          } catch (err) {
-            console.error("Forced end failed", err);
-          } finally {
-            onWorkoutComplete();
-          }
+      }
+
+      if (consecutiveHeartbeatFailures.current >= 2) {
+        console.warn("Consecutive heartbeat failures - forcing session end");
+        try {
+          await endSession();
+        } catch (e) {
+          console.error("Forced end failed", e);
+        } finally {
+          onWorkoutComplete();
         }
       }
     };
 
-    // start immediately then every 20s
-    sendHeartbeat();
-    heartbeatIntervalRef.current = window.setInterval(sendHeartbeat, 20 * 1000);
-
-    // try to end session on unload (best-effort)
-    const handleBeforeUnload = (_e: BeforeUnloadEvent) => {
-      const token = localStorage.getItem("access_token");
-      if (!token) return;
-
-      try {
-        fetch(`${getApiBase()}/api/workouts/end/`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({}),
-          keepalive: true as any,
+    // Try Web Worker first
+    try {
+      if (typeof Worker !== "undefined") {
+        const w = new Worker(new URL("../workers/heartbeatWorker.ts", import.meta.url), { type: "module" });
+        workerRef.current = w;
+        usingWorkerRef.current = true;
+        w.onmessage = (ev) => {
+          if (ev?.data?.type === "error") {
+            console.warn("Heartbeat worker error fallback", ev.data?.message);
+          }
+          if (ev?.data?.type === "failure") {
+            // propagate failure counting to same logic
+            consecutiveHeartbeatFailures.current = ev.data.consecutiveFailures;
+            if (consecutiveHeartbeatFailures.current >= 2) {
+              (async () => {
+                try {
+                  await endSession();
+                } catch (e) {
+                  console.error("Forced end failed (worker)", e);
+                } finally {
+                  onWorkoutComplete();
+                }
+              })();
+            }
+          }
+        };
+        w.postMessage({
+          type: "start",
+          intervalMs: 20000,
+          apiBase,
+          token,
+          equipmentId: Number(equipment.id),
         });
-      } catch (_) {
-        // ignore best-effort failure
+      }
+    } catch (e) {
+      console.warn("Failed to start heartbeat worker, using fallback", e);
+      usingWorkerRef.current = false;
+    }
+
+    // Fallback interval if worker not used
+    if (!usingWorkerRef.current) {
+      sendHeartbeatDirect(); // immediate
+      heartbeatIntervalRef.current = window.setInterval(sendHeartbeatDirect, 20000);
+    }
+
+    // Visibility change: on becoming visible send immediate heartbeat
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        if (usingWorkerRef.current && workerRef.current) {
+          workerRef.current.postMessage({ type: "pulse" });
+        } else {
+          sendHeartbeatDirect();
+        }
+      } else if (document.visibilityState === "hidden") {
+        // On hide attempt lightweight beacon heartbeat (token via query param endpoint)
+        const access = localStorage.getItem("access_token");
+        if (access && navigator.sendBeacon) {
+          const url = `${apiBase}/api/workouts/heartbeat_beacon/?access_token=${encodeURIComponent(access)}&equipment_id=${encodeURIComponent(equipment.id)}`;
+          try {
+            navigator.sendBeacon(url, "{}");
+          } catch (_) {
+            // ignore
+          }
+        }
       }
     };
+    document.addEventListener("visibilitychange", handleVisibility);
 
-    window.addEventListener("beforeunload", handleBeforeUnload);
+    // Page unload/pagehide beacon end attempt (best-effort)
+    const handlePageHide = () => {
+      const access = localStorage.getItem("access_token");
+      if (access && navigator.sendBeacon) {
+        const url = `${apiBase}/api/workouts/end_beacon/?access_token=${encodeURIComponent(access)}`;
+        try {
+          navigator.sendBeacon(url, "{}");
+        } catch (_) {
+          // ignore
+        }
+      } else {
+        // fallback to fetch keepalive
+        try {
+          fetch(`${apiBase}/api/workouts/end/`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({}),
+            keepalive: true as any,
+          });
+        } catch (_) {
+          /* ignore */
+        }
+      }
+    };
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("beforeunload", handlePageHide);
 
     return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("beforeunload", handlePageHide);
       if (heartbeatIntervalRef.current) {
         window.clearInterval(heartbeatIntervalRef.current);
         heartbeatIntervalRef.current = null;
       }
-      window.removeEventListener("beforeunload", handleBeforeUnload);
+      if (workerRef.current) {
+        try {
+          workerRef.current.postMessage({ type: "stop" });
+          workerRef.current.terminate();
+        } catch (_) {
+          /* ignore */
+        }
+        workerRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
