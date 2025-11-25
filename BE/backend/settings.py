@@ -166,8 +166,8 @@ REST_FRAMEWORK = {
     )
 }
 
-WORKOUT_HEARTBEAT_TIMEOUT_SECONDS = 45
-WORKOUT_HEARTBEAT_START_GRACE_SECONDS = 15
+WORKOUT_HEARTBEAT_TIMEOUT_SECONDS = 60
+WORKOUT_HEARTBEAT_START_GRACE_SECONDS = 30
 
 # Simple JWT 설정: 액세스/리프레시 토큰 수명 연장
 from datetime import timedelta
@@ -204,14 +204,14 @@ CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default=CELERY_BROKER_URL)
 # Beat 스케줄: expire task를 주기적으로 실행하여 NOTIFIED 예약 만료 처리를 수행합니다.
 # 권장: 알림 타임아웃(예: 15초)과 맞추기 위해 15초 간격으로 실행하는 것을 권장합니다.
 CELERY_BEAT_SCHEDULE = {
-    'expire-reservations-every-15s': {
+    'expire-reservations-every-30s': {
         'task': 'workouts.tasks.expire_notified_reservations',
-        'schedule': 15.0,  # seconds (recommended)
+        'schedule': 30.0,  # seconds (recommended)
         'args': (),
     },
-    'expire-stale-sessions-every-15s': {
+    'expire-stale-sessions-every-30s': {
         'task': 'workouts.tasks.expire_stale_sessions',
-        'schedule': 15.0,
+        'schedule': 30.0,
         'args': (),
     },
 }
