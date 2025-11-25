@@ -307,7 +307,6 @@ class JoinQueueView(APIView):
         except Equipment.DoesNotExist:
             return Response({'error': '해당 기구가 존재하지 않습니다.'}, status=status.HTTP_404_NOT_FOUND)
 
-        created_new = False
         with transaction.atomic():
             equipment = Equipment.objects.select_for_update().get(pk=equipment.pk)
 
@@ -319,32 +318,27 @@ class JoinQueueView(APIView):
             )
 
             if existing:
-                reservation = existing
-            else:
-                reservation = Reservation.objects.create(user=user, equipment=equipment, status='WAITING')
-                created_new = True
+                return Response(
+                    {"error": "이미 예약한 장비입니다."},
+                    status=status.HTTP_409_CONFLICT,
+                )
 
+            reservation = Reservation.objects.create(user=user, equipment=equipment, status='WAITING')
             waiting_count = Reservation.objects.filter(
                 equipment=equipment,
                 status__in=['WAITING', 'NOTIFIED'],
             ).count()
             position = get_waiting_position(reservation) or 1
 
-        if created_new:
             notify_equipment_change(equipment)
 
-        response_payload = {
-            'reservation_id': reservation.id,
-            'equipment_id': equipment.id,
-            'position': position,
-            'waiting_count': waiting_count,
-        }
-
-        if created_new:
+            response_payload = {
+                'reservation_id': reservation.id,
+                'equipment_id': equipment.id,
+                'position': position,
+                'waiting_count': waiting_count,
+            }
             return Response(response_payload, status=status.HTTP_201_CREATED)
-
-        response_payload['detail'] = '이미 대기열에 등록되어 있습니다.'
-        return Response(response_payload, status=status.HTTP_200_OK)
 
 
 class LeaveQueueView(APIView):
