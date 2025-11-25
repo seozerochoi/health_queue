@@ -1,5 +1,6 @@
 import json
 import threading
+import time
 from collections import deque
 from datetime import timedelta
 from typing import Any, Dict, Optional
@@ -46,6 +47,33 @@ class LocalEventBuffer:
             return [], last_seq
 
 local_buffer = LocalEventBuffer()
+
+# ---------------------------------------------------------------------------
+# Backward compatibility shim: legacy 'equipment_event_bus' with wait_for_events
+# ---------------------------------------------------------------------------
+class _LegacyEquipmentEventBus:
+    """Provide legacy interface so older code importing equipment_event_bus does not crash.
+
+    wait_for_events(last_seq, timeout) -> (events, new_last_seq, timed_out)
+    Uses LocalEventBuffer's condition variable to wait up to `timeout` seconds for new events.
+    """
+    def wait_for_events(self, last_seq: int, timeout: int = 10):
+        deadline = time.time() + timeout
+        # fast path: immediately return if there are new events
+        events, current_seq = local_buffer.pop_new(last_seq)
+        if events:
+            return events, current_seq, False
+        # blocking wait
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            return [], last_seq, True
+        with local_buffer._cond:  # type: ignore[attr-defined]
+            local_buffer._cond.wait(timeout=remaining)
+        events, current_seq = local_buffer.pop_new(last_seq)
+        timed_out = len(events) == 0
+        return events, current_seq, timed_out
+
+equipment_event_bus = _LegacyEquipmentEventBus()
 
 
 def _serialize_equipment(equipment) -> Dict[str, Any]:
@@ -119,14 +147,96 @@ def publish_reservation_event(reservation, *, timeout_seconds: Optional[int] = N
     }
     publish_equipment_update(equipment, extra=extra)
 
-def redis_subscribe_generator():
-    """Yield messages from Redis Pub/Sub (cross-worker)."""
-    pubsub = _redis.pubsub()
-    pubsub.subscribe(REDIS_CHANNEL)
-    for raw in pubsub.listen():
-        if raw.get("type") == "message":
-            try:
-                data = json.loads(raw.get("data"))
-                yield data
-            except Exception:
-                logger.exception("❌ [EventBus] Redis 메시지 파싱 실패")
+def redis_subscribe_generator(max_backoff_seconds: int = 30):
+    """Redis Pub/Sub generator with auto-reconnect & non-blocking backoff.
+
+    Behavior:
+    - Yields parsed message dicts with keys: {type, payload}
+    - On connection failure, yields None immediately (so caller loop can send heartbeat)
+      then performs progressive backoff without blocking the caller for the full delay.
+    - Backoff doubles up to `max_backoff_seconds`.
+    - Resets backoff after a successful message receipt.
+    """
+    backoff_attempt = 0
+    reconnect_wait_until: Optional[float] = None
+
+    pubsub = None
+
+    def _connect_pubsub():
+        nonlocal pubsub, backoff_attempt, reconnect_wait_until
+        try:
+            client = _get_redis_client()
+            pubsub = client.pubsub(ignore_subscribe_messages=True)
+            pubsub.subscribe(REDIS_CHANNEL)
+            logger.info("🔌 [EventBus] Redis 구독 연결 수립")
+            backoff_attempt = 0
+            reconnect_wait_until = None
+            return True
+        except Exception as e:
+            logger.warning(f"⚠️ [EventBus] Redis 구독 연결 실패: {e}")
+            return False
+
+    # 초기 연결 시도
+    _connect_pubsub()
+
+    while True:
+        # 재연결 대기 중이면 즉시 None yield 후 잠깐 sleep -> 외부 루프 heartbeat 가능
+        if reconnect_wait_until and time.time() < reconnect_wait_until:
+            yield None
+            time.sleep(0.5)
+            continue
+
+        if pubsub is None:
+            # 연결이 전혀 없는 상태 -> backoff 설정 후 재시도 준비
+            backoff_attempt += 1
+            delay = min(2 ** (backoff_attempt - 1), max_backoff_seconds)
+            reconnect_wait_until = time.time() + delay
+            logger.info(f"⏳ [EventBus] Redis 재연결 대기: {delay}s (attempt {backoff_attempt})")
+            yield None
+            continue
+
+        try:
+            raw = next(pubsub.listen())  # may block until a message or subscription update
+        except Exception as e:
+            logger.warning(f"⚠️ [EventBus] listen() 오류: {e}")
+            pubsub = None
+            yield None
+            continue
+
+        if not raw:
+            yield None
+            continue
+
+        msg_type = raw.get("type")
+        if msg_type != "message":
+            # subscribe/unsubscribe 등은 무시하고 루프 재진입
+            yield None
+            continue
+
+        try:
+            data = json.loads(raw.get("data"))
+            # 성공적 수신 -> backoff 리셋
+            backoff_attempt = 0
+            reconnect_wait_until = None
+            yield data
+        except Exception:
+            logger.exception("❌ [EventBus] Redis 메시지 파싱 실패")
+            yield None
+
+        # 연결이 끊어졌는지 간단한 ping으로 주기적 확인 (저비용)
+        try:
+            if backoff_attempt == 0 and int(time.time()) % 60 == 0:  # roughly every 60s
+                _get_redis_client().ping()
+        except Exception as e:
+            logger.warning(f"⚠️ [EventBus] ping 실패, 재연결 준비: {e}")
+            pubsub = None
+            continue
+
+        # 만약 pubsub 객체가 None (연결 상실) 이면 재연결 시도 스케줄링
+        if pubsub is None:
+            if not _connect_pubsub():
+                backoff_attempt += 1
+                delay = min(2 ** (backoff_attempt - 1), max_backoff_seconds)
+                reconnect_wait_until = time.time() + delay
+                logger.info(f"⏳ [EventBus] Redis 재연결 예약: {delay}s (attempt {backoff_attempt})")
+                yield None
