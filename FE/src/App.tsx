@@ -11,7 +11,6 @@ import { Login } from "./components/Login";
 import { ModeSelection } from "./components/ModeSelection";
 import { GymSearch } from "./components/GymSearch";
 import { EquipmentList } from "./components/EquipmentList";
-import { EquipmentReservation } from "./components/EquipmentReservation";
 import { AIRoutineRecommendation } from "./components/AIRoutineRecommendation";
 import { AdminDashboard } from "./components/AdminDashboard";
 import { NFCTagging } from "./components/NFCTagging";
@@ -80,7 +79,6 @@ type AppView =
   | "mode-selection"
   | "gym-search"
   | "equipment-list"
-  | "equipment-reservation"
   | "ai-recommendation"
   | "admin-dashboard"
   | "nfc-tagging"
@@ -488,9 +486,44 @@ export default function App() {
       return;
     }
 
-    // 그 외(in-use, waiting 등)는 기존 예약 흐름 유지
-    setDirectWorkout(false);
-    setCurrentView("equipment-reservation");
+    // 기구가 사용 중이거나 대기 중인 경우 바로 줄서기 API 호출
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        alert("로그인이 필요합니다.");
+        return;
+      }
+
+      const response = await fetch(
+        "http://43.201.88.27/api/workouts/join-queue/",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            equipment_id: parseInt(equipment.id),
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("줄서기 실패:", response.status, errorText);
+        alert("줄서기에 실패했습니다.");
+        return;
+      }
+
+      const data = await response.json();
+      console.log("줄서기 성공:", data);
+
+      // 예약 상태에 추가하고 바로 예약 현황으로 이동
+      handleSingleReservation(equipment, "waiting", data.position);
+    } catch (error) {
+      console.error("줄서기 중 오류:", error);
+      alert("줄서기 중 오류가 발생했습니다.");
+    }
   };
 
   const handleStartNFC = () => {
@@ -996,6 +1029,11 @@ export default function App() {
     };
 
     setReservations((prev) => [...prev, newReservation]);
+    
+    // 줄서기 예약 완료 시 바로 예약 현황으로 이동
+    if (status === "waiting") {
+      setCurrentView("reservation-status");
+    }
   };
 
   const navigateBack = () => {
@@ -1012,10 +1050,6 @@ export default function App() {
         setCurrentView("gym-search");
         setSelectedGym(null);
         break;
-      case "equipment-reservation":
-        setCurrentView("equipment-list");
-        setSelectedEquipment(null);
-        break;
       case "ai-recommendation":
         setCurrentView("equipment-list");
         break;
@@ -1030,7 +1064,7 @@ export default function App() {
         setSelectedMode(null);
         break;
       case "nfc-tagging":
-        setCurrentView("equipment-reservation");
+        setCurrentView("equipment-list");
         break;
       case "workout-timer":
         // 바로 시작한 경우엔 NFC 화면이 없으므로 목록으로 돌아간다
@@ -1125,17 +1159,6 @@ export default function App() {
             onEquipmentSelect={handleEquipmentSelect}
           />
         );
-
-      case "equipment-reservation":
-        return selectedEquipment ? (
-          <EquipmentReservation
-            equipment={selectedEquipment}
-            onBack={navigateBack}
-            onStartNFC={handleStartNFC}
-            onReservationComplete={handleSingleReservation}
-            onQueueUpdate={handleQueueUpdate}
-          />
-        ) : null;
 
       case "ai-recommendation":
         return (

@@ -190,7 +190,7 @@ export function EquipmentReservation({
           alert("시작에 실패했습니다: " + err.message);
         });
     } else {
-      // join queue
+      // join queue - 줄서기 버튼 클릭 시 바로 예약 현황으로 이동
       const token = localStorage.getItem("access_token");
       fetch(`${API_BASE}/api/workouts/join-queue/`, {
         method: "POST",
@@ -210,16 +210,16 @@ export function EquipmentReservation({
             });
           }
           if (!res.ok) throw new Error(JSON.stringify(json));
-          setIsReserved(true);
-          setQueuePosition(json.position || (equipment.waitingCount || 0) + 1);
-          setQueueLength(json.waiting_count ?? equipment.waitingCount ?? null);
+          
+          // 예약 완료 후 바로 예약 현황으로 이동
           onReservationComplete(
             equipment,
             "waiting",
             json.position || (equipment.waitingCount || 0) + 1
           );
-          fetchQueueStatus();
-          onQueueUpdate?.();
+          
+          // 뒤로가기 (예약 현황으로 자동 이동)
+          onBack();
         })
         .catch((err) => {
           console.error("Join queue failed", err);
@@ -362,49 +362,6 @@ export function EquipmentReservation({
             </div>
           </CardContent>
         </Card>
-
-        {!isReserved && !isUsing && (
-          <Card className="border-gray-600 bg-card">
-            <CardContent className="p-6">
-              <div className="text-center space-y-4">
-                <h3 className="text-lg font-semibold text-white">
-                  {equipment.status === "available"
-                    ? "지금 바로 사용하기"
-                    : "예약하기"}
-                </h3>
-                <p className="text-gray-300">
-                  {equipment.status === "available"
-                    ? "NFC 태깅으로 즉시 시작할 수 있습니다."
-                    : `현재 ${waitingDisplay}명이 대기 중입니다.`}
-                </p>
-                <Button
-                  onClick={handleReserve}
-                  className="bg-blue-500 hover:bg-blue-600"
-                  size="lg"
-                >
-                  {equipment.status === "available"
-                    ? "바로 사용하기"
-                    : "예약하기"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {isReserved && !isUsing && queuePosition && (
-          <Card className="border-yellow-600 bg-yellow-900/20">
-            <CardContent className="p-6 text-center space-y-4">
-              <h3 className="text-lg font-semibold text-yellow-300">
-                예약 완료
-              </h3>
-              <p className="text-yellow-200">대기 순서: {queuePosition}번째</p>
-              <p className="text-sm text-yellow-100">
-                내 차례까지 약 {(queuePosition - 1) * equipment.allocatedTime}분
-                예상
-              </p>
-            </CardContent>
-          </Card>
-        )}
 
         {isReserved && !isUsing && !queuePosition && (
           <Card className="border-green-600 bg-green-900/20">
