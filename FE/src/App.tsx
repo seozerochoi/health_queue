@@ -1207,13 +1207,13 @@ export default function App() {
         );
 
       case "equipment-list":
-        return (
+        return selectedGym ? (
           <EquipmentList
-            gymName={selectedGym?.gym_name || ""}
+            gymName={selectedGym.gym_name || ""}
             onBack={navigateBack}
             onEquipmentSelect={handleEquipmentSelect}
           />
-        );
+        ) : null;
 
       case "ai-recommendation":
         return (
