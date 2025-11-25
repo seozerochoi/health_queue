@@ -38,6 +38,9 @@ interface EquipmentListProps {
   gymName: string;
   onBack: () => void;
   onEquipmentSelect: (equipment: Equipment) => void;
+  equipment?: Equipment[]; // App에서 전달받은 기구 목록 (옵셔널, 없으면 자체 로딩)
+  loading?: boolean; // App에서 전달받은 로딩 상태
+  error?: string | null; // App에서 전달받은 에러 상태
 }
 
 // Memoized equipment item to avoid unnecessary re-renders.
@@ -150,6 +153,9 @@ export function EquipmentList({
   gymName,
   onBack,
   onEquipmentSelect,
+  equipment: equipmentFromApp,
+  loading: loadingFromApp,
+  error: errorFromApp,
 }: EquipmentListProps) {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
@@ -157,10 +163,17 @@ export function EquipmentList({
     useState<string>("");
   const [reportType, setReportType] = useState<string>("");
   const [reportDescription, setReportDescription] = useState("");
-  const [equipment, setEquipment] = useState<Equipment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+
+  // App에서 equipment를 전달받으면 그것을 사용, 아니면 자체 로딩
+  const [localEquipment, setLocalEquipment] = useState<Equipment[]>([]);
+  const [localLoading, setLocalLoading] = useState(true);
+  const [localError, setLocalError] = useState<string | null>(null);
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+
+  // App에서 전달받은 데이터가 있으면 사용, 없으면 로컬 상태 사용
+  const equipment = equipmentFromApp ?? localEquipment;
+  const loading = loadingFromApp ?? localLoading;
+  const error = errorFromApp ?? localError;
 
   // 디버깅: gymName 확인
   // console.log("EquipmentList gymName:", gymName);
@@ -178,9 +191,12 @@ export function EquipmentList({
   const sseEnabled = useMemo(() => {
     try {
       const raw = (import.meta as any)?.env?.VITE_ENABLE_EQUIPMENT_SSE;
-      return raw === "true";
+      // 환경변수가 명시적으로 "false"가 아니면 SSE 사용 (기본값 true)
+      if (raw === "false") return false;
+      if (raw === "true") return true;
+      return true; // 기본값: SSE 활성화
     } catch (e) {
-      return false;
+      return true; // 에러 시에도 SSE 활성화
     }
   }, []);
 
@@ -191,10 +207,27 @@ export function EquipmentList({
     } catch (e) {
       /* ignore */
     }
-    return 10000;
+    return 10000; // 10초
   }, []);
 
   useEffect(() => {
+    // App에서 equipment 데이터를 전달받으면 로컬 폴링/SSE 하지 않음
+    if (equipmentFromApp !== undefined) {
+      console.log(
+        "✅ [EquipmentList] App에서 equipment 데이터 전달받음 - 로컬 폴링/SSE 건너뜀"
+      );
+      return;
+    }
+
+    // 로그인하지 않았으면 API 호출하지 않음
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      console.log("⏸️ [EquipmentList] 토큰 없음 - API 호출 건너뜀");
+      setLocalLoading(false);
+      setLocalError("로그인이 필요합니다.");
+      return;
+    }
+
     const base = (() => {
       // Vite exposes env vars on import.meta.env (VITE_...); guard process for other bundlers
       try {
@@ -296,7 +329,7 @@ export function EquipmentList({
         .map(normalizeEquipment)
         .filter((item) => item.id !== "");
 
-      setEquipment((prev) => {
+      setLocalEquipment((prev) => {
         const prevById = new Map(prev.map((item) => [String(item.id), item]));
         const changedIds: string[] = [];
         let didChange = prev.length !== formatted.length;
@@ -306,7 +339,9 @@ export function EquipmentList({
           if (!prevItem) {
             changedIds.push(item.id);
             didChange = true;
-            console.log(`🆕 새 기구 추가: ${item.name} (${item.status.toUpperCase()})`);
+            console.log(
+              `🆕 새 기구 추가: ${item.name} (${item.status.toUpperCase()})`
+            );
             return item;
           }
           const hasChange =
@@ -317,22 +352,28 @@ export function EquipmentList({
           if (hasChange) {
             changedIds.push(item.id);
             didChange = true;
-            
+
             // 상태 변경 상세 로그
             if (prevItem.status !== item.status) {
               const statusText = {
-                'available': 'AVAILABLE (사용 가능)',
-                'in-use': 'IN_USE (사용 중)',
-                'waiting': 'WAITING (대기 중)'
+                available: "AVAILABLE (사용 가능)",
+                "in-use": "IN_USE (사용 중)",
+                waiting: "WAITING (대기 중)",
               };
               console.log(
-                `🔄 ${item.name}: ${statusText[prevItem.status] || prevItem.status} → ${statusText[item.status] || item.status}`
+                `🔄 ${item.name}: ${
+                  statusText[prevItem.status] || prevItem.status
+                } → ${statusText[item.status] || item.status}`
               );
             }
             if ((prevItem.waitingCount ?? 0) !== (item.waitingCount ?? 0)) {
-              console.log(`👥 ${item.name}: 대기자 ${prevItem.waitingCount ?? 0}명 → ${item.waitingCount ?? 0}명`);
+              console.log(
+                `👥 ${item.name}: 대기자 ${prevItem.waitingCount ?? 0}명 → ${
+                  item.waitingCount ?? 0
+                }명`
+              );
             }
-            
+
             return { ...prevItem, ...item };
           }
           return prevItem;
@@ -367,19 +408,25 @@ export function EquipmentList({
     };
 
     const startPolling = (initialToken: string | null) => {
+      let isPollingActive = true; // 폴링 활성화 플래그
+
       const fetchSnapshot = async () => {
-        // SSE가 연결되어 있으면 폴링하지 않음
-        if (sseConnectedRef.current) {
-          console.log("⏸️ Equipment SSE 연결됨 - 폴링 스킵");
+        // SSE가 연결되어 있거나 폴링이 비활성화되면 실행하지 않음
+        if (sseConnectedRef.current || !isPollingActive) {
+          if (sseConnectedRef.current) {
+            console.log("⏸️ Equipment SSE 연결됨 - 폴링 스킵");
+          }
           return;
         }
-        
+
+        console.log("🔄 Equipment 데이터 폴링 중...");
         let access = accessTokenRef.current ?? initialToken;
         const refresh = localStorage.getItem("refresh_token");
 
         const callFetch = async (token: string | null) => {
           const headers: any = { "Content-Type": "application/json" };
           if (token) headers["Authorization"] = `Bearer ${token}`;
+          console.log(`📡 [폴링] GET ${base}/api/equipment/ 호출`);
           return await fetch(`${base}/api/equipment/`, { headers });
         };
 
@@ -417,11 +464,16 @@ export function EquipmentList({
         }
       };
 
-      console.log("🔄 Equipment 폴링 시작 (${pollIntervalMs}ms 간격)");
+      console.log(
+        `🔄 Equipment 폴링 시작 (${pollIntervalMs}ms = ${
+          pollIntervalMs / 1000
+        }초 간격)`
+      );
       fetchSnapshot();
       const timer = window.setInterval(fetchSnapshot, pollIntervalMs);
       return () => {
         console.log("🛑 Equipment 폴링 중지");
+        isPollingActive = false; // 폴링 비활성화
         window.clearInterval(timer);
       };
     };
@@ -432,7 +484,7 @@ export function EquipmentList({
       let reconnectTimer: number | null = null;
       let reconnectAttempts = 0;
       const MAX_RECONNECT_ATTEMPTS = 3;
-      
+
       const attemptConnection = () => {
         try {
           const tokenParam = accessToken
@@ -446,6 +498,13 @@ export function EquipmentList({
             sseConnected = true;
             sseConnectedRef.current = true;
             reconnectAttempts = 0;
+
+            // SSE 연결 성공 시 혹시 모를 폴링 타이머 정리
+            if (pollCleanupRef.current) {
+              console.log("🛑 SSE 연결 성공으로 기존 폴링 강제 중지");
+              pollCleanupRef.current();
+              pollCleanupRef.current = null;
+            }
           };
 
           // Listen to default message events (if server emits plain messages)
@@ -492,15 +551,19 @@ export function EquipmentList({
             // 연결 끊김
             if (es && es.readyState === EventSource.CLOSED) {
               reconnectAttempts++;
-              console.log(`⚠️ Equipment SSE 연결 끊김 (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+              console.log(
+                `⚠️ Equipment SSE 연결 끊김 (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`
+              );
               sseConnected = false;
               sseConnectedRef.current = false;
-              
+
               // EventSource 닫기 (자동 재연결 방지)
               es?.close();
-              
+
               if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-                console.log("❌ Equipment SSE 재시도 한도 초과 - 폴링 모드로 전환");
+                console.log(
+                  "❌ Equipment SSE 재시도 한도 초과 - 폴링 모드로 전환"
+                );
                 // 폴링으로 전환
                 if (pollCleanupRef.current) pollCleanupRef.current();
                 console.log("🔄 Equipment 폴링 모드 시작 (SSE 실패 후)");
@@ -519,10 +582,12 @@ export function EquipmentList({
           console.warn("SSE connection failed", err);
           sseConnected = false;
           sseConnectedRef.current = false;
-          
+
           if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
             reconnectAttempts++;
-            console.log(`🔄 3초 후 Equipment SSE 재연결 시도... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+            console.log(
+              `🔄 3초 후 Equipment SSE 재연결 시도... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`
+            );
             reconnectTimer = window.setTimeout(() => {
               attemptConnection();
             }, 3000);
@@ -576,12 +641,12 @@ export function EquipmentList({
             timeRemaining: 25,
           },
         ];
-        setEquipment(mockEquipment);
-        setLoading(false);
+        setLocalEquipment(mockEquipment);
+        setLocalLoading(false);
         return;
       }
 
-      setLoading(true);
+      setLocalLoading(true);
       try {
         let access = localStorage.getItem("access_token");
         const refresh = localStorage.getItem("refresh_token");
@@ -657,38 +722,44 @@ export function EquipmentList({
           };
         });
 
-        setEquipment(formattedEquipment);
-        
+        setLocalEquipment(formattedEquipment);
+
         // 초기 로딩 시 모든 기구 상태 출력
         console.log("======= 초기 기구 목록 로딩 =======");
-        formattedEquipment.forEach(eq => {
+        formattedEquipment.forEach((eq) => {
           const statusText = {
-            'available': 'AVAILABLE (사용 가능)',
-            'in-use': 'IN_USE (사용 중)',
-            'waiting': 'WAITING (대기 중)'
+            available: "AVAILABLE (사용 가능)",
+            "in-use": "IN_USE (사용 중)",
+            waiting: "WAITING (대기 중)",
           };
-          console.log(`  ${eq.name}: ${statusText[eq.status] || eq.status}${eq.waitingCount ? ` (대기자 ${eq.waitingCount}명)` : ''}`);
+          console.log(
+            `  ${eq.name}: ${statusText[eq.status] || eq.status}${
+              eq.waitingCount ? ` (대기자 ${eq.waitingCount}명)` : ""
+            }`
+          );
         });
         console.log("=============================");
-        
-        setError(null);
-        setLoading(false);
+
+        setLocalError(null);
+        setLocalLoading(false);
 
         // open SSE only after successful initial fetch
         accessTokenRef.current = access;
 
         if (sseEnabled) {
+          console.log("📡 SSE 모드 활성화 - 폴링 비활성화");
           const cleanup = openSSE(access);
           sseCleanupRef.current = cleanup;
         } else {
+          console.log("📊 폴링 모드 활성화 - SSE 비활성화");
           const cleanup = startPolling(access);
           pollCleanupRef.current = cleanup;
         }
       } catch (err) {
         console.error("Initial equipment fetch failed:", err);
-        setError(err instanceof Error ? err.message : String(err));
-        setEquipment([]);
-        setLoading(false);
+        setLocalError(err instanceof Error ? err.message : String(err));
+        setLocalEquipment([]);
+        setLocalLoading(false);
       }
     };
 
@@ -703,7 +774,7 @@ export function EquipmentList({
       sseCleanupRef.current = null;
       pollCleanupRef.current = null;
     };
-  }, [gymName, pollIntervalMs, sseEnabled]);
+  }, [gymName, pollIntervalMs, sseEnabled, equipmentFromApp]);
 
   const categories = [
     { id: "all", name: "전체" },

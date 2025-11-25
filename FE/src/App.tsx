@@ -108,6 +108,13 @@ export default function App() {
   );
   const shownNotificationsRef = useRef<Record<string, boolean>>({});
   const reservationSSEConnectedRef = useRef<boolean>(false);
+  const equipmentSSEConnectedRef = useRef<boolean>(false);
+
+  // 전역 equipment 상태 (모든 컴포넌트에서 공유)
+  const [equipmentList, setEquipmentList] = useState<Equipment[]>([]);
+  const [equipmentLoading, setEquipmentLoading] = useState(false);
+  const [equipmentError, setEquipmentError] = useState<string | null>(null);
+
   const [tempUserId, setTempUserId] = useState<string>("");
   const [tempPassword, setTempPassword] = useState<string>("");
   // 사용자가 NFC 과정을 거치지 않고 바로 타이머로 진입했는지 여부
@@ -385,6 +392,10 @@ export default function App() {
     console.log("role === 'admin' ?", role === "admin");
     console.log("typeof role:", typeof role);
 
+    // 로그인 시 초기 equipment 데이터 로드
+    console.log("🔄 [App] 로그인 완료 - 초기 equipment 데이터 로드");
+    await fetchEquipment();
+
     if (role === "admin") {
       console.log("→ admin-dashboard로 이동 (role=admin)");
       setCurrentView("admin-dashboard");
@@ -566,11 +577,13 @@ export default function App() {
       if (token) {
         try {
           // 백엔드가 세션 종료를 처리할 시간을 주기 위해 짧은 대기
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise((resolve) => setTimeout(resolve, 500));
 
           // 먼저 대기열 상태 확인
           const queueRes = await fetch(
-            `${apiBase}/api/reservations/?equipment_id=${encodeURIComponent(selectedEquipment.id)}`,
+            `${apiBase}/api/reservations/?equipment_id=${encodeURIComponent(
+              selectedEquipment.id
+            )}`,
             {
               headers: {
                 Authorization: `Bearer ${token}`,
@@ -610,7 +623,7 @@ export default function App() {
             } else {
               console.log("기구 상태가 AVAILABLE로 변경되었습니다.");
               // SSE가 업데이트를 전파할 시간 제공
-              await new Promise(resolve => setTimeout(resolve, 300));
+              await new Promise((resolve) => setTimeout(resolve, 300));
             }
           } else {
             console.log("대기자가 있어 기구 상태 유지");
@@ -820,31 +833,183 @@ export default function App() {
     }
   };
 
-  // Poll reservations in background to detect NOTIFIED reservations and show popup
-  // SSE 연결 성공 시 폴링 중단
-  useEffect(() => {
-    let mounted = true;
-    let timer: any = null;
-    let sseConnected = false;
+  /**
+   * Poll /api/equipment/
+   */
+  const getEquipmentImage = (name: string, type: string): string => {
+    const nameLower = (name || "").toLowerCase();
+    if (
+      nameLower.includes("러닝") ||
+      nameLower.includes("런닝") ||
+      nameLower.includes("treadmill")
+    )
+      return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+    if (
+      nameLower.includes("사이클") ||
+      nameLower.includes("cycle") ||
+      nameLower.includes("bike")
+    )
+      return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+    if (nameLower.includes("일립티컬") || nameLower.includes("elliptical"))
+      return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+    if (nameLower.includes("로잉") || nameLower.includes("rowing"))
+      return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+    if (nameLower.includes("벤치") || nameLower.includes("bench"))
+      return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+    if (nameLower.includes("스쿼트") || nameLower.includes("squat"))
+      return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+    if (nameLower.includes("덤벨") || nameLower.includes("dumbbell"))
+      return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+    if (nameLower.includes("스텝") || nameLower.includes("step"))
+      return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+    if ((type || "").toLowerCase() === "cardio")
+      return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+    return "https://images.unsplash.com/photo-1758957646695-ec8bce3df462?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
+  };
 
-    const poll = async () => {
-      // SSE 연결되면 폴링하지 않음
-      if (sseConnected) {
-        console.log("⏸️ SSE 연결됨 - 예약 폴링 스킵");
+  const formatSingleEquipment = (eq: any): Equipment => {
+    const imageUrl =
+      eq.image_url ||
+      eq.image ||
+      eq.imageUrl ||
+      eq.photo ||
+      eq.picture_url ||
+      getEquipmentImage(eq.name, eq.type);
+
+    return {
+      id: eq.id.toString(),
+      name: eq.name,
+      type: (eq.type || "").toLowerCase(),
+      status:
+        eq.status === "AVAILABLE"
+          ? "available"
+          : eq.status === "IN_USE"
+          ? "in-use"
+          : eq.status === "WAITING"
+          ? "waiting"
+          : "available",
+      image: imageUrl,
+      allocatedTime: eq.base_session_time_minutes || 30,
+      waitingCount: eq.waiting_count ?? 0,
+      currentUser: eq.current_user ?? undefined,
+      timeRemaining: eq.time_remaining ?? undefined,
+    };
+  };
+
+  const formatEquipmentData = (data: any[]): Equipment[] => {
+    return (data || []).map(formatSingleEquipment);
+  };
+
+  const fetchEquipment = async () => {
+    const base = (() => {
+      if (import.meta.env.VITE_API_URL) {
+        return import.meta.env.VITE_API_URL;
+      }
+      return "http://43.201.88.27";
+    })();
+    const access = localStorage.getItem("access_token");
+    const refresh = localStorage.getItem("refresh_token");
+
+    const doFetch = async (token: string | null) => {
+      const headers: any = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${base}/api/equipment/`, { headers });
+      return res;
+    };
+
+    try {
+      // If there's no access token and no refresh token, skip calling protected API
+      if (!access && !refresh) {
+        console.warn(
+          "[App] No access or refresh token present - skipping equipment fetch"
+        );
+        setEquipmentList([]);
         return;
       }
-      
+
+      setEquipmentLoading(true);
+      let res = await doFetch(access);
+      if (res.status === 401) {
+        if (refresh) {
+          // try refresh
+          const rres = await fetch(`${base}/api/token/refresh/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ refresh }),
+          });
+          if (rres.ok) {
+            const rdata = await rres.json();
+            if (rdata.access) {
+              localStorage.setItem("access_token", rdata.access);
+              res = await doFetch(rdata.access);
+            }
+          } else {
+            // refresh failed -> logout
+            handleLogout();
+            setEquipmentLoading(false);
+            return;
+          }
+        } else {
+          // no refresh token -> logout
+          handleLogout();
+          setEquipmentLoading(false);
+          return;
+        }
+      }
+
+      if (!res.ok) {
+        console.error("[App] Failed to fetch equipment", res.status);
+        setEquipmentError("장비 정보를 불러올 수 없습니다");
+        setEquipmentLoading(false);
+        return;
+      }
+
+      const data = await res.json();
+
+      // 헬퍼 함수를 사용하여 백엔드 응답을 Equipment 타입으로 변환
+      const formattedEquipment = formatEquipmentData(data);
+
+      setEquipmentList(formattedEquipment);
+      setEquipmentError(null);
+      setEquipmentLoading(false);
+      return formattedEquipment;
+    } catch (e) {
+      console.error("[App] Error fetching equipment:", e);
+      setEquipmentError("장비 정보를 불러오는 중 오류가 발생했습니다");
+      setEquipmentLoading(false);
+    }
+  };
+
+  // 통합 SSE/폴링 관리: 예약 알림 + 장비 상태를 하나의 연결로 처리
+  useEffect(() => {
+    // 로그인하지 않은 경우 실행하지 않음
+    if (!userName) {
+      console.log("👤 사용자 미로그인 - SSE 건너뜀");
+      return;
+    }
+
+    let mounted = true;
+    let reservationPollTimer: any = null;
+    let equipmentPollTimer: any = null;
+    let sseConnected = false;
+    let isInitialConnection = true; // 최초 연결인지 재연결인지 구분
+
+    // 예약 데이터 폴링 (SSE 실패 시 백업)
+    const pollReservations = async () => {
+      if (sseConnected) return;
+
+      console.log("🔄 [App] 예약 데이터 폴링 중...");
       try {
         const data = await fetchReservations();
         if (!mounted || !data) return;
-        // find notified reservations
+
+        // NOTIFIED 예약 찾아서 알림 표시
         const now = new Date();
         for (const r of data) {
           if (r.status === "NOTIFIED" && r.notified_at) {
             const id = String(r.id);
-            if (shownNotificationsRef.current[id]) continue; // already shown
+            if (shownNotificationsRef.current[id]) continue;
 
-            // compute expiresAt from serializer if provided
             const expiresAt = (r as any).notification_expires_at || null;
             let secondsLeft = 15;
             if (expiresAt) {
@@ -861,9 +1026,8 @@ export default function App() {
               );
             }
 
-            if (secondsLeft <= 0) continue; // already expired
+            if (secondsLeft <= 0) continue;
 
-            // add notification
             shownNotificationsRef.current[id] = true;
             setNotifications((prev) => [
               ...prev,
@@ -881,6 +1045,18 @@ export default function App() {
       }
     };
 
+    // 장비 데이터 폴링 (SSE 실패 시 백업)
+    const pollEquipment = async () => {
+      if (sseConnected) return;
+
+      console.log("🔄 [App] 장비 데이터 폴링 중...");
+      try {
+        await fetchEquipment();
+      } catch (err) {
+        // ignore poll errors
+      }
+    };
+
     const token = localStorage.getItem("access_token");
     const currentUser = localStorage.getItem("current_user");
     const base = getApiBase();
@@ -888,43 +1064,214 @@ export default function App() {
     let reconnectAttempts = 0;
     const MAX_RECONNECT_ATTEMPTS = 3;
 
-    const handlePayload = (payload: any) => {
-      if (!payload || payload.notified_username !== currentUser) return;
-
-      const reservationId = payload.notified_reservation_id
-        ? String(payload.notified_reservation_id)
-        : "";
-      const equipmentName = payload.equipment_name || payload.name || "기구";
-      const timeoutSeconds = payload.notification_timeout_seconds
-        ? Number(payload.notification_timeout_seconds)
-        : Math.max(1, payload.notification_timeout ?? 15);
-      const expiresAt =
-        payload.notification_expires_at ||
-        new Date(Date.now() + timeoutSeconds * 1000).toISOString();
-
-      addNotification({
-        reservationId,
-        equipmentName,
-        expiresAt,
-        secondsLeft: timeoutSeconds,
-      });
-    };
-
-    // SSE 연결 시도
+    // SSE 통합 연결
     if (token && currentUser) {
       try {
         es = new EventSource(
-          `${base}/api/equipment/stream?access_token=${encodeURIComponent(token)}`
+          `${base}/api/equipment/stream?access_token=${encodeURIComponent(
+            token
+          )}`
         );
-        
+
         es.onopen = () => {
-          console.log("✅ SSE 연결 성공 - 예약 폴링 완전 중단");
+          // 최초 연결 시에만 로그 출력 (재연결 시 중복 로그 방지)
+          if (isInitialConnection) {
+            console.log("✅ [App] SSE 연결 성공 (예약 + 장비 통합)");
+            isInitialConnection = false;
+          }
           sseConnected = true;
           reservationSSEConnectedRef.current = true;
+          equipmentSSEConnectedRef.current = true;
+          reconnectAttempts = 0;
+
+          // 폴링 타이머 정리
+          if (reservationPollTimer) {
+            clearInterval(reservationPollTimer);
+            reservationPollTimer = null;
+          }
+          if (equipmentPollTimer) {
+            clearInterval(equipmentPollTimer);
+            equipmentPollTimer = null;
+          }
+        };
+
+        const handleEvent = (event: MessageEvent) => {
+          try {
+            const payload = JSON.parse(event.data);
+
+            // 1. 예약 알림 처리
+            if (payload && payload.notified_username === currentUser) {
+              const reservationId = payload.notified_reservation_id
+                ? String(payload.notified_reservation_id)
+                : "";
+              const equipmentName =
+                payload.equipment_name || payload.name || "기구";
+              const timeoutSeconds = payload.notification_timeout_seconds
+                ? Number(payload.notification_timeout_seconds)
+                : Math.max(1, payload.notification_timeout ?? 15);
+              const expiresAt =
+                payload.notification_expires_at ||
+                new Date(Date.now() + timeoutSeconds * 1000).toISOString();
+
+              addNotification({
+                reservationId,
+                equipmentName,
+                expiresAt,
+                secondsLeft: timeoutSeconds,
+              });
+
+              // 예약 목록도 갱신
+              fetchReservations();
+            }
+
+            // 2. 장비 상태 업데이트 처리
+            if (payload) {
+              // 'initial' 이벤트: 전체 목록 수신
+              if (event.type === "initial" && Array.isArray(payload)) {
+                console.log("🔄 [App] 초기 equipment 목록 수신");
+                const formattedEquipment = formatEquipmentData(payload);
+                setEquipmentList(formattedEquipment);
+                return;
+              }
+
+              // 'update' 또는 'message' 이벤트: 개별 equipment 업데이트
+              const equipmentData = payload.equipment || payload;
+              if (equipmentData && equipmentData.id) {
+                const formattedItem = formatSingleEquipment(equipmentData);
+
+                setEquipmentList((prev) => {
+                  const existingIndex = prev.findIndex(
+                    (eq) => eq.id === formattedItem.id
+                  );
+
+                  if (existingIndex >= 0) {
+                    const updated = [...prev];
+                    updated[existingIndex] = formattedItem;
+                    return updated;
+                  } else {
+                    return [...prev, formattedItem];
+                  }
+                });
+              }
+            }
+          } catch (err) {
+            console.warn("[App] SSE 페이로드 파싱 실패:", err);
+          }
+        };
+
+        es.addEventListener("message", handleEvent);
+        es.addEventListener("update", handleEvent);
+        es.addEventListener("initial", handleEvent);
+
+        es.onerror = (err) => {
+          // 연결된 상태면 일시적 오류
+          if (es && es.readyState === EventSource.OPEN) {
+            return;
+          }
+
+          // 연결 끊김
+          if (es && es.readyState === EventSource.CLOSED) {
+            reconnectAttempts++;
+            console.log(
+              `⚠️ [App] SSE 연결 끊김 (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`
+            );
+
+            es?.close();
+            sseConnected = false;
+            reservationSSEConnectedRef.current = false;
+            equipmentSSEConnectedRef.current = false;
+
+            if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+              console.log("❌ [App] SSE 재시도 한도 초과 - 폴링 모드로 전환");
+
+              if (!reservationPollTimer && mounted) {
+                console.log("🔄 [App] 예약 폴링 시작 (10초 간격)");
+                pollReservations();
+                reservationPollTimer = setInterval(pollReservations, 10000);
+              }
+
+              if (!equipmentPollTimer && mounted) {
+                console.log("🔄 [App] 장비 폴링 시작 (10초 간격)");
+                pollEquipment();
+                equipmentPollTimer = setInterval(pollEquipment, 10000);
+              }
+            }
+          }
+        };
+      } catch (err) {
+        console.warn("[App] SSE 연결 실패:", err);
+        sseConnected = false;
+        reservationSSEConnectedRef.current = false;
+        equipmentSSEConnectedRef.current = false;
+
+        // 폴링 시작
+        pollReservations();
+        reservationPollTimer = setInterval(pollReservations, 10000);
+        pollEquipment();
+        equipmentPollTimer = setInterval(pollEquipment, 10000);
+      }
+    }
+
+    return () => {
+      mounted = false;
+      reservationSSEConnectedRef.current = false;
+      equipmentSSEConnectedRef.current = false;
+      if (reservationPollTimer) clearInterval(reservationPollTimer);
+      if (equipmentPollTimer) clearInterval(equipmentPollTimer);
+      es?.close();
+    };
+  }, [userName]);
+
+  // Equipment SSE/폴링 관리 (App에서 통합 관리, 페이지 이동해도 세션 유지)
+  useEffect(() => {
+    // 로그인하지 않은 경우 실행하지 않음
+    if (!userName) {
+      console.log("👤 사용자 미로그인 - 장비 폴링/SSE 건너뜀");
+      return;
+    }
+
+    let mounted = true;
+    let timer: any = null;
+    let sseConnected = false;
+
+    const poll = async () => {
+      // SSE 연결되면 폴링하지 않음
+      if (sseConnected) {
+        console.log("⏸️ [App] Equipment SSE 연결됨 - 장비 폴링 스킵");
+        return;
+      }
+
+      console.log("🔄 [App] 장비 데이터 폴링 중...");
+      try {
+        await fetchEquipment();
+      } catch (err) {
+        // ignore poll errors
+      }
+    };
+
+    const token = localStorage.getItem("access_token");
+    const base = getApiBase();
+    let es: EventSource | null = null;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 3;
+
+    // SSE 연결 시도
+    if (token) {
+      try {
+        es = new EventSource(
+          `${base}/api/equipment/stream?access_token=${encodeURIComponent(
+            token
+          )}`
+        );
+
+        es.onopen = () => {
+          console.log("✅ [App] Equipment SSE 연결 성공 - 장비 폴링 완전 중단");
+          sseConnected = true;
+          equipmentSSEConnectedRef.current = true;
           reconnectAttempts = 0; // 성공 시 재시도 카운트 리셋
           // 기존 폴링 타이머가 있다면 즉시 정리
           if (timer) {
-            console.log("🛑 기존 폴링 타이머 정리");
+            console.log("🛑 [App] 기존 장비 폴링 타이머 정리");
             clearInterval(timer);
             timer = null;
           }
@@ -933,76 +1280,110 @@ export default function App() {
         const handleEvent = (event: MessageEvent) => {
           try {
             const payload = JSON.parse(event.data);
-            handlePayload(payload);
-            
-            // SSE로 예약 관련 이벤트를 받으면 예약 목록도 갱신
-            if (payload && (payload.notified_username || payload.equipment_name || payload.equipment_id)) {
-              console.log("📥 SSE 이벤트 수신 - 예약 목록 갱신");
-              fetchReservations();
+
+            // SSE 페이로드에서 equipment 데이터 추출하여 부분 업데이트
+            if (payload) {
+              console.log("📥 [App] Equipment SSE 이벤트 수신:", payload);
+
+              // 'initial' 이벤트: 전체 목록 수신
+              if (event.type === "initial" && Array.isArray(payload)) {
+                console.log("🔄 [App] 초기 equipment 목록 수신 (전체 갱신)");
+                const formattedEquipment = formatEquipmentData(payload);
+                setEquipmentList(formattedEquipment);
+                return;
+              }
+
+              // 'update' 또는 'message' 이벤트: 개별 equipment 업데이트
+              const equipmentData = payload.equipment || payload;
+              if (equipmentData && equipmentData.id) {
+                console.log(
+                  `🔄 [App] Equipment ${
+                    equipmentData.name || equipmentData.id
+                  } 부분 업데이트`
+                );
+
+                const formattedItem = formatSingleEquipment(equipmentData);
+
+                setEquipmentList((prev) => {
+                  const existingIndex = prev.findIndex(
+                    (eq) => eq.id === formattedItem.id
+                  );
+
+                  if (existingIndex >= 0) {
+                    // 기존 아이템 업데이트
+                    const updated = [...prev];
+                    updated[existingIndex] = formattedItem;
+                    return updated;
+                  } else {
+                    // 새 아이템 추가
+                    return [...prev, formattedItem];
+                  }
+                });
+              }
             }
           } catch (err) {
-            console.warn("Failed to parse SSE payload", err);
+            console.warn("[App] Failed to parse Equipment SSE payload", err);
           }
         };
-        
+
         es.addEventListener("message", handleEvent);
         es.addEventListener("update", handleEvent);
         es.addEventListener("initial", handleEvent);
-        
+
         es.onerror = (err) => {
           // EventSource가 연결된 상태(OPEN)면 일시적 오류이므로 무시
           if (es && es.readyState === EventSource.OPEN) {
-            console.log("ℹ️ SSE 일시적 오류 - 연결 유지 중");
+            console.log("ℹ️ [App] Equipment SSE 일시적 오류 - 연결 유지 중");
             return;
           }
-          
+
           // 연결이 끊어진 경우에만 재시도 카운트 증가
           if (es && es.readyState === EventSource.CLOSED) {
             reconnectAttempts++;
-            console.log(`⚠️ SSE 연결 끊김 (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
-            
+            console.log(
+              `⚠️ [App] Equipment SSE 연결 끊김 (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`
+            );
+
             // EventSource를 즉시 닫아서 자동 재연결 차단
             es?.close();
             sseConnected = false;
-            reservationSSEConnectedRef.current = false;
-            
+            equipmentSSEConnectedRef.current = false;
+
             if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-              console.log("❌ SSE 재시도 한도 초과 - 폴링 모드로 전환");
+              console.log(
+                "❌ [App] Equipment SSE 재시도 한도 초과 - 폴링 모드로 전환"
+              );
               sseConnected = false;
-              reservationSSEConnectedRef.current = false;
+              equipmentSSEConnectedRef.current = false;
               // 타이머가 없을 때만 폴링 시작
               if (!timer && mounted) {
-                console.log("🔄 폴링 모드 시작 (10초 간격)");
+                console.log("🔄 [App] 장비 폴링 모드 시작 (10초 간격)");
                 poll();
                 timer = setInterval(poll, 10000);
               }
             } else {
-              console.log("🔄 3초 후 재연결 시도...");
+              console.log("🔄 [App] 3초 후 Equipment SSE 재연결 시도...");
               // 3초 후 수동 재연결 (자동 재연결 방지)
             }
           }
         };
       } catch (err) {
-        console.warn("SSE 연결 실패:", err);
+        console.warn("[App] Equipment SSE 연결 실패:", err);
         // SSE 사용 불가 - 폴링 시작
-        console.log("🔄 폴링 모드 시작 (SSE 연결 실패)");
+        console.log("🔄 [App] 장비 폴링 모드 시작 (SSE 연결 실패)");
         sseConnected = false;
-        reservationSSEConnectedRef.current = false;
+        equipmentSSEConnectedRef.current = false;
         poll();
         timer = setInterval(poll, 10000);
       }
     } else {
-      // 토큰 없으면 폴링 시작
-      console.log("토큰 없음 - 폴링 모드 사용");
-      sseConnected = false;
-      reservationSSEConnectedRef.current = false;
-      poll();
-      timer = setInterval(poll, 10000);
+      // 토큰 없으면 폴링 시작 안 함 (로그인 후에만)
+      console.log("⏸️ [App] 토큰 없음 - 장비 폴링/SSE 건너뜀");
     }
 
     return () => {
       mounted = false;
-      reservationSSEConnectedRef.current = false;
+      equipmentSSEConnectedRef.current = false;
       if (timer) clearInterval(timer);
       es?.close();
     };
@@ -1024,39 +1405,57 @@ export default function App() {
   // When entering reservation-status view, load reservations from server
   // SSE 연결 시에는 초기 로딩만, 미연결 시에는 주기적 폴링
   useEffect(() => {
+    // 로그인하지 않았으면 예약 현황 조회 안 함
+    if (!userName) {
+      return;
+    }
+
     if (currentView === "reservation-status") {
-      console.log("📋 예약 현황 뷰 진입 - 초기 데이터 로딩");
+      console.log("📋 [App] 예약 현황 뷰 진입 - 초기 데이터 로딩");
       fetchReservations();
-      
+
       // SSE가 연결되지 않은 경우에만 폴링 시작
       let pollTimer: any = null;
       const checkSSEAndPoll = () => {
         // SSE 연결 상태 확인
         if (reservationSSEConnectedRef.current) {
-          console.log("⏸️ 예약 SSE 연결됨 - 현황 폴링 스킵");
+          console.log("⏸️ [App] 예약 SSE 연결됨 - 현황 폴링 스킵");
           return;
         }
-        
-        console.log("🔄 예약 현황 폴링 실행 (SSE 미연결)");
+
+        console.log("🔄 [App] 예약 현황 폴링 실행 (SSE 미연결)");
         fetchReservations();
       };
-      
+
       // 10초 후부터 10초 간격으로 폴링 (수동 체크 시만)
       const timeoutId = setTimeout(() => {
-        console.log("🔄 예약 현황 폴링 시작 확인 중...");
+        console.log("🔄 [App] 예약 현황 폴링 시작 확인 중...");
         checkSSEAndPoll();
         pollTimer = setInterval(checkSSEAndPoll, 10000);
       }, 10000);
-      
+
       return () => {
         clearTimeout(timeoutId);
         if (pollTimer) {
-          console.log("🛑 예약 현황 폴링 중지");
+          console.log("🛑 [App] 예약 현황 폴링 중지");
           clearInterval(pollTimer);
         }
       };
     }
-  }, [currentView]);
+  }, [currentView, userName]);
+
+  // equipment-list 탭 선택 시 초기 데이터 로드
+  useEffect(() => {
+    if (currentView === "equipment-list" && userName) {
+      // equipmentList가 비어있으면 초기 로드
+      if (equipmentList.length === 0) {
+        console.log(
+          "🔄 [App] equipment-list 진입 - 초기 equipment 데이터 로드"
+        );
+        fetchEquipment();
+      }
+    }
+  }, [currentView, userName]);
 
   const handleSingleReservation = (
     equipment: Equipment,
@@ -1084,7 +1483,7 @@ export default function App() {
     };
 
     setReservations((prev) => [...prev, newReservation]);
-    
+
     // 줄서기 예약 완료 시 바로 예약 현황으로 이동
     if (status === "waiting") {
       setCurrentView("reservation-status");
@@ -1212,6 +1611,9 @@ export default function App() {
             gymName={selectedGym?.gym_name || ""}
             onBack={navigateBack}
             onEquipmentSelect={handleEquipmentSelect}
+            equipment={equipmentList}
+            loading={equipmentLoading}
+            error={equipmentError}
           />
         );
 
