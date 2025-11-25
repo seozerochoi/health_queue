@@ -223,6 +223,7 @@ def equipment_stream(request):
                 try:
                     events, last_seq, timed_out = equipment_event_bus.wait_for_events(last_seq, timeout=heartbeat)
                     if events:
+                        logger.info(f"📨 [SSE] {len(events)}개 이벤트 전송")
                         for event in events:
                             payload = event.get('payload', {})
                             eq_id = payload.get('id')
@@ -234,11 +235,12 @@ def equipment_stream(request):
                         # heartbeat keeps the connection alive while there are no events
                         yield "event: heartbeat\ndata: {}\n\n"
                 except Exception as e:
-                    logger.exception("SSE event_stream error")
+                    logger.exception("❌ [SSE] event_stream error - 연결 유지 시도")
                     # 예외 발생 시에도 커넥션을 유지하며 heartbeat 전송
                     yield "event: heartbeat\ndata: {}\n\n"
         except GeneratorExit:
             # client disconnected
+            logger.info("🔌 [SSE] 클라이언트 연결 종료 (GeneratorExit)")
             return
 
     response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')

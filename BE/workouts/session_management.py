@@ -24,6 +24,7 @@ def notify_equipment_change(equipment: Optional[Equipment]):
         return
 
     def _emit():
+        logger.info(f"🔔 [SSE] Equipment {equipment.id} ({equipment.name}) 상태 변경 이벤트 발행 - status: {equipment.status}")
         publish_equipment_update(equipment)
 
     transaction.on_commit(_emit)

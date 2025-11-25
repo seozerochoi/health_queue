@@ -64,6 +64,9 @@ def _serialize_equipment(equipment) -> Dict[str, Any]:
 
 def publish_equipment_update(equipment, waiting_count: Optional[int] = None, extra: Optional[Dict[str, Any]] = None):
     """Convenience helper to emit an equipment update SSE message."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     payload = _serialize_equipment(equipment)
 
     if waiting_count is None:
@@ -80,6 +83,7 @@ def publish_equipment_update(equipment, waiting_count: Optional[int] = None, ext
     if extra:
         payload.update(extra)
 
+    logger.info(f"📡 [EventBus] Equipment {equipment.id} 이벤트 발행 - waiting_count: {waiting_count}, extra: {extra}")
     equipment_event_bus.publish(payload)
 
 
@@ -95,6 +99,8 @@ def publish_equipment_update_by_id(equipment_id: int):
 
 def publish_reservation_event(reservation, *, timeout_seconds: Optional[int] = None):
     """Emit an SSE payload that includes reservation notification metadata."""
+    import logging
+    logger = logging.getLogger(__name__)
 
     if reservation is None:
         return
@@ -124,4 +130,5 @@ def publish_reservation_event(reservation, *, timeout_seconds: Optional[int] = N
         "reservation_status": reservation.status,
     }
 
+    logger.info(f"🔔 [EventBus] Reservation {reservation.id} 알림 이벤트 발행 - user: {extra['notified_username']}, equipment: {equipment.name}")
     publish_equipment_update(equipment, extra=extra)

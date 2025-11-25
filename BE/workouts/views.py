@@ -219,6 +219,7 @@ class StartSessionView(APIView):
 
                 equipment.status = 'IN_USE'
                 equipment.save()
+                logger.info(f"✅ [StartSession] Equipment {equipment.id} ({equipment.name}) 상태 변경: IN_USE")
                 notify_equipment_change(equipment)
 
                 session = UsageSession.objects.create(
@@ -330,6 +331,7 @@ class JoinQueueView(APIView):
             ).count()
             position = get_waiting_position(reservation) or 1
 
+            logger.info(f"✅ [JoinQueue] User {user.username} joined queue for Equipment {equipment.id} - position: {position}")
             notify_equipment_change(equipment)
 
             response_payload = {
