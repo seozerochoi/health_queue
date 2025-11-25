@@ -243,4 +243,6 @@ def equipment_stream(request):
 
     response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
     response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'  # nginx 버퍼링 비활성화
+    response['Connection'] = 'keep-alive'
     return response

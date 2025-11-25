@@ -1083,7 +1083,10 @@ export default function App() {
             console.log("✅ [App] SSE 연결 성공 (예약 + 장비 통합)");
             isInitialConnection = false;
           } else {
-            console.log("🔄 [App] SSE 재연결됨 (자동 재연결)");
+            // 재연결 시 reconnectAttempts를 0으로 리셋만 하고 로그는 간소화
+            if (reconnectAttempts > 0) {
+              console.log("🔄 [App] SSE 재연결 성공");
+            }
           }
           sseConnected = true;
           reservationSSEConnectedRef.current = true;
@@ -1165,30 +1168,47 @@ export default function App() {
           }
         };
 
+        // heartbeat 이벤트 핸들러 추가 (ping 수신 확인용)
+        es.addEventListener("heartbeat", (event: MessageEvent) => {
+          console.log(
+            "💓 [SSE] heartbeat 수신:",
+            new Date().toLocaleTimeString()
+          );
+        });
+
         es.addEventListener("message", handleEvent);
         es.addEventListener("update", handleEvent);
         es.addEventListener("initial", handleEvent);
 
         es.onerror = (err) => {
-          // 연결된 상태면 일시적 오류
+          console.log(`⚠️ [SSE] onerror 발생 - readyState: ${es?.readyState}`);
+
+          // 연결된 상태면 일시적 오류 - 무시
           if (es && es.readyState === EventSource.OPEN) {
+            console.log("ℹ️ [SSE] OPEN 상태 - 일시적 오류, 무시");
             return;
           }
 
-          // 연결 끊김
+          // CONNECTING 상태면 브라우저가 자동 재연결 중 - 무시
+          if (es && es.readyState === EventSource.CONNECTING) {
+            console.log("ℹ️ [SSE] CONNECTING 상태 - 브라우저 자동 재연결 중");
+            return;
+          }
+
+          // CLOSED 상태 - 실제 연결 끊김
           if (es && es.readyState === EventSource.CLOSED) {
             reconnectAttempts++;
             console.log(
-              `⚠️ [App] SSE 연결 끊김 (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`
+              `❌ [App] SSE 완전히 끊김 (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`
             );
 
-            es?.close();
             sseConnected = false;
             reservationSSEConnectedRef.current = false;
             equipmentSSEConnectedRef.current = false;
 
             if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
               console.log("❌ [App] SSE 재시도 한도 초과 - 폴링 모드로 전환");
+              es?.close();
 
               if (!reservationPollTimer && mounted) {
                 console.log("🔄 [App] 예약 폴링 시작 (10초 간격)");
