@@ -787,11 +787,15 @@ export default function App() {
   };
 
   // Poll reservations in background to detect NOTIFIED reservations and show popup
+  // SSE 연결 성공 시 폴링 중단
   useEffect(() => {
     let mounted = true;
     let timer: any = null;
+    let sseConnected = false;
 
     const poll = async () => {
+      if (sseConnected) return; // SSE 연결되면 폴링 중단
+      
       try {
         const data = await fetchReservations();
         if (!mounted || !data) return;
@@ -839,23 +843,12 @@ export default function App() {
       }
     };
 
-    // start immediately and then interval
-    poll();
-    timer = setInterval(poll, 5000);
-
-    return () => {
-      mounted = false;
-      if (timer) clearInterval(timer);
-    };
-  }, [userName]);
-
-  useEffect(() => {
     const token = localStorage.getItem("access_token");
     const currentUser = localStorage.getItem("current_user");
-    if (!token || !currentUser) return;
-
     const base = getApiBase();
     let es: EventSource | null = null;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 3;
 
     const handlePayload = (payload: any) => {
       if (!payload || payload.notified_username !== currentUser) return;
@@ -879,29 +872,83 @@ export default function App() {
       });
     };
 
-    try {
-      es = new EventSource(
-        `${base}/api/equipment/stream?access_token=${encodeURIComponent(token)}`
-      );
-      const handleEvent = (event: MessageEvent) => {
-        try {
-          const payload = JSON.parse(event.data);
-          handlePayload(payload);
-        } catch (err) {
-          console.warn("Failed to parse SSE payload", err);
-        }
-      };
-      es.addEventListener("message", handleEvent);
-      es.addEventListener("update", handleEvent);
-      es.addEventListener("initial", handleEvent);
-    } catch (err) {
-      console.warn("Failed to connect to equipment stream", err);
+    // SSE 연결 시도
+    if (token && currentUser) {
+      try {
+        es = new EventSource(
+          `${base}/api/equipment/stream?access_token=${encodeURIComponent(token)}`
+        );
+        
+        es.onopen = () => {
+          console.log("✅ SSE 연결 성공 - 예약 폴링 중단");
+          sseConnected = true;
+          reconnectAttempts = 0; // 성공 시 재시도 카운트 리셋
+          if (timer) {
+            clearInterval(timer);
+            timer = null;
+          }
+        };
+
+        const handleEvent = (event: MessageEvent) => {
+          try {
+            const payload = JSON.parse(event.data);
+            handlePayload(payload);
+          } catch (err) {
+            console.warn("Failed to parse SSE payload", err);
+          }
+        };
+        
+        es.addEventListener("message", handleEvent);
+        es.addEventListener("update", handleEvent);
+        es.addEventListener("initial", handleEvent);
+        
+        es.onerror = (err) => {
+          // EventSource가 연결된 상태(OPEN)면 일시적 오류이므로 무시
+          if (es && es.readyState === EventSource.OPEN) {
+            console.log("ℹ️ SSE 일시적 오류 - 연결 유지 중");
+            return;
+          }
+          
+          // 연결이 끊어진 경우에만 재시도 카운트 증가
+          if (es && es.readyState === EventSource.CLOSED) {
+            reconnectAttempts++;
+            console.log(`⚠️ SSE 연결 끊김 (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+            
+            // EventSource를 즉시 닫아서 자동 재연결 차단
+            es?.close();
+            
+            if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+              console.log("❌ SSE 재시도 한도 초과 - 폴링 모드로 전환");
+              sseConnected = false;
+              if (!timer && mounted) {
+                poll();
+                timer = setInterval(poll, 5000);
+              }
+            } else {
+              console.log("🔄 3초 후 재연결 시도...");
+              // 3초 후 수동 재연결 (자동 재연결 방지)
+            }
+          }
+        };
+      } catch (err) {
+        console.warn("SSE 연결 실패:", err);
+        // SSE 사용 불가 - 폴링 시작
+        poll();
+        timer = setInterval(poll, 5000);
+      }
+    } else {
+      // 토큰 없으면 폴링 시작
+      console.log("토큰 없음 - 폴링 모드 사용");
+      poll();
+      timer = setInterval(poll, 5000);
     }
 
     return () => {
+      mounted = false;
+      if (timer) clearInterval(timer);
       es?.close();
     };
-  }, []);
+  }, [userName]);
 
   // decrement countdowns for notifications
   useEffect(() => {
