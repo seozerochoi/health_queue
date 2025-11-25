@@ -16,23 +16,27 @@ async function sendHeartbeat() {
   const { apiBase, token, equipmentId } = currentConfig;
   try {
     const res = await fetch(`${apiBase}/api/workouts/heartbeat/`, {
-      method: 'POST',
+      method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({ equipment_id: equipmentId }),
     });
     if (!res.ok) {
       consecutiveFailures += 1;
-      (self as any).postMessage({ type: 'failure', consecutiveFailures });
+      (self as any).postMessage({ type: "failure", consecutiveFailures });
     } else {
       consecutiveFailures = 0;
-      (self as any).postMessage({ type: 'ok' });
+      (self as any).postMessage({ type: "ok" });
     }
   } catch (e: any) {
     consecutiveFailures += 1;
-    (self as any).postMessage({ type: 'failure', consecutiveFailures, message: e?.message });
+    (self as any).postMessage({
+      type: "failure",
+      consecutiveFailures,
+      message: e?.message,
+    });
   }
 }
 
@@ -41,7 +45,10 @@ function start(config: any) {
   if (intervalId) clearInterval(intervalId);
   // immediate first
   sendHeartbeat();
-  intervalId = setInterval(sendHeartbeat, config.intervalMs) as unknown as number;
+  intervalId = setInterval(
+    sendHeartbeat,
+    config.intervalMs
+  ) as unknown as number;
 }
 
 function stop() {
@@ -55,7 +62,7 @@ function stop() {
 (self as any).onmessage = (e: MessageEvent) => {
   const data = e.data;
   switch (data?.type) {
-    case 'start':
+    case "start":
       start({
         apiBase: data.apiBase,
         token: data.token,
@@ -63,13 +70,16 @@ function stop() {
         intervalMs: data.intervalMs || 20000,
       });
       break;
-    case 'pulse':
+    case "pulse":
       sendHeartbeat();
       break;
-    case 'stop':
+    case "stop":
       stop();
       break;
     default:
-      (self as any).postMessage({ type: 'error', message: 'Unknown message type' });
+      (self as any).postMessage({
+        type: "error",
+        message: "Unknown message type",
+      });
   }
 };

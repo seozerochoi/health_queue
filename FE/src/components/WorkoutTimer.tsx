@@ -131,13 +131,14 @@ export function WorkoutTimer({
         let errorMessage = "알 수 없는 오류";
         try {
           const errorData = await response.json();
-          errorMessage = errorData.error || errorData.message || JSON.stringify(errorData);
+          errorMessage =
+            errorData.error || errorData.message || JSON.stringify(errorData);
         } catch {
           errorMessage = await response.text();
         }
-        
+
         console.error("운동 종료 API 실패:", response.status, errorMessage);
-        
+
         // 404 에러 (세션이 없음)는 이미 종료되었을 가능성이 있으므로 무시하고 계속 진행
         if (response.status === 404) {
           console.warn("세션이 이미 종료되었거나 존재하지 않음 - 계속 진행");
@@ -205,7 +206,10 @@ export function WorkoutTimer({
     // Try Web Worker first
     try {
       if (typeof Worker !== "undefined") {
-        const w = new Worker(new URL("../workers/heartbeatWorker.ts", import.meta.url), { type: "module" });
+        const w = new Worker(
+          new URL("../workers/heartbeatWorker.ts", import.meta.url),
+          { type: "module" }
+        );
         workerRef.current = w;
         usingWorkerRef.current = true;
         w.onmessage = (ev) => {
@@ -244,7 +248,10 @@ export function WorkoutTimer({
     // Fallback interval if worker not used
     if (!usingWorkerRef.current) {
       sendHeartbeatDirect(); // immediate
-      heartbeatIntervalRef.current = window.setInterval(sendHeartbeatDirect, 20000);
+      heartbeatIntervalRef.current = window.setInterval(
+        sendHeartbeatDirect,
+        20000
+      );
     }
 
     // Visibility change: on becoming visible send immediate heartbeat
@@ -259,7 +266,9 @@ export function WorkoutTimer({
         // On hide attempt lightweight beacon heartbeat (token via query param endpoint)
         const access = localStorage.getItem("access_token");
         if (access && navigator.sendBeacon) {
-          const url = `${apiBase}/api/workouts/heartbeat_beacon/?access_token=${encodeURIComponent(access)}&equipment_id=${encodeURIComponent(equipment.id)}`;
+          const url = `${apiBase}/api/workouts/heartbeat_beacon/?access_token=${encodeURIComponent(
+            access
+          )}&equipment_id=${encodeURIComponent(equipment.id)}`;
           try {
             navigator.sendBeacon(url, "{}");
           } catch (_) {
@@ -274,7 +283,9 @@ export function WorkoutTimer({
     const handlePageHide = () => {
       const access = localStorage.getItem("access_token");
       if (access && navigator.sendBeacon) {
-        const url = `${apiBase}/api/workouts/end_beacon/?access_token=${encodeURIComponent(access)}`;
+        const url = `${apiBase}/api/workouts/end_beacon/?access_token=${encodeURIComponent(
+          access
+        )}`;
         try {
           navigator.sendBeacon(url, "{}");
         } catch (_) {
