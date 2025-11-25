@@ -173,6 +173,7 @@ export function EquipmentList({
   const sseCleanupRef = useRef<(() => void) | null>(null);
   const pollCleanupRef = useRef<(() => void) | null>(null);
   const accessTokenRef = useRef<string | null>(null);
+  const sseConnectedRef = useRef<boolean>(false);
 
   const sseEnabled = useMemo(() => {
     try {
@@ -190,7 +191,7 @@ export function EquipmentList({
     } catch (e) {
       /* ignore */
     }
-    return 5000;
+    return 10000;
   }, []);
 
   useEffect(() => {
@@ -367,6 +368,12 @@ export function EquipmentList({
 
     const startPolling = (initialToken: string | null) => {
       const fetchSnapshot = async () => {
+        // SSE가 연결되어 있으면 폴링하지 않음
+        if (sseConnectedRef.current) {
+          console.log("⏸️ Equipment SSE 연결됨 - 폴링 스킵");
+          return;
+        }
+        
         let access = accessTokenRef.current ?? initialToken;
         const refresh = localStorage.getItem("refresh_token");
 
@@ -410,55 +417,137 @@ export function EquipmentList({
         }
       };
 
+      console.log("🔄 Equipment 폴링 시작 (${pollIntervalMs}ms 간격)");
       fetchSnapshot();
       const timer = window.setInterval(fetchSnapshot, pollIntervalMs);
       return () => {
+        console.log("🛑 Equipment 폴링 중지");
         window.clearInterval(timer);
       };
     };
 
     const openSSE = (accessToken: string | null) => {
       let es: EventSource | null = null;
-      try {
-        const tokenParam = accessToken
-          ? `?access_token=${encodeURIComponent(accessToken)}`
-          : "";
-        // avoid accidental double-slash before query
-        es = new EventSource(`${base}/api/equipment/stream${tokenParam}`);
+      let sseConnected = false;
+      let reconnectTimer: number | null = null;
+      let reconnectAttempts = 0;
+      const MAX_RECONNECT_ATTEMPTS = 3;
+      
+      const attemptConnection = () => {
+        try {
+          const tokenParam = accessToken
+            ? `?access_token=${encodeURIComponent(accessToken)}`
+            : "";
+          // avoid accidental double-slash before query
+          es = new EventSource(`${base}/api/equipment/stream${tokenParam}`);
 
-        // Listen to default message events (if server emits plain messages)
-        es.onmessage = (ev) => {
-          try {
-            const payload = JSON.parse(ev.data);
-            mergeEquipmentFromServer(payload);
-          } catch (err) {
-            console.error("SSE message parse error", err);
-          }
-        };
+          es.onopen = () => {
+            console.log("✅ Equipment SSE 연결 성공 - 폴링 사용 안 함");
+            sseConnected = true;
+            sseConnectedRef.current = true;
+            reconnectAttempts = 0;
+          };
 
-        // Some servers emit a named event for the initial snapshot ("initial").
-        // Add a listener so we correctly receive that payload and initialize the list.
-        es.addEventListener("initial", (ev: MessageEvent) => {
-          try {
-            const payload = JSON.parse((ev as any).data);
-            if (payload) {
-              mergeEquipmentFromServer(payload, { suppressFlash: true });
+          // Listen to default message events (if server emits plain messages)
+          es.onmessage = (ev) => {
+            try {
+              const payload = JSON.parse(ev.data);
+              mergeEquipmentFromServer(payload);
+            } catch (err) {
+              console.error("SSE message parse error", err);
             }
-          } catch (err) {
-            console.error("SSE initial event parse error", err);
-          }
-        });
+          };
 
-        es.onerror = (err) => {
-          console.warn("SSE error", err);
-        };
-      } catch (err) {
-        console.warn("SSE not available", err);
-      }
+          // Some servers emit a named event for the initial snapshot ("initial").
+          // Add a listener so we correctly receive that payload and initialize the list.
+          es.addEventListener("initial", (ev: MessageEvent) => {
+            try {
+              const payload = JSON.parse((ev as any).data);
+              if (payload) {
+                mergeEquipmentFromServer(payload, { suppressFlash: true });
+              }
+            } catch (err) {
+              console.error("SSE initial event parse error", err);
+            }
+          });
+
+          es.addEventListener("update", (ev: MessageEvent) => {
+            try {
+              const payload = JSON.parse((ev as any).data);
+              if (payload) {
+                mergeEquipmentFromServer(payload);
+              }
+            } catch (err) {
+              console.error("SSE update event parse error", err);
+            }
+          });
+
+          es.onerror = (err) => {
+            // SSE가 연결된 상태면 일시적 오류로 간주
+            if (es && es.readyState === EventSource.OPEN) {
+              console.log("ℹ️ Equipment SSE 일시적 오류 - 연결 유지 중");
+              return;
+            }
+
+            // 연결 끊김
+            if (es && es.readyState === EventSource.CLOSED) {
+              reconnectAttempts++;
+              console.log(`⚠️ Equipment SSE 연결 끊김 (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+              sseConnected = false;
+              sseConnectedRef.current = false;
+              
+              // EventSource 닫기 (자동 재연결 방지)
+              es?.close();
+              
+              if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                console.log("❌ Equipment SSE 재시도 한도 초과 - 폴링 모드로 전환");
+                // 폴링으로 전환
+                if (pollCleanupRef.current) pollCleanupRef.current();
+                console.log("🔄 Equipment 폴링 모드 시작 (SSE 실패 후)");
+                const cleanup = startPolling(accessToken);
+                pollCleanupRef.current = cleanup;
+              } else {
+                // 재연결 시도
+                console.log("🔄 3초 후 Equipment SSE 재연결 시도...");
+                reconnectTimer = window.setTimeout(() => {
+                  attemptConnection();
+                }, 3000);
+              }
+            }
+          };
+        } catch (err) {
+          console.warn("SSE connection failed", err);
+          sseConnected = false;
+          sseConnectedRef.current = false;
+          
+          if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            reconnectAttempts++;
+            console.log(`🔄 3초 후 Equipment SSE 재연결 시도... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+            reconnectTimer = window.setTimeout(() => {
+              attemptConnection();
+            }, 3000);
+          } else {
+            console.log("❌ Equipment SSE 연결 완전 실패 - 폴링 모드로 전환");
+            // 폴링으로 전환
+            if (pollCleanupRef.current) pollCleanupRef.current();
+            console.log("🔄 Equipment 폴링 모드 시작");
+            const cleanup = startPolling(accessToken);
+            pollCleanupRef.current = cleanup;
+          }
+        }
+      };
+
+      // 초기 연결 시도
+      attemptConnection();
 
       // return cleanup
       return () => {
-        if (es) es.close();
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        if (es) {
+          console.log("🛑 Equipment SSE 연결 종료");
+          es.close();
+        }
+        sseConnectedRef.current = false;
       };
     };
 
@@ -571,7 +660,7 @@ export function EquipmentList({
         setEquipment(formattedEquipment);
         
         // 초기 로딩 시 모든 기구 상태 출력
-        console.log("📋 ===== 초기 기구 목록 로딩 =====");
+        console.log("======= 초기 기구 목록 로딩 =======");
         formattedEquipment.forEach(eq => {
           const statusText = {
             'available': 'AVAILABLE (사용 가능)',

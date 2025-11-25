@@ -107,6 +107,7 @@ export default function App() {
     []
   );
   const shownNotificationsRef = useRef<Record<string, boolean>>({});
+  const reservationSSEConnectedRef = useRef<boolean>(false);
   const [tempUserId, setTempUserId] = useState<string>("");
   const [tempPassword, setTempPassword] = useState<string>("");
   // 사용자가 NFC 과정을 거치지 않고 바로 타이머로 진입했는지 여부
@@ -827,7 +828,11 @@ export default function App() {
     let sseConnected = false;
 
     const poll = async () => {
-      if (sseConnected) return; // SSE 연결되면 폴링 중단
+      // SSE 연결되면 폴링하지 않음
+      if (sseConnected) {
+        console.log("⏸️ SSE 연결됨 - 예약 폴링 스킵");
+        return;
+      }
       
       try {
         const data = await fetchReservations();
@@ -913,10 +918,13 @@ export default function App() {
         );
         
         es.onopen = () => {
-          console.log("✅ SSE 연결 성공 - 예약 폴링 중단");
+          console.log("✅ SSE 연결 성공 - 예약 폴링 완전 중단");
           sseConnected = true;
+          reservationSSEConnectedRef.current = true;
           reconnectAttempts = 0; // 성공 시 재시도 카운트 리셋
+          // 기존 폴링 타이머가 있다면 즉시 정리
           if (timer) {
+            console.log("🛑 기존 폴링 타이머 정리");
             clearInterval(timer);
             timer = null;
           }
@@ -926,6 +934,12 @@ export default function App() {
           try {
             const payload = JSON.parse(event.data);
             handlePayload(payload);
+            
+            // SSE로 예약 관련 이벤트를 받으면 예약 목록도 갱신
+            if (payload && (payload.notified_username || payload.equipment_name || payload.equipment_id)) {
+              console.log("📥 SSE 이벤트 수신 - 예약 목록 갱신");
+              fetchReservations();
+            }
           } catch (err) {
             console.warn("Failed to parse SSE payload", err);
           }
@@ -949,13 +963,18 @@ export default function App() {
             
             // EventSource를 즉시 닫아서 자동 재연결 차단
             es?.close();
+            sseConnected = false;
+            reservationSSEConnectedRef.current = false;
             
             if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
               console.log("❌ SSE 재시도 한도 초과 - 폴링 모드로 전환");
               sseConnected = false;
+              reservationSSEConnectedRef.current = false;
+              // 타이머가 없을 때만 폴링 시작
               if (!timer && mounted) {
+                console.log("🔄 폴링 모드 시작 (10초 간격)");
                 poll();
-                timer = setInterval(poll, 5000);
+                timer = setInterval(poll, 10000);
               }
             } else {
               console.log("🔄 3초 후 재연결 시도...");
@@ -966,18 +985,24 @@ export default function App() {
       } catch (err) {
         console.warn("SSE 연결 실패:", err);
         // SSE 사용 불가 - 폴링 시작
+        console.log("🔄 폴링 모드 시작 (SSE 연결 실패)");
+        sseConnected = false;
+        reservationSSEConnectedRef.current = false;
         poll();
-        timer = setInterval(poll, 5000);
+        timer = setInterval(poll, 10000);
       }
     } else {
       // 토큰 없으면 폴링 시작
       console.log("토큰 없음 - 폴링 모드 사용");
+      sseConnected = false;
+      reservationSSEConnectedRef.current = false;
       poll();
-      timer = setInterval(poll, 5000);
+      timer = setInterval(poll, 10000);
     }
 
     return () => {
       mounted = false;
+      reservationSSEConnectedRef.current = false;
       if (timer) clearInterval(timer);
       es?.close();
     };
@@ -997,9 +1022,39 @@ export default function App() {
   }, [notifications.length]);
 
   // When entering reservation-status view, load reservations from server
+  // SSE 연결 시에는 초기 로딩만, 미연결 시에는 주기적 폴링
   useEffect(() => {
     if (currentView === "reservation-status") {
+      console.log("📋 예약 현황 뷰 진입 - 초기 데이터 로딩");
       fetchReservations();
+      
+      // SSE가 연결되지 않은 경우에만 폴링 시작
+      let pollTimer: any = null;
+      const checkSSEAndPoll = () => {
+        // SSE 연결 상태 확인
+        if (reservationSSEConnectedRef.current) {
+          console.log("⏸️ 예약 SSE 연결됨 - 현황 폴링 스킵");
+          return;
+        }
+        
+        console.log("🔄 예약 현황 폴링 실행 (SSE 미연결)");
+        fetchReservations();
+      };
+      
+      // 10초 후부터 10초 간격으로 폴링 (수동 체크 시만)
+      const timeoutId = setTimeout(() => {
+        console.log("🔄 예약 현황 폴링 시작 확인 중...");
+        checkSSEAndPoll();
+        pollTimer = setInterval(checkSSEAndPoll, 10000);
+      }, 10000);
+      
+      return () => {
+        clearTimeout(timeoutId);
+        if (pollTimer) {
+          console.log("🛑 예약 현황 폴링 중지");
+          clearInterval(pollTimer);
+        }
+      };
     }
   }, [currentView]);
 
