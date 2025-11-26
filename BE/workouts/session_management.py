@@ -156,9 +156,8 @@ def _release_equipment_to_available(equipment: Equipment, now=None):
     else:
         equipment.status = 'AVAILABLE'
 
-    equipment.save()
-
-    notify_equipment_change(equipment)
+    # ⚡ update_fields 지정 → Signal에서 자동 발행 (notify 호출 불필요)
+    equipment.save(update_fields=['status'])
     return equipment
 
 
@@ -265,8 +264,7 @@ def cleanup_stale_sessions(timeout_seconds: Optional[int] = None, grace_seconds:
             for equipment in waiting_equipment:
                 try:
                     equipment.status = 'AVAILABLE'
-                    equipment.save()
-                    notify_equipment_change(equipment)
+                    equipment.save(update_fields=['status'])  # ⚡ Signal에서 자동 발행
                     logger.info(
                         "Released WAITING equipment %s with empty queue",
                         equipment.pk,

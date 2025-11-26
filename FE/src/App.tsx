@@ -1323,16 +1323,13 @@ export default function App() {
     }
   }, [currentView, userName]);
 
-  // equipment-list 탭 선택 시 초기 데이터 로드
+  // equipment-list 탭 선택 시 항상 API로 최신 데이터 로드
   useEffect(() => {
     if (currentView === "equipment-list" && userName) {
-      // equipmentList가 비어있으면 초기 로드
-      if (equipmentList.length === 0) {
-        console.log(
-          "🔄 [App] equipment-list 진입 - 초기 equipment 데이터 로드"
-        );
-        fetchEquipment();
-      }
+      console.log(
+        "🔄 [App] equipment-list 탭 진입 - API로 최신 equipment 데이터 로드"
+      );
+      fetchEquipment();
     }
   }, [currentView, userName]);
 
@@ -1620,13 +1617,13 @@ export default function App() {
                     const equipment = equipmentList.find(
                       (eq) => String(eq.id) === equipmentId
                     );
-                    
+
                     if (equipment) {
                       // 기구 선택 및 운동 시작
                       setSelectedEquipment(equipment);
                       setWorkoutStartTime(new Date());
                       setCurrentView("workout-timer");
-                      
+
                       // 알림 제거
                       setNotifications((prev) =>
                         prev.filter((x) => x.reservationId !== n.reservationId)
@@ -1651,7 +1648,7 @@ export default function App() {
                         } catch (e) {}
                         return "http://43.201.88.27";
                       })();
-                      
+
                       const response = await fetch(
                         `${base}/api/reservations/${n.reservationId}/`,
                         {
@@ -1659,7 +1656,7 @@ export default function App() {
                           headers: {
                             Authorization: `Bearer ${token}`,
                           },
-                          credentials: 'include',
+                          credentials: "include",
                         }
                       );
 
@@ -1674,7 +1671,7 @@ export default function App() {
                   } catch (error) {
                     console.error("예약 취소 중 오류:", error);
                   }
-                  
+
                   // 알림 제거
                   setNotifications((prev) =>
                     prev.filter((x) => x.reservationId !== n.reservationId)
