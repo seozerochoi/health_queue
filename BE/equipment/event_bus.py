@@ -18,7 +18,18 @@ REDIS_CHANNEL = "equipment_events"
 def _get_redis_client():
     broker_url = getattr(settings, "CELERY_BROKER_URL", "redis://localhost:6379/0")
     parsed = urlparse(broker_url)
-    return redis.Redis(host=parsed.hostname or "localhost", port=parsed.port or 6379, db=int((parsed.path or "/0").strip("/")))
+    # ⚡ CRITICAL: Add socket_timeout and socket_connect_timeout to prevent blocking
+    # If Redis is down, fail fast (3s) instead of hanging for 60+ seconds
+    return redis.Redis(
+        host=parsed.hostname or "localhost",
+        port=parsed.port or 6379,
+        db=int((parsed.path or "/0").strip("/")),
+        socket_timeout=3.0,  # Read/write timeout
+        socket_connect_timeout=3.0,  # Connection timeout
+        socket_keepalive=True,
+        socket_keepalive_options={},
+        retry_on_timeout=False,  # Don't retry on timeout
+    )
 
 # ⚡ CRITICAL: Do NOT create global Redis connection at module load time!
 # When preload_app=True in Gunicorn, all workers share the same connection object
@@ -114,13 +125,22 @@ def publish_equipment_update(equipment, waiting_count: Optional[int] = None, ext
     payload["waiting_count"] = waiting_count
     if extra:
         payload.update(extra)
+    
+    # ⚡ CRITICAL: Redis publish with timeout protection
+    # If Redis is down, log error and continue instead of blocking the request
     try:
-        # ⚡ Use lazy-initialized publisher to avoid connection sharing across workers
         redis_client = _get_redis_publisher()
         redis_client.publish(REDIS_CHANNEL, json.dumps({"type": "update", "payload": payload}))
         logger.info(f"📡 [EventBus] Redis publish equipment {equipment.id} waiting={waiting_count}")
-    except Exception:
-        logger.exception("❌ [EventBus] Redis publish 실패")
+    except redis.exceptions.ConnectionError as e:
+        logger.error(f"❌ [EventBus] Redis 연결 실패 (equipment {equipment.id}): {e}")
+        # Continue execution - SSE clients will get updates on reconnect
+    except redis.exceptions.TimeoutError as e:
+        logger.error(f"❌ [EventBus] Redis 타임아웃 (equipment {equipment.id}): {e}")
+        # Continue execution
+    except Exception as e:
+        logger.exception(f"❌ [EventBus] Redis publish 실패 (equipment {equipment.id}): {e}")
+        # Continue execution
     
     # ⚡ REMOVED: Do NOT add to local_buffer
     # Local buffer causes race conditions when multiple workers handle different events.
