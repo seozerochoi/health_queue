@@ -45,7 +45,27 @@ class ReservationViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # ⚡ FIXED: 모든 사용자(관리자 포함)는 자신의 예약만 조회 가능 (user_id로 강제 필터)
+        # 추가로 Authorization Bearer 토큰을 직접 디코드하여 request.user와 토큰 사용자 불일치 시 토큰 사용자로 교체
         user = self.request.user
+        try:
+            auth_header = self.request.headers.get('Authorization') or self.request.META.get('HTTP_AUTHORIZATION')
+            if auth_header and auth_header.lower().startswith('bearer '):
+                raw_token = auth_header.split(' ', 1)[1].strip()
+                tb = TokenBackend(
+                    algorithm=settings.SIMPLE_JWT.get('ALGORITHM', 'HS256'),
+                    signing_key=settings.SIMPLE_JWT.get('SIGNING_KEY', settings.SECRET_KEY),
+                )
+                payload = tb.decode(raw_token, verify=True)
+                token_user_id = payload.get('user_id') or payload.get('user')
+                if token_user_id and getattr(user, 'id', None) != token_user_id:
+                    User = get_user_model()
+                    user = User.objects.get(pk=token_user_id)
+                    logger.warning(
+                        "⚠️ [ReservationViewSet] request.user와 토큰 사용자 불일치 - request.user=%s token_user_id=%s -> 토큰 사용자로 대체",
+                        getattr(self.request.user, 'id', None), token_user_id,
+                    )
+        except Exception:
+            logger.warning("[ReservationViewSet] Authorization 토큰 파싱 실패 - DRF request.user 사용", exc_info=True)
         equipment_id = self.request.query_params.get('equipment_id', None)
 
         # 🔍 디버깅 로그: 누가 어떤 예약을 조회하는지 확인
