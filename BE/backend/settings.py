@@ -24,7 +24,7 @@ environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 # .env 파일(로컬) 또는 클라우드타입의 환경 변수(서버)에서 값을 읽어옵니다.
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
-OPENAI_API_KEY = env('OPENAI_API_KEY')
+OPENAI_API_KEY = env('OPENAI_API_KEY', default='')
 # AWS region for Rekognition fallback in InBody analyze
 # Prefer AWS_REGION, fallback to AWS_DEFAULT_REGION if present
 AWS_REGION = env('AWS_REGION', default=os.getenv('AWS_DEFAULT_REGION'))

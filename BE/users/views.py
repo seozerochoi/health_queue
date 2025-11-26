@@ -161,6 +161,14 @@ class InbodyAnalyzeView(APIView):
         # Try GPT Vision first (if OPENAI_API_KEY is configured); fallback to AWS Rekognition heuristic
         api_key = os.getenv('OPENAI_API_KEY') or getattr(settings, 'OPENAI_API_KEY', None)
         use_gpt = getattr(settings, 'INBODY_GPT_ENABLED', False)
+        
+        # Check configuration and provide clear error messages
+        if use_gpt and not api_key:
+            return Response({
+                'detail': 'INBODY_GPT_ENABLED is true but OPENAI_API_KEY is not configured. '
+                          'Please set OPENAI_API_KEY or disable GPT by setting INBODY_GPT_ENABLED=false'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         if OpenAI and api_key and use_gpt:
             try:
                 b64 = base64.b64encode(img_bytes).decode('utf-8')
@@ -243,7 +251,13 @@ class InbodyAnalyzeView(APIView):
 
             except Exception:
                 logger.exception('Inbody analyze via GPT failed; falling back to Rekognition')
-                # continue to Rekognition fallback
+                # If GPT is explicitly enabled, return error instead of silent fallback
+                if use_gpt:
+                    return Response({
+                        'detail': 'GPT Vision analysis failed. Check server logs for details. '
+                                  'You can disable GPT by setting INBODY_GPT_ENABLED=false to use AWS Rekognition instead.'
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                # continue to Rekognition fallback only if GPT is not explicitly enabled
 
         # Fallback: AWS Rekognition OCR + heuristics
         try:
