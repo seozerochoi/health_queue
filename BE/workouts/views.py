@@ -275,6 +275,18 @@ class StartSessionView(APIView):
                     session_type=session_type,
                     last_heartbeat=timezone.now()
                 )
+
+                # 🔔 큐 상태 반영: 사용 시작 시 본인의 NOTIFIED/WAITING 예약이 소진되므로 대기 인원 업데이트를 즉시 브로드캐스트
+                try:
+                    from equipment.event_bus import publish_equipment_update
+                    waiting_count = Reservation.objects.filter(
+                        equipment=equipment,
+                        status__in=['WAITING', 'NOTIFIED'],
+                    ).count()
+                    publish_equipment_update(equipment, waiting_count=waiting_count)
+                except Exception:
+                    # SSE 발행 실패는 세션 생성 자체를 막지 않음
+                    logger.warning("[StartSession] Failed to publish waiting_count update", exc_info=True)
         except Exception as e:
             logger.exception("Failed to create UsageSession or update Equipment status")
             return Response({'error': '서버 에러: 세션 생성 실패'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -365,9 +377,26 @@ class JoinQueueView(APIView):
             )
 
             if existing:
+                # 🔁 Idempotent behavior: if user already has an active reservation for this equipment,
+                # return current queue info instead of failing. This avoids UX errors on repeated taps.
+                waiting_count = Reservation.objects.filter(
+                    equipment=equipment,
+                    status__in=['WAITING', 'NOTIFIED'],
+                ).count()
+                position = get_waiting_position(existing) or 1
+
+                logger.info(
+                    f"♻️ [JoinQueue] Idempotent return for user {user.username} equipment {equipment.id} - position: {position}"
+                )
                 return Response(
-                    {"error": "이미 예약한 장비입니다."},
-                    status=status.HTTP_409_CONFLICT,
+                    {
+                        'reservation_id': existing.id,
+                        'equipment_id': equipment.id,
+                        'position': position,
+                        'waiting_count': waiting_count,
+                        'message': '이미 대기 중이거나 알림 상태입니다.',
+                    },
+                    status=status.HTTP_200_OK,
                 )
 
             reservation = Reservation.objects.create(user=user, equipment=equipment, status='WAITING')
