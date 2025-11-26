@@ -28,7 +28,7 @@ OPENAI_API_KEY = env('OPENAI_API_KEY')
 # AWS region for Rekognition fallback in InBody analyze
 # Prefer AWS_REGION, fallback to AWS_DEFAULT_REGION if present
 AWS_REGION = env('AWS_REGION', default=os.getenv('AWS_DEFAULT_REGION'))
-INBODY_GPT_ENABLED = env.bool('INBODY_GPT_ENABLED', default=False)
+INBODY_GPT_ENABLED = env.bool('INBODY_GPT_ENABLED', default=True)
 
 # 클라우드타입이 제공하는 도메인을 허용해야 합니다.
 # ['*']는 모든 주소를 허용하는 가장 간단한 설정입니다.
