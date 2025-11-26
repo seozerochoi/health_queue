@@ -233,10 +233,11 @@ export function AdminDashboard({
               </div>
             </CardHeader>
             <CardContent>
-              <div className="w-full h-[500px] bg-gray-900 rounded-lg p-4">
+              <div className="w-full h-[400px] bg-gray-900 rounded-lg p-4">
                 {/* Hardcoded bar chart visualization */}
                 <div className="h-full flex flex-col">
-                  <div className="flex items-end justify-between gap-2" style={{ height: '420px' }}>
+                  <div className="text-gray-300 text-sm mb-2 font-medium">이용률 (%)</div>
+                  <div className="flex-1 flex items-end justify-between gap-1" style={{ height: '320px' }}>
                     {[
                       { hour: '06:00', rate: 53 },
                       { hour: '07:00', rate: 42 },
@@ -257,27 +258,27 @@ export function AdminDashboard({
                       { hour: '22:00', rate: 45 },
                       { hour: '23:00', rate: 28 },
                     ].map((item) => (
-                      <div key={item.hour} className="flex-1 flex flex-col items-center justify-end" style={{ height: '100%' }}>
+                      <div key={item.hour} className="flex flex-col items-center justify-end" style={{ width: '5%', height: '100%' }}>
                         <div
                           className="w-full bg-blue-500 rounded-t transition-all hover:bg-blue-400 cursor-pointer"
                           style={{ 
-                            height: `${item.rate}%`
+                            height: `${item.rate}%`,
+                            minHeight: '2px'
                           }}
                           title={`${item.hour}: ${item.rate}%`}
                         />
                       </div>
                     ))}
                   </div>
-                  <div className="text-gray-300 text-sm mt-4 mb-2 font-medium">이용률 (%)</div>
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center justify-between gap-1 mt-2">
                     {[
                       '06시', '07시', '08시', '09시', '10시', '11시', '12시', '13시', 
                       '14시', '15시', '16시', '17시', '18시', '19시', '20시', '21시', 
                       '22시', '23시'
                     ].map((label) => (
-                      <div key={label} className="flex-1 text-center">
-                        <span className="text-xs text-gray-400">{label}</span>
-                      </div>
+                      <span key={label} className="text-xs text-gray-400" style={{ width: '5%', textAlign: 'center' }}>
+                        {label}
+                      </span>
                     ))}
                   </div>
                 </div>
