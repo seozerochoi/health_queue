@@ -355,7 +355,29 @@ class JoinQueueView(APIView):
         응답:
         { "reservation_id": 123, "equipment_id": 3, "position": 2, "waiting_count": 5 }
         """
+        # DRF의 request.user가 미스매치되는 사례가 있어 토큰을 직접 검증하여 사용자 일치 여부를 강제 확인합니다.
         user = request.user
+        try:
+            auth_header = request.headers.get('Authorization') or request.META.get('HTTP_AUTHORIZATION')
+            if auth_header and auth_header.lower().startswith('bearer '):
+                raw_token = auth_header.split(' ', 1)[1].strip()
+                tb = TokenBackend(
+                    algorithm=settings.SIMPLE_JWT.get('ALGORITHM', 'HS256'),
+                    signing_key=settings.SIMPLE_JWT.get('SIGNING_KEY', settings.SECRET_KEY),
+                )
+                payload = tb.decode(raw_token, verify=True)
+                token_user_id = payload.get('user_id') or payload.get('user')
+                if token_user_id and getattr(user, 'id', None) != token_user_id:
+                    # 토큰의 사용자와 request.user가 다르면 토큰 사용자로 강제 교체
+                    User = get_user_model()
+                    user = User.objects.get(pk=token_user_id)
+                    logger.warning(
+                        "⚠️ [JoinQueue] request.user와 토큰 사용자 불일치 - request.user=%s token_user_id=%s -> 토큰 사용자로 대체",
+                        getattr(request.user, 'id', None), token_user_id,
+                    )
+        except Exception:
+            # 토큰 파싱 실패는 치명적이지 않음; DRF 인증에 맡김
+            logger.warning("[JoinQueue] Authorization 토큰 파싱 실패 - DRF request.user 사용", exc_info=True)
         equipment_id = request.data.get('equipment_id')
 
         if equipment_id is None:
