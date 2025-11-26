@@ -1617,13 +1617,13 @@ export default function App() {
                     const equipment = equipmentList.find(
                       (eq) => String(eq.id) === equipmentId
                     );
-                    
+
                     if (equipment) {
                       // 기구 선택 및 운동 시작
                       setSelectedEquipment(equipment);
                       setWorkoutStartTime(new Date());
                       setCurrentView("workout-timer");
-                      
+
                       // 알림 제거
                       setNotifications((prev) =>
                         prev.filter((x) => x.reservationId !== n.reservationId)
@@ -1648,7 +1648,7 @@ export default function App() {
                         } catch (e) {}
                         return "http://43.201.88.27";
                       })();
-                      
+
                       const response = await fetch(
                         `${base}/api/reservations/${n.reservationId}/`,
                         {
@@ -1656,7 +1656,7 @@ export default function App() {
                           headers: {
                             Authorization: `Bearer ${token}`,
                           },
-                          credentials: 'include',
+                          credentials: "include",
                         }
                       );
 
@@ -1671,7 +1671,7 @@ export default function App() {
                   } catch (error) {
                     console.error("예약 취소 중 오류:", error);
                   }
-                  
+
                   // 알림 제거
                   setNotifications((prev) =>
                     prev.filter((x) => x.reservationId !== n.reservationId)
