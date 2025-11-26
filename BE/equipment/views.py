@@ -216,33 +216,22 @@ def equipment_stream(request):
 
         last_state = {item['id']: item for item in serialized}
         heartbeat = getattr(settings, 'EQUIPMENT_SSE_HEARTBEAT_SECONDS', 10)  # 10초로 단축
-        last_seq = 0
         iteration_count = 0
 
         logger.info(f"🚀 [SSE] Event stream started - heartbeat: {heartbeat}s")
 
-        from equipment.event_bus import redis_subscribe_generator, local_buffer, REDIS_CHANNEL
+        from equipment.event_bus import redis_subscribe_generator, REDIS_CHANNEL
         import time
         redis_gen = redis_subscribe_generator()
-        last_seq_local = 0
         last_activity = time.time()
         try:
             while True:
                 iteration_count += 1
                 try:
-                    # 1) 먼저 local buffer 신규 이벤트 처리 (same-worker fast path)
-                    local_events, last_seq_local = local_buffer.pop_new(last_seq_local)
-                    for ev in local_events:
-                        payload = ev.get('payload', {})
-                        eq_id = payload.get('id')
-                        if eq_id:
-                            last_state[eq_id] = payload
-                        yield f"event: update\ndata: {json.dumps(payload)}\n\n"
-                        last_activity = time.time()
-
-                    # 2) Redis cross-worker 이벤트 (non-blocking next with timeout via generator blocking)
-                    #    redis_subscribe_generator() 자체가 블록하므로 heartbeat 주기 전에만 빠져나오도록 설계.
-                    #    한 사이클 당 하나만 전송 후 루프 재진입 (과도한 backlog 방지)
+                    # ⚡ CRITICAL: Process ONLY Redis events for consistency across all workers
+                    # Local buffer removed to prevent race conditions and state inconsistencies
+                    
+                    # Redis cross-worker 이벤트 처리 (모든 워커가 동일한 이벤트 스트림 수신)
                     got_redis = False
                     # consume up to 5 messages per loop to avoid backlog while keeping heartbeat cadence
                     for _ in range(5):
@@ -258,11 +247,11 @@ def equipment_stream(request):
                         last_activity = time.time()
                         got_redis = True
 
-                    # 3) 주기적 상태 로그
+                    # 주기적 상태 로그
                     if iteration_count % 12 == 0:  # 약 120초 간격
                         logger.info(f"⏰ [SSE] alive iter={iteration_count} last_activity={int(time.time()-last_activity)}s")
 
-                    # 4) 최근 활동 없으면 heartbeat
+                    # 최근 활동 없으면 heartbeat
                     if time.time() - last_activity >= heartbeat:
                         yield "event: heartbeat\ndata: {}\n\n"
                         last_activity = time.time()

@@ -20,7 +20,18 @@ def _get_redis_client():
     parsed = urlparse(broker_url)
     return redis.Redis(host=parsed.hostname or "localhost", port=parsed.port or 6379, db=int((parsed.path or "/0").strip("/")))
 
-_redis = _get_redis_client()
+# ⚡ CRITICAL: Do NOT create global Redis connection at module load time!
+# When preload_app=True in Gunicorn, all workers share the same connection object
+# which causes cross-worker communication failures. Create fresh connection per use.
+_redis = None
+
+def _get_redis_publisher():
+    """Get or create Redis client for publishing (lazy initialization per worker)."""
+    global _redis
+    if _redis is None:
+        _redis = _get_redis_client()
+        logger.info("🔌 [EventBus] Redis publisher initialized for this worker")
+    return _redis
 
 class LocalEventBuffer:
     """Local buffer used only for same-worker immediate access (optional)."""
@@ -104,12 +115,17 @@ def publish_equipment_update(equipment, waiting_count: Optional[int] = None, ext
     if extra:
         payload.update(extra)
     try:
-        _redis.publish(REDIS_CHANNEL, json.dumps({"type": "update", "payload": payload}))
+        # ⚡ Use lazy-initialized publisher to avoid connection sharing across workers
+        redis_client = _get_redis_publisher()
+        redis_client.publish(REDIS_CHANNEL, json.dumps({"type": "update", "payload": payload}))
         logger.info(f"📡 [EventBus] Redis publish equipment {equipment.id} waiting={waiting_count}")
     except Exception:
         logger.exception("❌ [EventBus] Redis publish 실패")
-    # local buffer for same-worker subscribers
-    local_buffer.add(payload, event_type="update")
+    
+    # ⚡ REMOVED: Do NOT add to local_buffer
+    # Local buffer causes race conditions when multiple workers handle different events.
+    # All events should flow through Redis for consistency across workers.
+    # local_buffer.add(payload, event_type="update")  # REMOVED
 
 
 def publish_equipment_update_by_id(equipment_id: int):
