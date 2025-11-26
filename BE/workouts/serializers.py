@@ -54,6 +54,12 @@ class ReservationSerializer(serializers.ModelSerializer):
         return getattr(obj.equipment, 'base_session_time_minutes', None)
 
     def get_waiting_count(self, obj):
+        # ⚡ OPTIMIZATION: Use getattr with cached value if available from annotate()
+        # If ViewSet used annotate(waiting_count_cached=...), use that to avoid N+1 query.
+        if hasattr(obj, 'waiting_count_cached'):
+            return obj.waiting_count_cached
+        
+        # Fallback: individual query (N+1 risk but necessary for detail views)
         return Reservation.objects.filter(
             equipment=obj.equipment,
             status__in=['WAITING', 'NOTIFIED'],

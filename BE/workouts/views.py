@@ -46,9 +46,51 @@ class ReservationViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         # Admin/staff can view all reservations; regular users only their own.
         user = self.request.user
+        equipment_id = self.request.query_params.get('equipment_id', None)
+        
+        # 🔍 디버깅 로그: 누가 어떤 예약을 조회하는지 확인
+        logger.info(
+            f"🔍 [ReservationViewSet] 조회 요청 - user: {user.username} (staff: {user.is_staff}), "
+            f"equipment_id: {equipment_id}"
+        )
+        
+        # ⚡ CRITICAL OPTIMIZATION: select_related to avoid N+1 on equipment/user
         if user.is_staff or user.is_superuser:
-            return Reservation.objects.all()
-        return Reservation.objects.filter(user=user)
+            qs = Reservation.objects.select_related('equipment', 'user').all()
+        else:
+            qs = Reservation.objects.select_related('equipment', 'user').filter(user=user)
+        
+        # equipment_id 파라미터가 있으면 추가 필터링
+        if equipment_id:
+            qs = qs.filter(equipment_id=equipment_id)
+        
+        # 🔍 디버깅 로그: 실제 반환되는 예약 수와 사용자 목록
+        result_count = qs.count()
+        result_users = list(qs.values_list('user__username', 'id', 'status'))
+        logger.info(
+            f"📋 [ReservationViewSet] 반환 예약 수: {result_count}, "
+            f"예약 목록: {result_users}"
+        )
+        
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        """Override list to batch-compute waiting counts and avoid N+1."""
+        from django.db.models import Count, Q, Subquery, OuterRef
+        
+        qs = self.get_queryset()
+        
+        # ⚡ OPTIMIZATION: Annotate waiting_count per equipment to avoid N+1 in serializer
+        # Use subquery to count WAITING/NOTIFIED reservations for each equipment
+        waiting_subquery = Reservation.objects.filter(
+            equipment_id=OuterRef('equipment_id'),
+            status__in=['WAITING', 'NOTIFIED']
+        ).values('equipment_id').annotate(cnt=Count('id')).values('cnt')
+        
+        qs = qs.annotate(waiting_count_cached=Subquery(waiting_subquery))
+        
+        serializer = self.get_serializer(qs, many=True)
+        return Response(serializer.data)
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
