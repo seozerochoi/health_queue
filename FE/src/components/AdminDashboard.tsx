@@ -233,42 +233,50 @@ export function AdminDashboard({
               </div>
             </CardHeader>
             <CardContent>
-              <div className="w-full h-[400px] bg-gray-900 rounded-lg p-4">
+              <div className="w-full h-[500px] bg-gray-900 rounded-lg p-4">
                 {/* Hardcoded bar chart visualization */}
                 <div className="h-full flex flex-col">
-                  <div className="text-gray-300 text-sm mb-2 font-medium">이용률 (%)</div>
-                  <div className="flex-1 flex items-end justify-between gap-2">
+                  <div className="flex items-end justify-between gap-2" style={{ height: '420px' }}>
                     {[
-                      { hour: '06:00', rate: 30 },
-                      { hour: '07:00', rate: 45 },
-                      { hour: '08:00', rate: 65 },
-                      { hour: '09:00', rate: 75 },
-                      { hour: '10:00', rate: 85 },
-                      { hour: '11:00', rate: 80 },
-                      { hour: '12:00', rate: 70 },
-                      { hour: '13:00', rate: 60 },
-                      { hour: '14:00', rate: 55 },
-                      { hour: '15:00', rate: 50 },
-                      { hour: '16:00', rate: 60 },
-                      { hour: '17:00', rate: 75 },
-                      { hour: '18:00', rate: 90 },
-                      { hour: '19:00', rate: 85 },
+                      { hour: '06:00', rate: 53 },
+                      { hour: '07:00', rate: 42 },
+                      { hour: '08:00', rate: 12 },
+                      { hour: '09:00', rate: 37 },
+                      { hour: '10:00', rate: 50 },
+                      { hour: '11:00', rate: 66 },
+                      { hour: '12:00', rate: 20 },
+                      { hour: '13:00', rate: 55 },
+                      { hour: '14:00', rate: 68 },
+                      { hour: '15:00', rate: 72 },
+                      { hour: '16:00', rate: 78 },
+                      { hour: '17:00', rate: 85 },
+                      { hour: '18:00', rate: 92 },
+                      { hour: '19:00', rate: 88 },
                       { hour: '20:00', rate: 75 },
-                      { hour: '21:00', rate: 60 },
-                      { hour: '22:00', rate: 40 },
-                      { hour: '23:00', rate: 25 },
+                      { hour: '21:00', rate: 62 },
+                      { hour: '22:00', rate: 45 },
+                      { hour: '23:00', rate: 28 },
                     ].map((item) => (
-                      <div key={item.hour} className="flex-1 flex flex-col items-center gap-1">
-                        <div className="w-full flex items-end justify-center" style={{ height: '300px' }}>
-                          <div
-                            className="w-full bg-emerald-500 rounded-t transition-all hover:bg-emerald-400"
-                            style={{ height: `${item.rate}%` }}
-                            title={`${item.hour}: ${item.rate}%`}
-                          />
-                        </div>
-                        <span className="text-xs text-gray-400 rotate-[-45deg] origin-top-left whitespace-nowrap mt-2">
-                          {item.hour}
-                        </span>
+                      <div key={item.hour} className="flex-1 flex flex-col items-center justify-end" style={{ height: '100%' }}>
+                        <div
+                          className="w-full bg-blue-500 rounded-t transition-all hover:bg-blue-400 cursor-pointer"
+                          style={{ 
+                            height: `${item.rate}%`
+                          }}
+                          title={`${item.hour}: ${item.rate}%`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="text-gray-300 text-sm mt-4 mb-2 font-medium">이용률 (%)</div>
+                  <div className="flex items-center justify-between gap-2">
+                    {[
+                      '06시', '07시', '08시', '09시', '10시', '11시', '12시', '13시', 
+                      '14시', '15시', '16시', '17시', '18시', '19시', '20시', '21시', 
+                      '22시', '23시'
+                    ].map((label) => (
+                      <div key={label} className="flex-1 text-center">
+                        <span className="text-xs text-gray-400">{label}</span>
                       </div>
                     ))}
                   </div>
