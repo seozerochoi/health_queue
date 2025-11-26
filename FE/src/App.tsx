@@ -1109,7 +1109,7 @@ export default function App() {
             const payload = JSON.parse(event.data);
 
             // 1. 예약 알림 처리
-            if (payload && payload.notified_username === currentUser) {
+            if (payload && payload.notified_username === userName) {
               const reservationId = payload.notified_reservation_id
                 ? String(payload.notified_reservation_id)
                 : "";
@@ -1605,19 +1605,83 @@ export default function App() {
               </div>
               <div className="text-2xl font-mono ml-2">{n.secondsLeft}s</div>
             </div>
-            <div className="mt-2 flex justify-end">
+            <div className="mt-3 flex gap-2">
               <button
-                className="bg-white text-blue-900 px-3 py-1 rounded"
-                onClick={() => {
-                  // navigate to reservation status page
-                  setCurrentView("reservation-status");
-                  // remove this notification
+                className="flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded font-semibold"
+                onClick={async () => {
+                  // 예약을 찾아서 해당 기구로 workout-timer 시작
+                  const reservation = reservations.find(
+                    (r) => r.id === n.reservationId
+                  );
+                  if (reservation) {
+                    const equipmentId = String(
+                      reservation.equipment_id || reservation.equipmentId || ""
+                    );
+                    const equipment = equipmentList.find(
+                      (eq) => String(eq.id) === equipmentId
+                    );
+                    
+                    if (equipment) {
+                      // 기구 선택 및 운동 시작
+                      setSelectedEquipment(equipment);
+                      setWorkoutStartTime(new Date());
+                      setCurrentView("workout-timer");
+                      
+                      // 알림 제거
+                      setNotifications((prev) =>
+                        prev.filter((x) => x.reservationId !== n.reservationId)
+                      );
+                    }
+                  }
+                }}
+              >
+                시작
+              </button>
+              <button
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded font-semibold"
+                onClick={async () => {
+                  // 예약 취소 (dequeue)
+                  try {
+                    const token = localStorage.getItem("access_token");
+                    if (token) {
+                      const base = (() => {
+                        try {
+                          const vite = (import.meta as any)?.env?.VITE_API_BASE;
+                          if (vite) return vite;
+                        } catch (e) {}
+                        return "http://43.201.88.27";
+                      })();
+                      
+                      const response = await fetch(
+                        `${base}/api/reservations/${n.reservationId}/`,
+                        {
+                          method: "DELETE",
+                          headers: {
+                            Authorization: `Bearer ${token}`,
+                          },
+                          credentials: 'include',
+                        }
+                      );
+
+                      if (response.ok || response.status === 404) {
+                        console.log("✅ 예약 거절 (취소) 성공");
+                        // 예약 목록 갱신
+                        fetchReservations();
+                      } else {
+                        console.error("예약 취소 실패:", response.status);
+                      }
+                    }
+                  } catch (error) {
+                    console.error("예약 취소 중 오류:", error);
+                  }
+                  
+                  // 알림 제거
                   setNotifications((prev) =>
                     prev.filter((x) => x.reservationId !== n.reservationId)
                   );
                 }}
               >
-                확인
+                거절
               </button>
             </div>
           </div>
