@@ -1323,16 +1323,13 @@ export default function App() {
     }
   }, [currentView, userName]);
 
-  // equipment-list 탭 선택 시 초기 데이터 로드
+  // equipment-list 탭 선택 시 항상 API로 최신 데이터 로드
   useEffect(() => {
     if (currentView === "equipment-list" && userName) {
-      // equipmentList가 비어있으면 초기 로드
-      if (equipmentList.length === 0) {
-        console.log(
-          "🔄 [App] equipment-list 진입 - 초기 equipment 데이터 로드"
-        );
-        fetchEquipment();
-      }
+      console.log(
+        "🔄 [App] equipment-list 탭 진입 - API로 최신 equipment 데이터 로드"
+      );
+      fetchEquipment();
     }
   }, [currentView, userName]);
 

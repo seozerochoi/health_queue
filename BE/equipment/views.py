@@ -31,17 +31,34 @@ from .event_bus import equipment_event_bus
 
 class EquipmentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
-    # use select_related for gym to avoid N+1 when serializer accesses gym.name
+    # ⚡ OPTIMIZED: select_related for gym, prefetch for reservations
     queryset = Equipment.objects.all().select_related('gym')
     serializer_class = EquipmentSerializer
+    
+    def get_queryset(self):
+        """Override to add prefetch optimization for list view."""
+        qs = super().get_queryset()
+        
+        # For list view, prefetch reservations to avoid N+1
+        if self.action == 'list':
+            from workouts.models import Reservation
+            qs = qs.prefetch_related(
+                'reservation_set'  # Prefetch all reservations
+            )
+        
+        return qs
 
     def list(self, request, *args, **kwargs):
         """Override list to batch-compute waiting counts to avoid N+1 queries."""
+        import time
+        start_time = time.time()
+        
         from workouts.models import Reservation  # lazy import to avoid circular dependency at module load
         from django.db.models import Count, Q
         
         # CRITICAL OPTIMIZATION: Use annotate to compute waiting_count in a SINGLE query
         # instead of two separate queries (Equipment fetch + Reservation count)
+        query_start = time.time()
         qs = self.get_queryset().annotate(
             waiting_count=Count(
                 'reservation',
@@ -50,17 +67,26 @@ class EquipmentViewSet(viewsets.ModelViewSet):
             )
         )
         
-        serializer = self.get_serializer(qs, many=True)
+        equips_list = list(qs)  # Force query execution
+        query_time = time.time() - query_start
+        logger.info(f"⏱️ [Equipment List] DB Query: {query_time:.3f}s, Count: {len(equips_list)}")
+        
+        serialize_start = time.time()
+        serializer = self.get_serializer(equips_list, many=True)
         data = serializer.data
+        serialize_time = time.time() - serialize_start
+        logger.info(f"⏱️ [Equipment List] Serialization: {serialize_time:.3f}s")
         
         # Attach pre-computed waiting_count to serialized data
-        equips_list = list(qs)
         for idx, item in enumerate(data):
             if idx < len(equips_list):
                 item['waiting_count'] = equips_list[idx].waiting_count
             else:
                 item['waiting_count'] = 0
 
+        total_time = time.time() - start_time
+        logger.info(f"⏱️ [Equipment List] Total: {total_time:.3f}s")
+        
         return Response(data)
 
     @action(detail=True, methods=['patch'], url_path='operational-state')
