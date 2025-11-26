@@ -31,11 +31,13 @@ threads = 6
 keepalive = 65
 
 # 로그 레벨
-loglevel = 'info'
+loglevel = 'debug'
 
 # Access log 형식
 accesslog = '-'
 errorlog = '-'
+capture_output = True
+enable_stdio_inheritance = True
 
 # 요청 처리 시간 제한 (SSE는 장시간이므로 충분히 설정)
 # 주의: timeout과 다르게 실제 응답 데이터가 전송되는 시간

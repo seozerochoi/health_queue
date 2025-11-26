@@ -249,13 +249,19 @@ class InbodyAnalyzeView(APIView):
                     }
                 })
 
-            except Exception:
+            except Exception as e:
                 logger.exception('Inbody analyze via GPT failed; falling back to Rekognition')
                 # If GPT is explicitly enabled, return error instead of silent fallback
                 if use_gpt:
+                    import traceback
+                    error_detail = str(e)
+                    stack_trace = traceback.format_exc()
+                    logger.error(f"GPT Vision Error Detail: {error_detail}\n{stack_trace}")
                     return Response({
-                        'detail': 'GPT Vision analysis failed. Check server logs for details. '
-                                  'You can disable GPT by setting INBODY_GPT_ENABLED=false to use AWS Rekognition instead.'
+                        'detail': f'GPT Vision analysis failed: {error_detail}',
+                        'error_type': type(e).__name__,
+                        'hint': 'Check OPENAI_API_KEY validity and account credits. '
+                                'You can disable GPT by setting INBODY_GPT_ENABLED=false to use AWS Rekognition instead.'
                     }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
                 # continue to Rekognition fallback only if GPT is not explicitly enabled
 

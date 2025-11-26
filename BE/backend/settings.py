@@ -257,12 +257,17 @@ LOGGING = {
         },
         "django.request": {
             "handlers": ["console"],
-            "level": "ERROR",
-            "propagate": True,
+            "level": "DEBUG",
+            "propagate": False,
+        },
+        "users": {
+            "handlers": ["console"],
+            "level": "DEBUG",
+            "propagate": False,
         },
         "gunicorn.error": {
             "handlers": ["console"],
-            "level": "INFO",
+            "level": "DEBUG",
             "propagate": False,
         },
         "gunicorn.access": {
