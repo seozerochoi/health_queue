@@ -20,29 +20,20 @@ DEFAULT_HEARTBEAT_START_GRACE_SECONDS = getattr(settings, "WORKOUT_HEARTBEAT_STA
 
 
 def notify_equipment_change(equipment: Optional[Equipment]):
-    if equipment is None:
-        return
-
-    # 트랜잭션 커밋 후 이벤트 발행 (비동기 처리)
-    def _emit():
-        logger.info(f"🔔 [SSE] Equipment {equipment.id} ({equipment.name}) 상태 변경 이벤트 발행 - status: {equipment.status}")
-        publish_equipment_update(equipment)
-
-    # 트랜잭션이 아직 진행 중인지 확인
-    try:
-        from django.db import connection
-        if connection.in_atomic_block:
-            # 트랜잭션 내부에서 호출됨 - 커밋 후 실행
-            transaction.on_commit(_emit)
-            logger.debug(f"🕒 [SSE] Equipment {equipment.id} 이벤트 예약됨 (트랜잭션 커밋 후 실행)")
-        else:
-            # 트랜잭션 외부에서 호출됨 - 즉시 실행
-            _emit()
-            logger.debug(f"⚡ [SSE] Equipment {equipment.id} 이벤트 즉시 발행됨")
-    except Exception as e:
-        logger.exception(f"❌ [SSE] Equipment {equipment.id} 이벤트 발행 실패")
-        # 실패해도 일단 시도
-        _emit()
+    """
+    ⚠️ DEPRECATED: Do NOT use this function!
+    
+    Equipment state changes are automatically published via post_save signal.
+    This function causes duplicate events with stale data.
+    
+    Use publish_equipment_update() directly if you need to send updates
+    without changing equipment status.
+    """
+    logger.warning(
+        f"⚠️ [DEPRECATED] notify_equipment_change() called for equipment {equipment.id if equipment else 'None'}. "
+        "This function is deprecated. Use equipment.save(update_fields=['status']) or publish_equipment_update() directly."
+    )
+    return  # Do nothing - prevent duplicate events
 
 
 def cancel_active_reservation(reservation: Reservation, now=None) -> dict[str, Optional[int]]:
@@ -95,7 +86,8 @@ def cancel_active_reservation(reservation: Reservation, now=None) -> dict[str, O
         # 장비 status가 변경된 경우에는 post_save signal이 이미 SSE 발행 -> 중복 방지를 위해 skip
         # status 미변경이지만 대기열 변화가 있었다면 waiting_count 값 반영 위해 직접 발행
         if status_was_active and not status_changed:
-            notify_equipment_change(equipment)
+            # ⚡ FIXED: Signal 없이 직접 발행 (waiting_count 업데이트 반영)
+            publish_equipment_update(equipment, waiting_count=waiting_count)
 
     return {
         "waiting_count": waiting_count,

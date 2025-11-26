@@ -177,9 +177,9 @@ class StartSessionView(APIView):
                     equipment.save(update_fields=['status'])  # ⚡ Signal에서 자동 발행
                     status_changed = True
 
-                # ⚠️ status_changed=True일 때 이미 signal로 발행되므로, 중복 방지
-                if (stale_expired or promoted_reservation) and not status_changed:
-                    notify_equipment_change(equipment)
+                # ⚡ REMOVED: Signal이 이미 이벤트 발행하므로 중복 호출 제거
+                # if (stale_expired or promoted_reservation) and not status_changed:
+                #     notify_equipment_change(equipment)
 
             other_waiting = Reservation.objects.filter(equipment=equipment, status='WAITING').exclude(user=user).exists()
             other_recent_notified = Reservation.objects.filter(equipment=equipment, status='NOTIFIED', notified_at__gte=notified_cutoff).exclude(user=user).exists()
@@ -374,7 +374,8 @@ class JoinQueueView(APIView):
             position = get_waiting_position(reservation) or 1
 
             logger.info(f"✅ [JoinQueue] User {user.username} joined queue for Equipment {equipment.id} - position: {position}")
-            notify_equipment_change(equipment)
+            # ⚡ REMOVED: Equipment 상태는 변경되지 않으므로 이벤트 불필요
+            # notify_equipment_change(equipment)
 
             response_payload = {
                 'reservation_id': reservation.id,
