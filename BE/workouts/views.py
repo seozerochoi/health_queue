@@ -44,34 +44,38 @@ class ReservationViewSet(viewsets.ModelViewSet):
     serializer_class = ReservationSerializer
 
     def get_queryset(self):
-        # Admin/staff can view all reservations; regular users only their own.
+        # ⚡ FIXED: 모든 사용자(관리자 포함)는 자신의 예약만 조회 가능 (user_id로 강제 필터)
         user = self.request.user
         equipment_id = self.request.query_params.get('equipment_id', None)
-        
+
         # 🔍 디버깅 로그: 누가 어떤 예약을 조회하는지 확인
         logger.info(
-            f"🔍 [ReservationViewSet] 조회 요청 - user: {user.username} (staff: {user.is_staff}), "
-            f"equipment_id: {equipment_id}"
+            "🔍 [ReservationViewSet] 조회 요청",
+            extra={
+                "user_id": getattr(user, "id", None),
+                "username": getattr(user, "username", None),
+                "staff": getattr(user, "is_staff", None),
+                "equipment_id": equipment_id,
+            },
         )
-        
-        # ⚡ CRITICAL OPTIMIZATION: select_related to avoid N+1 on equipment/user
-        if user.is_staff or user.is_superuser:
-            qs = Reservation.objects.select_related('equipment', 'user').all()
-        else:
-            qs = Reservation.objects.select_related('equipment', 'user').filter(user=user)
-        
-        # equipment_id 파라미터가 있으면 추가 필터링
+
+        # ⚡ CRITICAL: user 객체가 아닌 user_id로 강제 필터하여 예기치 않은 인증 문제 방지
+        qs = (
+            Reservation.objects.select_related("equipment", "user")
+            .filter(user_id=getattr(user, "id", None))
+        )
+
+        # equipment_id 파라미터가 있으면 추가 필터링 (여전히 본인 소유 범위 내)
         if equipment_id:
             qs = qs.filter(equipment_id=equipment_id)
-        
-        # 🔍 디버깅 로그: 실제 반환되는 예약 수와 사용자 목록
-        result_count = qs.count()
-        result_users = list(qs.values_list('user__username', 'id', 'status'))
+
+        # 🔍 반환 데이터 샘플 로그 (유출 방지를 위해 최소 정보만)
+        sample = list(qs.values_list("user_id", "id", "status")[:10])
         logger.info(
-            f"📋 [ReservationViewSet] 반환 예약 수: {result_count}, "
-            f"예약 목록: {result_users}"
+            "📋 [ReservationViewSet] 반환 요약",
+            extra={"count": qs.count(), "sample": sample},
         )
-        
+
         return qs
 
     def list(self, request, *args, **kwargs):
@@ -374,8 +378,10 @@ class JoinQueueView(APIView):
             position = get_waiting_position(reservation) or 1
 
             logger.info(f"✅ [JoinQueue] User {user.username} joined queue for Equipment {equipment.id} - position: {position}")
-            # ⚡ REMOVED: Equipment 상태는 변경되지 않으므로 이벤트 불필요
-            # notify_equipment_change(equipment)
+            
+            # ⚡ FIX: 줄서기 시 waiting_count가 변경되므로 SSE 이벤트 발행 필요
+            from equipment.event_bus import publish_equipment_update
+            publish_equipment_update(equipment, waiting_count=waiting_count)
 
             response_payload = {
                 'reservation_id': reservation.id,

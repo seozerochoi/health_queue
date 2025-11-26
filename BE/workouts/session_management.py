@@ -83,10 +83,9 @@ def cancel_active_reservation(reservation: Reservation, now=None) -> dict[str, O
                 equipment.save(update_fields=["status"])
                 status_changed = True
 
-        # 장비 status가 변경된 경우에는 post_save signal이 이미 SSE 발행 -> 중복 방지를 위해 skip
-        # status 미변경이지만 대기열 변화가 있었다면 waiting_count 값 반영 위해 직접 발행
-        if status_was_active and not status_changed:
-            # ⚡ FIXED: Signal 없이 직접 발행 (waiting_count 업데이트 반영)
+        # ⚡ FIX: 대기열 변화가 있었다면 항상 SSE 이벤트 발행 (waiting_count 업데이트 반영)
+        # status 변경 시에도 signal에서 waiting_count를 전달받지 못할 수 있으므로 명시적으로 발행
+        if status_was_active:
             publish_equipment_update(equipment, waiting_count=waiting_count)
 
     return {
