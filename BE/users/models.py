@@ -2,6 +2,18 @@
 
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone
+
+
+class InbodyRecord(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='inbody_records')
+    image = models.ImageField(upload_to='inbody/%Y/%m/%d/')
+    source = models.CharField(max_length=32, blank=True, null=True, help_text='gpt or rekognition')
+    parsed = models.JSONField(blank=True, null=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"InbodyRecord(user={self.user_id}, id={self.id})"
 
 class UserProfile(models.Model):
     # Django의 기본 User 모델과 1:1로 연결합니다.

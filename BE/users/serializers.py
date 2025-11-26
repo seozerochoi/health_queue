@@ -3,7 +3,7 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers, generics, status
 from rest_framework.response import Response
-from .models import UserProfile
+from .models import UserProfile, InbodyRecord
 import logging
 
 logger = logging.getLogger(__name__)
@@ -134,3 +134,23 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'segment_right_arm_kg', 'segment_left_arm_kg', 'segment_trunk_kg',
             'segment_right_leg_kg', 'segment_left_leg_kg',
         ]
+
+
+class InbodyRecordSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = InbodyRecord
+        fields = ['id', 'image_url', 'parsed', 'source', 'created_at']
+
+    def get_image_url(self, obj):
+        try:
+            request = self.context.get('request')
+        except Exception:
+            request = None
+        if obj.image and hasattr(obj.image, 'url'):
+            url = obj.image.url
+            if request is not None:
+                return request.build_absolute_uri(url)
+            return url
+        return None

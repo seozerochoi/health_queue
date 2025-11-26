@@ -25,6 +25,10 @@ environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
 OPENAI_API_KEY = env('OPENAI_API_KEY')
+# AWS region for Rekognition fallback in InBody analyze
+# Prefer AWS_REGION, fallback to AWS_DEFAULT_REGION if present
+AWS_REGION = env('AWS_REGION', default=os.getenv('AWS_DEFAULT_REGION'))
+INBODY_GPT_ENABLED = env.bool('INBODY_GPT_ENABLED', default=False)
 
 # 클라우드타입이 제공하는 도메인을 허용해야 합니다.
 # ['*']는 모든 주소를 허용하는 가장 간단한 설정입니다.
@@ -154,6 +158,10 @@ STATIC_URL = 'static/'
 # 클라우드타입 같은 배포 환경에서 정적 파일을 모으는 경로입니다.
 # (배포를 위해 꼭 필요한 설정입니다)
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# Media files (user uploads)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 
 # Default primary key field type

@@ -102,6 +102,18 @@ export function MyPage({
   const [uploading, setUploading] = useState(false);
   const [parsedResult, setParsedResult] = useState<any>(null);
   const [rawLines, setRawLines] = useState<string[]>([]);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const [lastBlob, setLastBlob] = useState<Blob | null>(null);
+  const [serverImageUrl, setServerImageUrl] = useState<string | null>(null);
+  const [recordMeta, setRecordMeta] = useState<{
+    id: number;
+    created_at: string;
+  } | null>(null);
+  const [latestRecord, setLatestRecord] = useState<{
+    image_url: string;
+    parsed: any;
+    created_at: string;
+  } | null>(null);
 
   const onSelectFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files && e.target.files[0];
@@ -167,8 +179,10 @@ export function MyPage({
     if (!imageSrc || !croppedAreaPixels) return;
     try {
       setUploading(true);
+      setAnalyzeError(null);
       const blob = await getCroppedImg(imageSrc, croppedAreaPixels, rotation);
       if (!blob) throw new Error("Failed to crop image");
+      setLastBlob(blob);
 
       // preview
       const previewUrl = URL.createObjectURL(blob);
@@ -187,13 +201,14 @@ export function MyPage({
       );
       if (!res.ok) {
         const txt = await res.text();
-        alert("분석 실패: " + res.status + "\n" + txt);
+        setAnalyzeError(`분석 실패: ${res.status} ${txt}`);
         return;
       }
       const data = await res.json();
       // prefer server-parsed values, fall back to heuristic parse of raw_lines
       const serverParsed = data.parsed || null;
       const serverLines: string[] = data.raw_lines || [];
+      const rec = data.record || null;
       if (serverParsed && Object.keys(serverParsed).length > 0) {
         setParsedResult(serverParsed);
       } else if (serverLines.length > 0) {
@@ -202,9 +217,51 @@ export function MyPage({
         setParsedResult({});
       }
       setRawLines(serverLines);
+      if (rec) {
+        setServerImageUrl(rec.image_url || null);
+        if (rec.id != null && rec.created_at)
+          setRecordMeta({ id: rec.id, created_at: rec.created_at });
+      }
     } catch (e) {
       console.error(e);
-      alert("분석 중 오류가 발생했습니다. 콘솔을 확인하세요.");
+      setAnalyzeError("분석 중 오류가 발생했습니다. 콘솔을 확인하세요.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const retryAnalyze = async () => {
+    if (!lastBlob) return;
+    try {
+      setUploading(true);
+      setAnalyzeError(null);
+      const form = new FormData();
+      form.append("image", lastBlob, "inbody.jpg");
+      const res = await fetchWithAuth(
+        "http://43.201.88.27/api/inbody/analyze/",
+        { method: "POST", body: form }
+      );
+      if (!res.ok) {
+        const txt = await res.text();
+        setAnalyzeError(`분석 실패: ${res.status} ${txt}`);
+        return;
+      }
+      const data = await res.json();
+      const serverParsed = data.parsed || null;
+      const serverLines: string[] = data.raw_lines || [];
+      const rec = data.record || null;
+      setParsedResult(
+        serverParsed || (serverLines.length ? parseFromLines(serverLines) : {})
+      );
+      setRawLines(serverLines);
+      if (rec) {
+        setServerImageUrl(rec.image_url || null);
+        if (rec.id != null && rec.created_at)
+          setRecordMeta({ id: rec.id, created_at: rec.created_at });
+      }
+    } catch (e) {
+      console.error(e);
+      setAnalyzeError("재시도 중 오류가 발생했습니다.");
     } finally {
       setUploading(false);
     }
@@ -286,7 +343,58 @@ export function MyPage({
       }
     };
     loadProfile();
+    const loadLatestInbody = async () => {
+      try {
+        const res = await fetchWithAuth(
+          "http://43.201.88.27/api/inbody/records/latest/",
+          { method: "GET" }
+        );
+        if (res.status === 204) return; // no content
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.image_url) {
+          setLatestRecord({
+            image_url: data.image_url,
+            parsed: data.parsed || {},
+            created_at: data.created_at,
+          });
+        }
+      } catch (e) {
+        console.warn("Failed to load latest inbody record", e);
+      }
+    };
+    loadLatestInbody();
   }, []);
+
+  const applyParsedToProfileFrom = async (parsed: any) => {
+    if (!parsed) return;
+    const body: any = {};
+    if (parsed.weight_kg != null) body.weight_kg = parsed.weight_kg;
+    if (parsed.body_fat_percentage != null)
+      body.body_fat_percentage = parsed.body_fat_percentage;
+    if (parsed.skeletal_muscle_mass_kg != null)
+      body.skeletal_muscle_mass_kg = parsed.skeletal_muscle_mass_kg;
+    if (parsed.bmi != null) body.bmi = parsed.bmi;
+
+    try {
+      setSaving(true);
+      const res = await fetchWithAuth(
+        "http://43.201.88.27/api/users/profile/",
+        {
+          method: "PATCH",
+          body: JSON.stringify(body),
+        }
+      );
+      if (!res.ok) {
+        const txt = await res.text();
+        alert("프로필 저장 실패: " + res.status + "\n" + txt);
+        return;
+      }
+      alert("분석 결과가 프로필에 저장되었습니다.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const saveProfile = async () => {
     try {
@@ -345,15 +453,17 @@ export function MyPage({
           <CardContent className="p-6">
             <div className="flex items-center gap-4">
               <div className="w-16 h-16 rounded-full bg-blue-500 flex items-center justify-center text-white text-2xl font-bold">
-                {userNickname ? userNickname[0].toUpperCase() : userName ? userName[0].toUpperCase() : "U"}
+                {userNickname
+                  ? userNickname[0].toUpperCase()
+                  : userName
+                  ? userName[0].toUpperCase()
+                  : "U"}
               </div>
               <div className="flex-1">
                 <div className="text-xl font-semibold text-foreground">
                   {userNickname || userName || "사용자"}
                 </div>
-                <div className="text-sm text-muted-foreground">
-                  스마트짐
-                </div>
+                <div className="text-sm text-muted-foreground">스마트짐</div>
               </div>
             </div>
           </CardContent>
@@ -362,6 +472,53 @@ export function MyPage({
         {/* 단순화된 폼: 운동 목적만 */}
         <Card className="bg-card border-border">
           <CardContent className="p-6 space-y-6">
+            {/* 최근 인바디 기록 */}
+            {latestRecord && (
+              <div className="space-y-2">
+                <Label className="text-foreground">최근 인바디 기록</Label>
+                <div className="rounded-lg border border-gray-700 p-3">
+                  <div className="flex flex-col md:flex-row gap-4">
+                    <img
+                      src={latestRecord.image_url}
+                      className="w-full md:w-1/3 max-h-64 object-contain rounded"
+                    />
+                    <div className="flex-1 grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        체중(kg): {latestRecord.parsed?.weight_kg ?? "-"}
+                      </div>
+                      <div>
+                        체지방(%):{" "}
+                        {latestRecord.parsed?.body_fat_percentage ?? "-"}
+                      </div>
+                      <div>
+                        골격근량(kg):{" "}
+                        {latestRecord.parsed?.skeletal_muscle_mass_kg ?? "-"}
+                      </div>
+                      <div>BMI: {latestRecord.parsed?.bmi ?? "-"}</div>
+                      <div>키(cm): {latestRecord.parsed?.height_cm ?? "-"}</div>
+                      <div>
+                        체지방량(kg):{" "}
+                        {latestRecord.parsed?.body_fat_mass_kg ?? "-"}
+                      </div>
+                      <div>
+                        근육량(kg): {latestRecord.parsed?.muscle_mass_kg ?? "-"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex justify-end">
+                    <Button
+                      size="sm"
+                      onClick={() =>
+                        applyParsedToProfileFrom(latestRecord.parsed)
+                      }
+                      disabled={saving}
+                    >
+                      프로필에 적용
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
             {/* 운동 목적 */}
             <div className="space-y-2">
               <Label className="text-foreground">운동 목적</Label>
@@ -472,6 +629,20 @@ export function MyPage({
                     className="w-full max-h-64 object-contain rounded-lg"
                   />
                 </div>
+                {analyzeError && (
+                  <div className="rounded-md bg-red-900/30 border border-red-700 p-3 text-red-200 flex items-center justify-between">
+                    <span className="text-sm">{analyzeError}</span>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={retryAnalyze}
+                        disabled={uploading}
+                      >
+                        {uploading ? "재시도 중..." : "재시도"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 <div>
                   <Label>추출된 값</Label>
                   <div className="mt-2">
@@ -484,8 +655,35 @@ export function MyPage({
                       {parsedResult?.skeletal_muscle_mass_kg ?? "-"}{" "}
                     </div>
                     <div>BMI: {parsedResult?.bmi ?? "-"} </div>
+                    <div>키(cm): {parsedResult?.height_cm ?? "-"}</div>
+                    <div>
+                      체지방량(kg): {parsedResult?.body_fat_mass_kg ?? "-"}
+                    </div>
+                    <div>근육량(kg): {parsedResult?.muscle_mass_kg ?? "-"}</div>
                   </div>
                 </div>
+                {serverImageUrl && (
+                  <div className="rounded-md bg-emerald-900/20 border border-emerald-700 p-3 text-emerald-200">
+                    <div className="text-sm">
+                      서버에 이미지가 저장되었습니다.
+                      {recordMeta?.created_at && (
+                        <span className="ml-2 opacity-80">
+                          ({new Date(recordMeta.created_at).toLocaleString()})
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-2">
+                      <a
+                        className="underline"
+                        href={serverImageUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        이미지 열기
+                      </a>
+                    </div>
+                  </div>
+                )}
                 <div>
                   <Label>OCR 원문 (편집 가능)</Label>
                   <div className="mt-2 space-y-2">

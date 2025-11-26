@@ -16,6 +16,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 # Simple JWT가 제공하는 View들을 import 합니다.
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -39,3 +41,7 @@ urlpatterns = [
     path('api/', include('reports.urls')),
     path('api/routines/', include('routines.urls')),
 ]
+
+# Serve media files in development
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

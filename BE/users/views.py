@@ -9,7 +9,8 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import UserSerializer, RegisterSerializer, UserProfileSerializer
-from .models import UserProfile
+from .models import UserProfile, InbodyRecord
+from .serializers import InbodyRecordSerializer
 import logging
 import re
 import boto3
@@ -17,6 +18,14 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.views import APIView
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.conf import settings
+import base64
+import json
+import os
+from django.core.files.base import ContentFile
+try:
+    from openai import OpenAI
+except Exception:
+    OpenAI = None
 
 logger = logging.getLogger(__name__)
 
@@ -143,19 +152,107 @@ class InbodyAnalyzeView(APIView):
         if not image_file:
             return Response({'detail': 'No image provided'}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            # Read bytes
-            if isinstance(image_file, InMemoryUploadedFile):
-                img_bytes = image_file.read()
-            else:
-                img_bytes = image_file.file.read()
+        # Read bytes
+        if isinstance(image_file, InMemoryUploadedFile):
+            img_bytes = image_file.read()
+        else:
+            img_bytes = image_file.file.read()
 
-            # Call AWS Rekognition detect_text
-            rek = boto3.client('rekognition',
-                               region_name=getattr(settings, 'AWS_REGION', None))
+        # Try GPT Vision first (if OPENAI_API_KEY is configured); fallback to AWS Rekognition heuristic
+        api_key = os.getenv('OPENAI_API_KEY') or getattr(settings, 'OPENAI_API_KEY', None)
+        use_gpt = getattr(settings, 'INBODY_GPT_ENABLED', False)
+        if OpenAI and api_key and use_gpt:
+            try:
+                b64 = base64.b64encode(img_bytes).decode('utf-8')
+                client = OpenAI(api_key=api_key)
+
+                system_prompt = (
+                    "당신은 인바디 결과표 이미지를 구조화된 데이터로 추출하는 도우미입니다. "
+                    "숫자만 추출하여 JSON으로 반환하세요. 단위는 다음 규칙을 따르세요: "
+                    "weight_kg(kg), body_fat_percentage(%), skeletal_muscle_mass_kg(kg), bmi(값), "
+                    "height_cm(cm, 선택), body_fat_mass_kg(kg, 선택), muscle_mass_kg(kg, 선택). "
+                    "반드시 JSON만 출력하고 설명, 코드블록, 기타 텍스트는 금지합니다."
+                )
+
+                user_prompt = (
+                    "이미지에서 다음 항목을 찾아서 숫자만 반환:")
+
+                # Use Chat Completions with multimodal content (gpt-4o-mini)
+                resp = client.chat.completions.create(
+                    model=os.getenv('OPENAI_INBODY_MODEL', 'gpt-4o-mini'),
+                    temperature=0,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": user_prompt},
+                                {
+                                    "type": "image_url",
+                                    "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
+                                }
+                            ],
+                        },
+                    ],
+                )
+
+                content = resp.choices[0].message.content if resp.choices else None
+                if not content:
+                    raise ValueError('Empty response from GPT')
+
+                # Expect strict JSON; attempt to parse
+                # If provider wraps in code fences, strip them
+                text = content.strip()
+                if text.startswith('```'):
+                    text = text.strip('`')
+                    # remove possible leading json
+                    text = text.replace('json\n', '')
+                data = json.loads(text)
+
+                # Coerce to expected schema, allowing missing keys
+                def to_num(x):
+                    try:
+                        return float(x) if x is not None else None
+                    except Exception:
+                        return None
+
+                parsed = {
+                    'weight_kg': to_num(data.get('weight_kg')),
+                    'body_fat_percentage': to_num(data.get('body_fat_percentage')),
+                    'skeletal_muscle_mass_kg': to_num(data.get('skeletal_muscle_mass_kg')),
+                    'bmi': to_num(data.get('bmi')),
+                    'height_cm': to_num(data.get('height_cm')),
+                    'body_fat_mass_kg': to_num(data.get('body_fat_mass_kg')),
+                    'muscle_mass_kg': to_num(data.get('muscle_mass_kg')),
+                }
+
+                # Persist image and parsed result
+                filename = f"inbody_{request.user.id}.jpg"
+                record = InbodyRecord(user=request.user, source='gpt', parsed=parsed)
+                record.image.save(filename, ContentFile(img_bytes), save=True)
+
+                return Response({
+                    'source': 'gpt',
+                    'parsed': parsed,
+                    'record': {
+                        'id': record.id,
+                        'image_url': record.image.url,
+                        'created_at': record.created_at.isoformat(),
+                    }
+                })
+
+            except Exception:
+                logger.exception('Inbody analyze via GPT failed; falling back to Rekognition')
+                # continue to Rekognition fallback
+
+        # Fallback: AWS Rekognition OCR + heuristics
+        try:
+            region = getattr(settings, 'AWS_REGION', None) or os.getenv('AWS_REGION') or os.getenv('AWS_DEFAULT_REGION')
+            if not region:
+                return Response({'detail': 'AWS_REGION is not configured. Set AWS_REGION or AWS_DEFAULT_REGION.'}, status=status.HTTP_400_BAD_REQUEST)
+            rek = boto3.client('rekognition', region_name=region)
             resp = rek.detect_text(Image={'Bytes': img_bytes})
 
-            # Build a list of detections with type/confidence for better post-processing
             detections = resp.get('TextDetections', []) or []
             items = []
             for d in detections:
@@ -166,15 +263,12 @@ class InbodyAnalyzeView(APIView):
                     'geometry': d.get('Geometry'),
                 })
 
-            # Helper: normalize numeric string -> float (remove commas/fullwidth digits)
             def normalize_num_str(s: str) -> str:
                 if not s:
                     return s
-                # replace full-width digits
                 s = s.replace('\uFF10', '0').replace('\uFF11', '1').replace('\uFF12', '2').replace('\uFF13', '3')
                 s = s.replace('\uFF14', '4').replace('\uFF15', '5').replace('\uFF16', '6').replace('\uFF17', '7')
                 s = s.replace('\uFF18', '8').replace('\uFF19', '9')
-                # remove commas and spaces
                 s = s.replace(',', '').replace('\u2009', '').strip()
                 return s
 
@@ -185,93 +279,102 @@ class InbodyAnalyzeView(APIView):
                 except Exception:
                     return None
 
-            # Helper: find number in a text using common patterns
             def find_number_in_text(text: str):
                 if not text:
                     return None
-                # common number patterns like 70, 70.1, 70.1kg, 70kg
                 m = re.search(r"([0-9]+(?:[\.,][0-9]+)?)", text)
                 if m:
                     return to_float(m.group(1))
                 return None
 
-            # Sequence-based search: look for a keyword then number within same text or adjacent items
             def find_by_keywords(keywords_regex_list, unit_hint=None):
-                # search lines first
                 for idx, it in enumerate(items):
                     text = it['text']
                     for kw in keywords_regex_list:
                         if re.search(kw, text, re.IGNORECASE):
-                            # try to extract number from same text
                             num = None
-                            # common pattern: keyword followed by number
                             m = re.search(kw + r"[:\s]*([0-9]+(?:[\.,][0-9]+)?)", text, re.IGNORECASE)
                             if m:
                                 num = to_float(m.group(1))
                             else:
-                                # try any number in same text
                                 num = find_number_in_text(text)
                             if num is not None:
                                 return num
-                            # else try following few items concatenated
                             look = ' '.join([items[j]['text'] for j in range(idx, min(idx+3, len(items)))])
                             num = find_number_in_text(look)
                             if num is not None:
                                 return num
                 return None
 
-            # Build concatenated lines for fallback
             lines = [it['text'] for it in items if it.get('type') == 'LINE']
             concat = '\n'.join(lines)
 
             parsed = {}
-
-            # weight: keywords in Korean/English
             parsed['weight_kg'] = find_by_keywords([r"체중", r"몸무게", r"weight"], unit_hint='kg')
-            # also try kg tokens anywhere
             if parsed['weight_kg'] is None:
                 m = re.search(r"([0-9]+(?:[\.,][0-9]+)?)\s*(kg|㎏)\b", concat, re.IGNORECASE)
                 if m:
                     parsed['weight_kg'] = to_float(m.group(1))
 
-            # body fat percent: keywords and percent symbols
             parsed['body_fat_percentage'] = find_by_keywords([r"체지방률", r"체지방", r"체지방율", r"body fat", r"bodyfat"], unit_hint='%')
             if parsed['body_fat_percentage'] is None:
                 m = re.search(r"([0-9]+(?:[\.,][0-9]+)?)\s*(%|퍼센트)", concat, re.IGNORECASE)
                 if m:
                     parsed['body_fat_percentage'] = to_float(m.group(1))
 
-            # skeletal muscle mass
             parsed['skeletal_muscle_mass_kg'] = find_by_keywords([r"골격근량", r"골격근", r"skeletal muscle", r"SMM", r"muscle"], unit_hint='kg')
             if parsed['skeletal_muscle_mass_kg'] is None:
-                # try patterns like 'xx kg' with muscle keywords nearby
                 m = re.search(r"(골격근량|골격근|SMM|skeletal muscle|muscle)[:\s]*([0-9]+(?:[\.,][0-9]+)?)\s*(kg)?", concat, re.IGNORECASE)
                 if m:
                     parsed['skeletal_muscle_mass_kg'] = to_float(m.group(2))
 
-            # BMI
             parsed['bmi'] = find_by_keywords([r"BMI", r"체질량지수"], unit_hint=None)
             if parsed['bmi'] is None:
                 m = re.search(r"\b([0-9]+(?:[\.,][0-9]+)?)\s*BMI\b", concat, re.IGNORECASE)
                 if m:
                     parsed['bmi'] = to_float(m.group(1))
 
-            # Fallback heuristics: if weight missing, find any standalone kg number
             if parsed.get('weight_kg') is None:
                 m = re.search(r"([0-9]+(?:[\.,][0-9]+)?)\s*(kg|㎏)\b", concat, re.IGNORECASE)
                 if m:
                     parsed['weight_kg'] = to_float(m.group(1))
 
-            # Attach raw detected lines with confidences for debugging and possible UI display
             raw_lines = [{'text': it['text'], 'type': it['type'], 'confidence': it.get('confidence')} for it in items if it.get('type') == 'LINE']
 
-            result = {
+            # Persist image and parsed result
+            filename = f"inbody_{request.user.id}.jpg"
+            record = InbodyRecord(user=request.user, source='rekognition', parsed=parsed)
+            record.image.save(filename, ContentFile(img_bytes), save=True)
+
+            return Response({
+                'source': 'rekognition',
                 'parsed': parsed,
                 'raw_lines': raw_lines,
-            }
-
-            return Response(result)
+                'record': {
+                    'id': record.id,
+                    'image_url': record.image.url,
+                    'created_at': record.created_at.isoformat(),
+                }
+            })
 
         except Exception as e:
             logger.exception('Inbody analyze failed')
             return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class InbodyRecordListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        qs = InbodyRecord.objects.filter(user=request.user).order_by('-created_at')
+        serializer = InbodyRecordSerializer(qs, many=True, context={'request': request})
+        return Response(serializer.data)
+
+class InbodyRecordLatestView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        rec = InbodyRecord.objects.filter(user=request.user).order_by('-created_at').first()
+        if not rec:
+            return Response({}, status=status.HTTP_204_NO_CONTENT)
+        serializer = InbodyRecordSerializer(rec, context={'request': request})
+        return Response(serializer.data)
