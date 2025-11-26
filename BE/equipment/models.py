@@ -1,6 +1,7 @@
 # equipment/models.py
 
 from django.db import models, transaction
+from django.core.exceptions import ValidationError
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from gyms.models import Gym
@@ -53,6 +54,33 @@ class Equipment(models.Model):
         default='ETC',
         help_text="이 기구의 주요 운동 부위 (AI 비율 계산에 사용)"
     )
+    # 세부 부위(하부 카테고리)
+    SUBCATEGORY_CHOICES = [
+        # 상체
+        ('UPPER_BICEPS', '이두'),
+        ('UPPER_TRICEPS', '삼두'),
+        ('UPPER_CHEST', '가슴'),
+        ('UPPER_SHOULDER', '어깨'),
+        ('UPPER_BACK', '등'),
+        # 하체
+        ('LOWER_THIGH', '허벅지'),
+        ('LOWER_CALF', '종아리'),
+    ]
+    subcategory = models.CharField(
+        max_length=20,
+        choices=SUBCATEGORY_CHOICES,
+        blank=True,
+        null=True,
+        help_text="상세 운동 부위 (예: 상체-이두, 하체-허벅지). 상체/하체에서만 선택 필요"
+    )
+    # 유효 조합 맵
+    SUBCATEGORY_BY_BODY_PART = {
+        'UPPER': {c for c, _ in SUBCATEGORY_CHOICES if c.startswith('UPPER_')},
+        'LOWER': {c for c, _ in SUBCATEGORY_CHOICES if c.startswith('LOWER_')},
+        'CORE': set(),
+        'CARDIO': set(),
+        'ETC': set(),
+    }
     ai_model_id = models.IntegerField(
         default=0, 
         help_text="AI 모델이 인식하는 기구 ID (training_script.py와 일치해야 함, 예: 0=벤치)"
@@ -60,6 +88,20 @@ class Equipment(models.Model):
 
     def __str__(self):
         return f'{self.gym.name} - {self.name}'
+
+    def clean(self):
+        """body_part와 subcategory의 유효 조합을 검증합니다."""
+        allowed = self.SUBCATEGORY_BY_BODY_PART.get(self.body_part, set())
+        # 상체/하체: 하위 카테고리 필수 및 허용된 값만 가능
+        if self.body_part in ('UPPER', 'LOWER'):
+            if not self.subcategory:
+                raise ValidationError({'subcategory': '상체/하체 선택 시 세부 부위를 반드시 지정해야 합니다.'})
+            if self.subcategory not in allowed:
+                raise ValidationError({'subcategory': '선택한 상/하체와 세부 부위 조합이 올바르지 않습니다.'})
+        else:
+            # 코어/유산소/기타: 세부 부위는 비워두어야 함
+            if self.subcategory:
+                raise ValidationError({'subcategory': '코어/유산소/기타 카테고리에서는 세부 부위를 비워두세요.'})
 
 
 # Signal to automatically publish SSE events when Equipment status changes

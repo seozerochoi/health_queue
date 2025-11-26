@@ -1835,45 +1835,58 @@ export default function App() {
               <button
                 className="flex-1 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded font-semibold"
                 onClick={async () => {
-                  // 예약 취소 (dequeue)
+                  // 예약 거절 (leave-queue API 사용)
                   try {
                     const token = localStorage.getItem("access_token");
-                    if (token) {
-                      const base = (() => {
-                        try {
-                          const vite = (import.meta as any)?.env?.VITE_API_BASE;
-                          if (vite) return vite;
-                        } catch (e) {}
-                        return "http://43.201.88.27";
-                      })();
+                    if (!token) {
+                      alert("로그인이 필요합니다.");
+                      return;
+                    }
 
-                      const response = await fetch(
-                        `${base}/api/reservations/${n.reservationId}/`,
-                        {
-                          method: "DELETE",
-                          headers: {
-                            Authorization: `Bearer ${token}`,
-                          },
-                          credentials: "include",
-                        }
+                    const apiBase = getApiBase();
+
+                    const response = await fetch(
+                      `${apiBase}/api/workouts/leave-queue/`,
+                      {
+                        method: "POST",
+                        headers: {
+                          Authorization: `Bearer ${token}`,
+                          "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                          reservation_id: n.reservationId,
+                        }),
+                      }
+                    );
+
+                    if (response.ok || response.status === 404) {
+                      console.log("✅ 예약 거절 (탈퇴) 성공");
+
+                      // 알림 제거
+                      setNotifications((prev) =>
+                        prev.filter((x) => x.reservationId !== n.reservationId)
                       );
 
-                      if (response.ok || response.status === 404) {
-                        console.log("✅ 예약 거절 (취소) 성공");
-                        // 예약 목록 갱신
+                      // 예약 목록/장비 상태 갱신
+                      try {
                         fetchReservations();
-                      } else {
-                        console.error("예약 취소 실패:", response.status);
+                        fetchEquipment();
+                      } catch (e) {
+                        console.warn("거절 후 데이터 새로고침 실패", e);
                       }
+                    } else {
+                      const errorText = await response.text().catch(() => "");
+                      console.error(
+                        "예약 거절 실패:",
+                        response.status,
+                        errorText
+                      );
+                      alert("예약 거절에 실패했습니다.");
                     }
                   } catch (error) {
-                    console.error("예약 취소 중 오류:", error);
+                    console.error("예약 거절 중 오류:", error);
+                    alert("예약 거절 중 오류가 발생했습니다.");
                   }
-
-                  // 알림 제거
-                  setNotifications((prev) =>
-                    prev.filter((x) => x.reservationId !== n.reservationId)
-                  );
                 }}
               >
                 거절
