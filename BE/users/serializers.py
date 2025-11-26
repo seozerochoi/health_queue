@@ -86,21 +86,21 @@ class RegisterSerializer(serializers.ModelSerializer):
         sys.stdout.flush()
         logger.info(profile_log)
         
-        # 스마트짐(ID=24)에 자동으로 APPROVED 상태로 가입
+        # ⚡ 스마트짐(ID=1)에 자동으로 APPROVED 상태로 가입
         try:
             from gyms.models import Gym, GymMembership
-            smart_gym = Gym.objects.get(id=24)
+            smart_gym = Gym.objects.get(id=1)
             membership = GymMembership.objects.create(
                 user=user,
                 gym=smart_gym,
                 status='APPROVED'
             )
-            gym_log = f"[REGISTER] GymMembership Created: user={user.username} | gym_id=24 | status=APPROVED"
+            gym_log = f"[REGISTER] GymMembership Created: user={user.username} | gym_id=1 ({smart_gym.name}) | status=APPROVED"
             print(gym_log, flush=True)
             sys.stdout.flush()
             logger.info(gym_log)
         except Gym.DoesNotExist:
-            error_log = f"[REGISTER ERROR] Smart Gym (ID=24) does not exist"
+            error_log = f"[REGISTER ERROR] Smart Gym (ID=1) does not exist"
             print(error_log, flush=True)
             sys.stdout.flush()
             logger.error(error_log)
