@@ -271,7 +271,7 @@ export default function App() {
       status: "운영중",
       join_date: new Date().toISOString().split("T")[0],
     };
-    
+
     setSelectedGym(defaultGym);
     console.log("회원가입 완료 - 기본 헬스장(스마트짐) 설정:", defaultGym);
 
@@ -389,7 +389,10 @@ export default function App() {
               join_date: new Date().toISOString().split("T")[0],
             };
             setSelectedGym(defaultGym);
-            console.log("기본 헬스장(스마트짐) 설정 (404 fallback):", defaultGym);
+            console.log(
+              "기본 헬스장(스마트짐) 설정 (404 fallback):",
+              defaultGym
+            );
           } else {
             const text = await res.text();
             console.error("Failed fetching gym API:", res.status, text);
@@ -810,14 +813,11 @@ export default function App() {
 
       const data = await res.json();
       // map backend reservation objects to front Reservation type and include new fields
-      // EXPIRED 상태인 예약은 제외하고 WAITING, NOTIFIED, COMPLETED만 표시
+      // EXPIRED와 COMPLETED 상태인 예약은 제외하고 WAITING, NOTIFIED만 표시
       const mapped: Reservation[] = (data || [])
-        .filter((r: any) => r.status !== "EXPIRED")
+        .filter((r: any) => r.status !== "EXPIRED" && r.status !== "COMPLETED")
         .map((r: any) => {
-          const status =
-            r.status === "NOTIFIED" || r.status === "COMPLETED"
-              ? "confirmed"
-              : "waiting";
+          const status = r.status === "NOTIFIED" ? "confirmed" : "waiting";
           const reservationTime = r.created_at
             ? new Date(r.created_at).toLocaleString()
             : r.reservation_time || "";
@@ -1127,7 +1127,9 @@ export default function App() {
           const nowTs = Date.now();
           if (nowTs - lastResRefreshRef.value < RESERVATION_REFRESH_MIN_MS) {
             console.log(
-              `[SSE] 예약 목록 갱신 스킵 (${reason}) - throttle 보호 (${nowTs - lastResRefreshRef.value}ms < ${RESERVATION_REFRESH_MIN_MS}ms)`
+              `[SSE] 예약 목록 갱신 스킵 (${reason}) - throttle 보호 (${
+                nowTs - lastResRefreshRef.value
+              }ms < ${RESERVATION_REFRESH_MIN_MS}ms)`
             );
             return;
           }
@@ -1166,19 +1168,18 @@ export default function App() {
             }
 
             // 1-추가. payload_kind === 'reservation' 인 일반 예약 관련 SSE (취소/만료/승격 등)
-            if (payload && payload.payload_kind === 'reservation') {
+            if (payload && payload.payload_kind === "reservation") {
               // 내 예약과 직접 관련된 이벤트인지 최소 확인 (user match) 후 갱신
               if (
                 payload.notified_username === userName ||
                 // 혹시 backend가 다른 형태로 user id를 넣을 가능성 대비
-                String(payload.notified_user_id || '') === String(
-                  (window as any).CURRENT_USER_ID || ''
-                )
+                String(payload.notified_user_id || "") ===
+                  String((window as any).CURRENT_USER_ID || "")
               ) {
                 safeRefreshReservations("RESERVATION_EVENT");
               } else {
                 // 내 NOTIFIED가 아니더라도 queue 변동 가능 -> 현재 뷰가 예약 현황이면 갱신
-                if (currentView === 'reservation-status') {
+                if (currentView === "reservation-status") {
                   safeRefreshReservations("RESERVATION_EVENT_QUEUE");
                 }
               }
@@ -1191,7 +1192,7 @@ export default function App() {
                 console.log("🔄 [App] initial 장비 전체 목록 수신 (replace)");
                 setEquipmentList(formatEquipmentData(payload));
                 // 초기 로딩 시 내 예약 포지션 계산을 위해 한번만 갱신
-                if (currentView === 'reservation-status') {
+                if (currentView === "reservation-status") {
                   safeRefreshReservations("INITIAL_EQUIPMENT");
                 }
                 return;
@@ -1201,7 +1202,7 @@ export default function App() {
               if (event.type === "refresh" && Array.isArray(payload)) {
                 console.log("🔄 [App] refresh 이벤트 수신 - 전체 목록 교체");
                 setEquipmentList(formatEquipmentData(payload));
-                if (currentView === 'reservation-status') {
+                if (currentView === "reservation-status") {
                   safeRefreshReservations("REFRESH_EQUIPMENT");
                 }
                 return;
@@ -1266,12 +1267,62 @@ export default function App() {
                   return Object.values(map);
                 });
 
+                // 🔔 queue_positions가 있으면 내 예약의 대기 순번 즉시 업데이트
+                if (
+                  equipmentData.queue_positions &&
+                  Array.isArray(equipmentData.queue_positions)
+                ) {
+                  console.log(
+                    `[SSE] queue_positions 수신 (equipment ${equipmentData.id}):`,
+                    equipmentData.queue_positions
+                  );
+
+                  // 현재 로그인한 사용자의 user_id를 가져오기 위해 임시로 reservations에서 추출 (또는 전역 상태 사용)
+                  // 여기서는 간단히 reservations에서 user 정보를 찾거나, localStorage에서 가져올 수 있음
+                  setReservations((prev) => {
+                    return prev.map((r) => {
+                      const eqId = String(
+                        r.equipment_id || r.equipmentId || ""
+                      );
+                      if (eqId !== String(equipmentData.id)) {
+                        return r; // 다른 기구 예약은 그대로
+                      }
+
+                      // 이 기구에 대한 내 예약 - queue_positions에서 내 position 찾기
+                      const myQueueEntry = equipmentData.queue_positions.find(
+                        (qp: any) => String(qp.reservation_id) === String(r.id)
+                      );
+
+                      if (myQueueEntry) {
+                        console.log(
+                          `[SSE] 예약 ${r.id} 순번 업데이트: ${
+                            r.waitingPosition || r.waiting_position
+                          } → ${myQueueEntry.position}`
+                        );
+                        return {
+                          ...r,
+                          waitingPosition: myQueueEntry.position,
+                          waiting_position: myQueueEntry.position,
+                          waitingCount: equipmentData.waiting_count,
+                          waiting_count: equipmentData.waiting_count,
+                        };
+                      }
+
+                      // queue_positions에 없다면 이미 dequeue 되었거나 만료됨 - 그대로 유지 (API refresh가 제거할 것)
+                      return r;
+                    });
+                  });
+                }
+
                 // 내 예약 중 해당 기구를 사용하는 WAITING / NOTIFIED 가 있다면 포지션/만료 변동 가능성 -> 갱신
-                const hasMyReservationForEquipment = reservations.some(r => {
-                  const eqId = String(r.equipment_id || r.equipmentId || '');
+                const hasMyReservationForEquipment = reservations.some((r) => {
+                  const eqId = String(r.equipment_id || r.equipmentId || "");
                   return eqId === String(equipmentData.id);
                 });
-                if (hasMyReservationForEquipment && currentView === 'reservation-status') {
+                if (
+                  hasMyReservationForEquipment &&
+                  currentView === "reservation-status"
+                ) {
                   safeRefreshReservations("EQUIPMENT_UPDATE_AFFECTS_MY_RES");
                 }
               }
@@ -1712,10 +1763,13 @@ export default function App() {
                       (r) => r.id === n.reservationId
                     );
                     if (!reservation) {
-                      console.warn("해당 알림에 대응하는 예약을 찾을 수 없습니다.");
+                      console.warn(
+                        "해당 알림에 대응하는 예약을 찾을 수 없습니다."
+                      );
                       return;
                     }
-                    const equipmentIdRaw = reservation.equipment_id || reservation.equipmentId;
+                    const equipmentIdRaw =
+                      reservation.equipment_id || reservation.equipmentId;
                     if (!equipmentIdRaw) {
                       console.warn("예약 객체에 equipment_id가 없습니다.");
                       return;
@@ -1734,8 +1788,14 @@ export default function App() {
 
                     if (!res.ok) {
                       const errorText = await res.text().catch(() => "");
-                      console.error("세션 시작 API 실패:", res.status, errorText);
-                      alert("세션 시작에 실패했습니다. 다시 시도하거나 관리자에게 문의하세요.");
+                      console.error(
+                        "세션 시작 API 실패:",
+                        res.status,
+                        errorText
+                      );
+                      alert(
+                        "세션 시작에 실패했습니다. 다시 시도하거나 관리자에게 문의하세요."
+                      );
                       return;
                     }
 

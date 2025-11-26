@@ -119,7 +119,7 @@ def publish_equipment_update(equipment, waiting_count: Optional[int] = None, ext
     Args:
         equipment: Equipment instance
         waiting_count: Pre-calculated waiting count. If None, will query DB (slower)
-        extra: Additional fields to include in payload
+        extra: Additional fields to include in payload (e.g., reservation positions)
     """
     import time
     start_time = time.time()
@@ -137,6 +137,31 @@ def publish_equipment_update(equipment, waiting_count: Optional[int] = None, ext
         logger.warning(f"⚠️ [EventBus] waiting_count not provided, querying DB (slow!)")
     
     payload["waiting_count"] = waiting_count
+    
+    # 🔔 추가: 대기열의 모든 예약 position 정보를 함께 전송하여 클라이언트가 자기 순번을 재계산 가능하도록 함
+    try:
+        from workouts.models import Reservation
+        from workouts.utils import get_waiting_position
+        queue = Reservation.objects.filter(
+            equipment=equipment,
+            status__in=["WAITING", "NOTIFIED"],
+        ).order_by('created_at').values('id', 'user_id', 'status')
+        
+        # position 정보 리스트: [{reservation_id, user_id, position, status}, ...]
+        queue_positions = []
+        for idx, res in enumerate(queue, start=1):
+            queue_positions.append({
+                "reservation_id": res['id'],
+                "user_id": res['user_id'],
+                "position": idx,
+                "status": res['status'],
+            })
+        payload["queue_positions"] = queue_positions
+        logger.debug(f"[EventBus] Equipment {equipment.id} queue_positions: {queue_positions}")
+    except Exception as e:
+        logger.warning(f"[EventBus] Failed to calculate queue_positions for equipment {equipment.id}: {e}")
+        payload["queue_positions"] = []
+    
     if extra:
         payload.update(extra)
     
