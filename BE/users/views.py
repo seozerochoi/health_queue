@@ -330,34 +330,96 @@ class InbodyAnalyzeView(APIView):
             concat = '\n'.join(lines)
 
             parsed = {}
-            parsed['weight_kg'] = find_by_keywords([r"체중", r"몸무게", r"weight"], unit_hint='kg')
-            if parsed['weight_kg'] is None:
-                m = re.search(r"([0-9]+(?:[\.,][0-9]+)?)\s*(kg|㎏)\b", concat, re.IGNORECASE)
-                if m:
-                    parsed['weight_kg'] = to_float(m.group(1))
-
-            parsed['body_fat_percentage'] = find_by_keywords([r"체지방률", r"체지방", r"체지방율", r"body fat", r"bodyfat"], unit_hint='%')
-            if parsed['body_fat_percentage'] is None:
-                m = re.search(r"([0-9]+(?:[\.,][0-9]+)?)\s*(%|퍼센트)", concat, re.IGNORECASE)
-                if m:
-                    parsed['body_fat_percentage'] = to_float(m.group(1))
-
-            parsed['skeletal_muscle_mass_kg'] = find_by_keywords([r"골격근량", r"골격근", r"skeletal muscle", r"SMM", r"muscle"], unit_hint='kg')
-            if parsed['skeletal_muscle_mass_kg'] is None:
-                m = re.search(r"(골격근량|골격근|SMM|skeletal muscle|muscle)[:\s]*([0-9]+(?:[\.,][0-9]+)?)\s*(kg)?", concat, re.IGNORECASE)
-                if m:
-                    parsed['skeletal_muscle_mass_kg'] = to_float(m.group(2))
-
-            parsed['bmi'] = find_by_keywords([r"BMI", r"체질량지수"], unit_hint=None)
-            if parsed['bmi'] is None:
-                m = re.search(r"\b([0-9]+(?:[\.,][0-9]+)?)\s*BMI\b", concat, re.IGNORECASE)
-                if m:
-                    parsed['bmi'] = to_float(m.group(1))
-
-            if parsed.get('weight_kg') is None:
-                m = re.search(r"([0-9]+(?:[\.,][0-9]+)?)\s*(kg|㎏)\b", concat, re.IGNORECASE)
-                if m:
-                    parsed['weight_kg'] = to_float(m.group(1))
+            
+            # Enhanced parsing with better context awareness
+            def find_value_near_keyword(keyword_patterns, lines_list, default=None):
+                """Find numeric value near keyword with better context handling"""
+                for i, line in enumerate(lines_list):
+                    line_lower = line.lower()
+                    for pattern in keyword_patterns:
+                        if re.search(pattern, line_lower, re.IGNORECASE):
+                            # Try current line first
+                            num = find_number_in_text(line)
+                            if num is not None and num > 0:
+                                return num
+                            # Try next 2 lines
+                            for j in range(i+1, min(i+3, len(lines_list))):
+                                num = find_number_in_text(lines_list[j])
+                                if num is not None and num > 0:
+                                    return num
+                return default
+            
+                # InBody 270 typical layout: top 3 numbers are weight, skeletal muscle, body fat mass
+                # Extract sequential values from "X.X (Y.Y-Z.Z)" patterns
+                range_pattern = r'(\d+\.?\d*)\s*\(\s*\d+\.?\d*\s*-\s*\d+\.?\d*\s*\)'
+                range_matches = re.findall(range_pattern, concat)
+            
+                # Weight (체중): First value, typically 30-200 kg
+                parsed['weight_kg'] = find_by_keywords([r"체중", r"몸무게", r"weight"], unit_hint='kg')
+                if not parsed['weight_kg'] and range_matches:
+                    for val_str in range_matches:
+                        val = to_float(val_str)
+                        if val and 30 < val < 200:
+                            parsed['weight_kg'] = val
+                            break
+            
+                # Skeletal Muscle Mass (골격근량): Second value, typically 10-50 kg
+                # Note: User reports this as 19.3 (second number after weight)
+                parsed['skeletal_muscle_mass_kg'] = find_by_keywords([r"골격근량", r"골격근", r"skeletal muscle"], unit_hint='kg')
+                if not parsed['skeletal_muscle_mass_kg'] and len(range_matches) > 1:
+                    val = to_float(range_matches[1])
+                    if val and 10 < val < 50:
+                        parsed['skeletal_muscle_mass_kg'] = val
+            
+                # Body Fat Mass (체지방량): Third value, typically 3-80 kg
+                # User reports 22.1 as third number
+                parsed['body_fat_mass_kg'] = find_by_keywords([r"체지방량", r"body fat mass"], unit_hint='kg')
+                if not parsed['body_fat_mass_kg'] and len(range_matches) > 2:
+                    val = to_float(range_matches[2])
+                    if val and 3 < val < 80:
+                        parsed['body_fat_mass_kg'] = val
+            
+                # BMI: Look near "BMI" keyword, reasonable range 15-40
+                # User reports 24.0
+                parsed['bmi'] = None
+                for i, line in enumerate(lines):
+                    if re.search(r'\bBMI\b', line, re.IGNORECASE):
+                        # BMI keyword found, look in same line and next 2 lines
+                        for j in range(i, min(i+3, len(lines))):
+                            num = find_number_in_text(lines[j])
+                            if num and 15 < num < 40:
+                                parsed['bmi'] = num
+                                break
+                        if parsed['bmi']:
+                            break
+            
+                # Body Fat Percentage (체지방률): typically 5-60%
+                # User reports 37.5%
+                parsed['body_fat_percentage'] = find_by_keywords([r"체지방률", r"체지방", r"percent body fat"], unit_hint='%')
+                if not parsed['body_fat_percentage']:
+                    # Look for percentage sign with reasonable value
+                    for line in lines:
+                        m = re.search(r'(\d+\.?\d*)\s*%', line)
+                        if m:
+                            val = to_float(m.group(1))
+                            if val and 5 < val < 60:
+                                parsed['body_fat_percentage'] = val
+                                break
+            
+                # Height (신장): typically 100-250 cm
+                # User reports 156.9
+                parsed['height_cm'] = find_by_keywords([r"신장", r"키", r"height"], unit_hint='cm')
+                if not parsed['height_cm']:
+                    # Look for cm unit with reasonable value
+                    m = re.search(r'(\d+\.?\d*)\s*cm', concat, re.IGNORECASE)
+                    if m:
+                        val = to_float(m.group(1))
+                        if val and 100 < val < 250:
+                            parsed['height_cm'] = val
+            
+                # Muscle Mass (근육량): typically 15-100 kg
+                # User reports not found, so this is optional
+                parsed['muscle_mass_kg'] = find_by_keywords([r"근육량", r"muscle mass"], unit_hint='kg')
 
             raw_lines = [{'text': it['text'], 'type': it['type'], 'confidence': it.get('confidence')} for it in items if it.get('type') == 'LINE']
 
