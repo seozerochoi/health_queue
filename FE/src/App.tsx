@@ -1120,11 +1120,27 @@ export default function App() {
           }
         };
 
+        const lastResRefreshRef = { value: 0 };
+        const RESERVATION_REFRESH_MIN_MS = 1500; // 과도한 호출 방지
+
+        const safeRefreshReservations = (reason: string) => {
+          const nowTs = Date.now();
+          if (nowTs - lastResRefreshRef.value < RESERVATION_REFRESH_MIN_MS) {
+            console.log(
+              `[SSE] 예약 목록 갱신 스킵 (${reason}) - throttle 보호 (${nowTs - lastResRefreshRef.value}ms < ${RESERVATION_REFRESH_MIN_MS}ms)`
+            );
+            return;
+          }
+          lastResRefreshRef.value = nowTs;
+          console.log(`[SSE] 예약 목록 갱신 실행 (${reason})`);
+          fetchReservations();
+        };
+
         const handleEvent = (event: MessageEvent) => {
           try {
             const payload = JSON.parse(event.data);
 
-            // 1. 예약 알림 처리
+            // 1. 예약 알림 처리 (NOTIFIED 승격 전용)
             if (payload && payload.notified_username === userName) {
               const reservationId = payload.notified_reservation_id
                 ? String(payload.notified_reservation_id)
@@ -1145,8 +1161,27 @@ export default function App() {
                 secondsLeft: timeoutSeconds,
               });
 
-              // 예약 목록도 갱신
-              fetchReservations();
+              // 알림 승격 직후 예약 목록을 즉시 새로 고침
+              safeRefreshReservations("NOTIFIED_EVENT");
+            }
+
+            // 1-추가. payload_kind === 'reservation' 인 일반 예약 관련 SSE (취소/만료/승격 등)
+            if (payload && payload.payload_kind === 'reservation') {
+              // 내 예약과 직접 관련된 이벤트인지 최소 확인 (user match) 후 갱신
+              if (
+                payload.notified_username === userName ||
+                // 혹시 backend가 다른 형태로 user id를 넣을 가능성 대비
+                String(payload.notified_user_id || '') === String(
+                  (window as any).CURRENT_USER_ID || ''
+                )
+              ) {
+                safeRefreshReservations("RESERVATION_EVENT");
+              } else {
+                // 내 NOTIFIED가 아니더라도 queue 변동 가능 -> 현재 뷰가 예약 현황이면 갱신
+                if (currentView === 'reservation-status') {
+                  safeRefreshReservations("RESERVATION_EVENT_QUEUE");
+                }
+              }
             }
 
             // 2. 장비 상태 업데이트 처리 (이벤트 타입 별 분기)
@@ -1155,6 +1190,10 @@ export default function App() {
               if (event.type === "initial" && Array.isArray(payload)) {
                 console.log("🔄 [App] initial 장비 전체 목록 수신 (replace)");
                 setEquipmentList(formatEquipmentData(payload));
+                // 초기 로딩 시 내 예약 포지션 계산을 위해 한번만 갱신
+                if (currentView === 'reservation-status') {
+                  safeRefreshReservations("INITIAL_EQUIPMENT");
+                }
                 return;
               }
 
@@ -1162,6 +1201,9 @@ export default function App() {
               if (event.type === "refresh" && Array.isArray(payload)) {
                 console.log("🔄 [App] refresh 이벤트 수신 - 전체 목록 교체");
                 setEquipmentList(formatEquipmentData(payload));
+                if (currentView === 'reservation-status') {
+                  safeRefreshReservations("REFRESH_EQUIPMENT");
+                }
                 return;
               }
 
@@ -1196,7 +1238,6 @@ export default function App() {
                       waitingCount: existing.waitingCount,
                     });
 
-                    // 머지: 기존 필드 유지 + 신규값 우선 (timeRemaining / waitingCount 등 업데이트)
                     const merged: Equipment = {
                       ...existing,
                       ...formattedItem,
@@ -1224,6 +1265,15 @@ export default function App() {
                   }
                   return Object.values(map);
                 });
+
+                // 내 예약 중 해당 기구를 사용하는 WAITING / NOTIFIED 가 있다면 포지션/만료 변동 가능성 -> 갱신
+                const hasMyReservationForEquipment = reservations.some(r => {
+                  const eqId = String(r.equipment_id || r.equipmentId || '');
+                  return eqId === String(equipmentData.id);
+                });
+                if (hasMyReservationForEquipment && currentView === 'reservation-status') {
+                  safeRefreshReservations("EQUIPMENT_UPDATE_AFFECTS_MY_RES");
+                }
               }
             }
           } catch (err) {
@@ -1651,29 +1701,72 @@ export default function App() {
               <button
                 className="flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded font-semibold"
                 onClick={async () => {
-                  // 예약을 찾아서 해당 기구로 workout-timer 시작
-                  const reservation = reservations.find(
-                    (r) => r.id === n.reservationId
-                  );
-                  if (reservation) {
-                    const equipmentId = String(
-                      reservation.equipment_id || reservation.equipmentId || ""
-                    );
-                    const equipment = equipmentList.find(
-                      (eq) => String(eq.id) === equipmentId
-                    );
-
-                    if (equipment) {
-                      // 기구 선택 및 운동 시작
-                      setSelectedEquipment(equipment);
-                      setWorkoutStartTime(new Date());
-                      setCurrentView("workout-timer");
-
-                      // 알림 제거
-                      setNotifications((prev) =>
-                        prev.filter((x) => x.reservationId !== n.reservationId)
-                      );
+                  // ✅ 개선: 단순 화면 전환 대신 서버에 세션 시작 요청 후 성공 시 상태 업데이트
+                  try {
+                    const token = localStorage.getItem("access_token");
+                    if (!token) {
+                      alert("로그인이 필요합니다.");
+                      return;
                     }
+                    const reservation = reservations.find(
+                      (r) => r.id === n.reservationId
+                    );
+                    if (!reservation) {
+                      console.warn("해당 알림에 대응하는 예약을 찾을 수 없습니다.");
+                      return;
+                    }
+                    const equipmentIdRaw = reservation.equipment_id || reservation.equipmentId;
+                    if (!equipmentIdRaw) {
+                      console.warn("예약 객체에 equipment_id가 없습니다.");
+                      return;
+                    }
+                    const equipmentId = parseInt(String(equipmentIdRaw), 10);
+                    const apiBase = getApiBase();
+
+                    const res = await fetch(`${apiBase}/api/workouts/start/`, {
+                      method: "POST",
+                      headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({ equipment_id: equipmentId }),
+                    });
+
+                    if (!res.ok) {
+                      const errorText = await res.text().catch(() => "");
+                      console.error("세션 시작 API 실패:", res.status, errorText);
+                      alert("세션 시작에 실패했습니다. 다시 시도하거나 관리자에게 문의하세요.");
+                      return;
+                    }
+
+                    const sessionData = await res.json();
+                    console.log("[ToastStart] 세션 시작 성공:", sessionData);
+
+                    // 선택된 기구 설정 (장비 리스트에서 찾기)
+                    const equipment = equipmentList.find(
+                      (eq) => String(eq.id) === String(equipmentId)
+                    );
+                    if (equipment) {
+                      setSelectedEquipment(equipment);
+                    }
+                    setWorkoutStartTime(new Date());
+                    setCurrentView("workout-timer");
+
+                    // 알림 제거
+                    setNotifications((prev) =>
+                      prev.filter((x) => x.reservationId !== n.reservationId)
+                    );
+
+                    // 예약 목록/장비 상태 새로고침 (큐 반영)
+                    try {
+                      fetchReservations();
+                      fetchEquipment();
+                    } catch (e) {
+                      console.warn("세션 시작 후 데이터 새로고침 실패", e);
+                    }
+                  } catch (err) {
+                    console.error("알림 시작 처리 중 오류", err);
+                    alert("세션 시작 처리 중 오류가 발생했습니다.");
                   }
                 }}
               >

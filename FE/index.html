@@ -9,6 +9,47 @@
 
     <body>
       <div id="root"></div>
+      <!-- Token storage shim: redirect critical auth keys to sessionStorage for per-tab isolation -->
+      <script>
+        (function() {
+          try {
+            const KEYS = ['access_token','refresh_token','current_user'];
+            // Migrate existing localStorage tokens (if any) into sessionStorage once
+              KEYS.forEach(k => {
+                const sv = sessionStorage.getItem(k);
+                if (!sv) {
+                  const lv = localStorage.getItem(k);
+                  if (lv) sessionStorage.setItem(k, lv);
+                }
+              });
+            // Monkey patch localStorage methods for these keys so legacy code paths transparently use sessionStorage
+            const lg = localStorage.getItem.bind(localStorage);
+            localStorage.getItem = function(key) {
+              if (KEYS.includes(key)) return sessionStorage.getItem(key);
+              return lg(key);
+            };
+            const ls = localStorage.setItem.bind(localStorage);
+            localStorage.setItem = function(key, value) {
+              if (KEYS.includes(key)) return sessionStorage.setItem(key, value);
+              return ls(key, value);
+            };
+            const lr = localStorage.removeItem.bind(localStorage);
+            localStorage.removeItem = function(key) {
+              if (KEYS.includes(key)) return sessionStorage.removeItem(key);
+              return lr(key);
+            };
+            // Optional: expose helper
+            window.__tokenStorage = {
+              get: (k) => sessionStorage.getItem(k),
+              set: (k,v) => sessionStorage.setItem(k,v),
+              remove: (k) => sessionStorage.removeItem(k)
+            };
+            console.log('[AuthStorage] Using sessionStorage for tokens (per-tab isolation)');
+          } catch (e) {
+            console.warn('[AuthStorage] shim failed', e);
+          }
+        })();
+      </script>
       <script type="module" src="/src/main.tsx"></script>
     </body>
   </html>

@@ -209,7 +209,15 @@ class StartSessionView(APIView):
             other_recent_notified = Reservation.objects.filter(equipment=equipment, status='NOTIFIED', notified_at__gte=notified_cutoff).exclude(user=user).exists()
             other_in_queue = other_waiting or other_recent_notified
 
-            reservation = Reservation.objects.select_for_update().filter(equipment=equipment, user=user, status='NOTIFIED', notified_at__gte=notified_cutoff).first()
+            # 현재 사용자에게 NOTIFIED 예약이 있는지 확인
+            reservation = Reservation.objects.select_for_update().filter(
+                equipment=equipment,
+                user=user,
+                status='NOTIFIED',
+                notified_at__gte=notified_cutoff,
+            ).first()
+
+            # 다른 대기자가 존재하는데 본인이 NOTIFIED 상태가 아니면 사용 불가
             if other_in_queue and not reservation:
                 return Response({'error': '대기열이 있습니다. 알림 받은 사용자만 시작할 수 있습니다.'}, status=status.HTTP_409_CONFLICT)
 
@@ -217,10 +225,17 @@ class StartSessionView(APIView):
         session_type = ''
 
         if reservation:
+            # ✅ 사용 권한 검증 통과: NOTIFIED 사용자. 예약은 queue에서 제거(dequeue) 처리.
             allocated_time = equipment.base_session_time_minutes
             session_type = 'BASE'
-            reservation.status = 'COMPLETED'
-            reservation.save()
+            try:
+                res_id = reservation.id
+                reservation.delete()  # COMPLETED 대신 삭제로 큐 정리 명확화
+                logger.info(f"[StartSession] NOTIFIED 예약 dequeue 및 삭제 완료 reservation_id={res_id}")
+            except Exception:
+                logger.warning("[StartSession] 예약 삭제 실패 - fallback COMPLETED 표시", exc_info=True)
+                reservation.status = 'COMPLETED'
+                reservation.save(update_fields=['status'])
         else:
             try:
                 from ai_model.prediction_utils import get_ai_recommendation
