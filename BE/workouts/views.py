@@ -174,10 +174,11 @@ class StartSessionView(APIView):
                 desired_status = 'WAITING' if queue_exists else 'AVAILABLE'
                 if equipment.status != 'IN_USE' and equipment.status != desired_status:
                     equipment.status = desired_status
-                    equipment.save()
+                    equipment.save(update_fields=['status'])  # ⚡ Signal에서 자동 발행
                     status_changed = True
 
-                if stale_expired or promoted_reservation or status_changed:
+                # ⚠️ status_changed=True일 때 이미 signal로 발행되므로, 중복 방지
+                if (stale_expired or promoted_reservation) and not status_changed:
                     notify_equipment_change(equipment)
 
             other_waiting = Reservation.objects.filter(equipment=equipment, status='WAITING').exclude(user=user).exists()
@@ -260,9 +261,8 @@ class StartSessionView(APIView):
                     return Response({'error': '기구가 사용 불가 상태입니다.'}, status=status.HTTP_409_CONFLICT)
 
                 equipment.status = 'IN_USE'
-                equipment.save()
+                equipment.save(update_fields=['status'])  # ⚡ Signal에서 자동 발행하므로 notify 호출 불필요
                 logger.info(f"✅ [StartSession] Equipment {equipment.id} ({equipment.name}) 상태 변경: IN_USE")
-                notify_equipment_change(equipment)
 
                 session = UsageSession.objects.create(
                     user=user,
