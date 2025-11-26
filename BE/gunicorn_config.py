@@ -19,11 +19,13 @@ worker_class = 'sync'
 # Worker 프로세스 수
 # 2core 환경: worker 2~3개 + threads 2~4개 조합 권장
 # SSE 연결이 worker를 점유하므로 threads로 동시성 확보
-workers = 2  # ⚡ 2core에서 2개 worker (메모리 절약)
+# ⚡ TEMPORARY FIX: 3개 탭 × SSE + API 요청 처리를 위해 증가
+workers = 4  # ⚡ 4개 worker (메모리 감시 필요)
 
 # 각 worker의 스레드 수
 # ⚡ CRITICAL: SSE 연결용 1개 + API 요청용 2~3개
-threads = 4  # 각 worker가 4개 요청 동시 처리 = 총 8개 동시 처리 가능
+# ⚡ 6개로 증가: 총 24개 동시 처리 가능 (4 workers × 6 threads)
+threads = 6
 
 # Keep-alive 연결 타임아웃
 keepalive = 65
@@ -47,9 +49,9 @@ limit_request_fields = 100
 preload_app = False
 
 # Max requests per worker (메모리 누수 방지)
-# ⚡ 더 자주 재시작하여 메모리 안정성 확보
-max_requests = 500
-max_requests_jitter = 50
+# ⚡ worker 수 증가로 더 자주 재시작하여 메모리 안정성 확보
+max_requests = 300  # ⚡ 500 → 300 (worker가 많아서 더 자주 재시작)
+max_requests_jitter = 30
 
 # Worker 재시작 후 graceful shutdown
 # 기존 요청 완료 후 종료

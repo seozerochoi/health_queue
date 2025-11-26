@@ -93,17 +93,33 @@ def equipment_post_save(sender, instance, created, **kwargs):
         logger.debug(f"ℹ️ [Equipment] post_save (update_fields 없음) - 중복 방지로 SSE 미발행 id={instance.id}")
 
     if should_notify:
+        import time
+        signal_start = time.time()
+        
         from equipment.event_bus import publish_equipment_update
-        def _do_publish():
-            try:
-                publish_equipment_update(instance)
-                logger.info(f"✅ [Equipment Signal] 발행: id={instance.id}")
-            except Exception:
-                logger.exception(f"❌ [Equipment Signal] 발행 실패: id={instance.id}")
-
-        # DB 커밋 이후 발행 (트랜잭션 롤백 시 오발행 방지)
+        from workouts.models import Reservation
+        
+        # ⚡ Pre-calculate waiting_count to avoid DB query in publish function
+        query_start = time.time()
+        waiting_count = Reservation.objects.filter(
+            equipment=instance,
+            status__in=["WAITING", "NOTIFIED"],
+        ).count()
+        query_time = time.time() - query_start
+        
         try:
-            transaction.on_commit(_do_publish)
+            # ⚡ IMMEDIATE publish - no transaction.on_commit() delay
+            publish_start = time.time()
+            publish_equipment_update(instance, waiting_count=waiting_count)
+            publish_time = time.time() - publish_start
+            total_time = time.time() - signal_start
+            
+            logger.info(
+                f"⏱️ [Equipment Signal] Timing - "
+                f"query: {query_time*1000:.1f}ms, "
+                f"publish: {publish_time*1000:.1f}ms, "
+                f"total: {total_time*1000:.1f}ms | "
+                f"id={instance.id} waiting={waiting_count}"
+            )
         except Exception:
-            # on_commit 불가(비트랜잭션 상황) 시 즉시 실행
-            _do_publish()
+            logger.exception(f"❌ [Equipment Signal] 발행 실패: id={instance.id}")

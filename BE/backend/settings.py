@@ -222,8 +222,9 @@ CELERY_BEAT_SCHEDULE = {
 # INCREASED TO 30s TO REDUCE DB LOAD - Real-time updates handled by client polling instead
 EQUIPMENT_SSE_POLL_INTERVAL_SECONDS = 30
 
-# SSE Heartbeat 설정 (10초마다 ping 전송)
-EQUIPMENT_SSE_HEARTBEAT_SECONDS = 10
+# SSE Heartbeat 설정 (30초마다 ping 전송)
+# ⚡ 10초 → 30초로 증가하여 API 요청 부하 감소
+EQUIPMENT_SSE_HEARTBEAT_SECONDS = 30
 
 
 LOGGING = {

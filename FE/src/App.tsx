@@ -1152,7 +1152,20 @@ export default function App() {
               // update/message/reservation: 개별 기구 변경
               const equipmentData = payload.equipment || payload;
               if (equipmentData && equipmentData.id) {
+                console.log(
+                  `🔍 [SSE Update] 기구 ${equipmentData.id} 업데이트:`,
+                  {
+                    id: equipmentData.id,
+                    name: equipmentData.name,
+                    status: equipmentData.status,
+                    waiting_count: equipmentData.waiting_count,
+                    event_type: event.type,
+                    full_payload: equipmentData,
+                  }
+                );
+
                 const formattedItem = formatSingleEquipment(equipmentData);
+                console.log(`🔍 [SSE Update] 포맷된 데이터:`, formattedItem);
 
                 setEquipmentList((prev) => {
                   const map: Record<string, Equipment> = {};
@@ -1160,6 +1173,13 @@ export default function App() {
 
                   const existing = map[formattedItem.id];
                   if (existing) {
+                    console.log(`🔍 [SSE Update] 기존 상태:`, {
+                      id: existing.id,
+                      name: existing.name,
+                      status: existing.status,
+                      waitingCount: existing.waitingCount,
+                    });
+
                     // 머지: 기존 필드 유지 + 신규값 우선 (timeRemaining / waitingCount 등 업데이트)
                     const merged: Equipment = {
                       ...existing,
@@ -1173,8 +1193,17 @@ export default function App() {
                           ? formattedItem.timeRemaining
                           : existing.timeRemaining,
                     };
+
+                    console.log(`✅ [SSE Update] 머지된 상태:`, {
+                      id: merged.id,
+                      name: merged.name,
+                      status: merged.status,
+                      waitingCount: merged.waitingCount,
+                    });
+
                     map[formattedItem.id] = merged;
                   } else {
+                    console.log(`🆕 [SSE Update] 새 기구 추가:`, formattedItem);
                     map[formattedItem.id] = formattedItem;
                   }
                   return Object.values(map);

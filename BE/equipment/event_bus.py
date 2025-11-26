@@ -114,24 +114,50 @@ def _serialize_equipment(equipment) -> Dict[str, Any]:
 
 
 def publish_equipment_update(equipment, waiting_count: Optional[int] = None, extra: Optional[Dict[str, Any]] = None):
-    """Publish to Redis (cross-worker) and local buffer."""
+    """Publish to Redis (cross-worker).
+    
+    Args:
+        equipment: Equipment instance
+        waiting_count: Pre-calculated waiting count. If None, will query DB (slower)
+        extra: Additional fields to include in payload
+    """
+    import time
+    start_time = time.time()
+    
     payload = _serialize_equipment(equipment)
+    serialize_time = time.time()
+    
+    # ⚡ Use pre-calculated waiting_count if provided, otherwise query DB
     if waiting_count is None:
         from workouts.models import Reservation  # lazy import
         waiting_count = Reservation.objects.filter(
             equipment=equipment,
             status__in=["WAITING", "NOTIFIED"],
         ).count()
+        logger.warning(f"⚠️ [EventBus] waiting_count not provided, querying DB (slow!)")
+    
     payload["waiting_count"] = waiting_count
     if extra:
         payload.update(extra)
+    
+    prepare_time = time.time()
     
     # ⚡ CRITICAL: Redis publish with timeout protection
     # If Redis is down, log error and continue instead of blocking the request
     try:
         redis_client = _get_redis_publisher()
         redis_client.publish(REDIS_CHANNEL, json.dumps({"type": "update", "payload": payload}))
-        logger.info(f"📡 [EventBus] Redis publish equipment {equipment.id} waiting={waiting_count}")
+        redis_time = time.time()
+        
+        total_time = redis_time - start_time
+        logger.info(
+            f"⏱️ [EventBus] SSE Publish timing - "
+            f"serialize: {(serialize_time - start_time)*1000:.1f}ms, "
+            f"prepare: {(prepare_time - serialize_time)*1000:.1f}ms, "
+            f"redis: {(redis_time - prepare_time)*1000:.1f}ms, "
+            f"total: {total_time*1000:.1f}ms | "
+            f"equipment {equipment.id} waiting={waiting_count}"
+        )
     except redis.exceptions.ConnectionError as e:
         logger.error(f"❌ [EventBus] Redis 연결 실패 (equipment {equipment.id}): {e}")
         # Continue execution - SSE clients will get updates on reconnect
