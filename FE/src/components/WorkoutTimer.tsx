@@ -52,6 +52,56 @@ export function WorkoutTimer({
   const usingWorkerRef = useRef<boolean>(false);
   const consecutiveHeartbeatFailures = useRef(0);
 
+  // 뒤로가기 핸들러 - 운동 종료 API 호출
+  const handleBack = async () => {
+    if (isEnding) return;
+
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      console.warn("토큰 없음 - 뒤로가기만 처리");
+      onBack();
+      return;
+    }
+
+    console.log("⬅️ 뒤로가기 - 자동 운동 종료 처리");
+    setIsEnding(true);
+    setIsRunning(false);
+
+    try {
+      // 운동 종료 API 호출
+      const response = await fetch(`${getApiBase()}/api/workouts/end/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      });
+
+      if (response.ok) {
+        console.log("✅ 운동 종료 성공 (뒤로가기)");
+      } else {
+        console.warn("운동 종료 실패 (뒤로가기):", response.status);
+      }
+
+      // heartbeat 중지
+      if (heartbeatIntervalRef.current) {
+        window.clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
+      if (workerRef.current) {
+        workerRef.current.postMessage({ type: "stop" });
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+    } catch (error) {
+      console.error("운동 종료 중 오류 (뒤로가기):", error);
+    } finally {
+      setIsEnding(false);
+      onBack();
+    }
+  };
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
 
@@ -353,7 +403,7 @@ export function WorkoutTimer({
           <Button
             variant="ghost"
             size="icon"
-            onClick={onBack}
+            onClick={handleBack}
             className="text-white hover:bg-gray-800"
           >
             <ArrowLeft className="w-6 h-6" />
