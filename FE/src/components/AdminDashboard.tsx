@@ -269,17 +269,6 @@ export function AdminDashboard({
                       </div>
                     ))}
                   </div>
-                  <div className="flex items-center justify-between gap-2 mt-3">
-                    {[
-                      '06시', '07시', '08시', '09시', '10시', '11시', '12시', '13시', 
-                      '14시', '15시', '16시', '17시', '18시', '19시', '20시', '21시', 
-                      '22시', '23시'
-                    ].map((label) => (
-                      <div key={label} className="flex-1 text-center">
-                        <span className="text-xs text-gray-400">{label}</span>
-                      </div>
-                    ))}
-                  </div>
                 </div>
               </div>
             </CardContent>

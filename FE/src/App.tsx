@@ -262,7 +262,20 @@ export default function App() {
   };
 
   const handleSignUpComplete = async () => {
-    // 회원가입 후 API를 통해 헬스장 정보 가져오기
+    // 회원가입 후 기본 헬스장을 "스마트짐"으로 설정
+    const defaultGym = {
+      id: 1,
+      user: tempUserId || userName,
+      gym_name: "스마트짐",
+      gym_address: "서울시 강남구 테헤란로 123",
+      status: "운영중",
+      join_date: new Date().toISOString().split("T")[0],
+    };
+    
+    setSelectedGym(defaultGym);
+    console.log("회원가입 완료 - 기본 헬스장(스마트짐) 설정:", defaultGym);
+
+    // 추가로 API를 통해 헬스장 정보가 있는지 확인
     try {
       const token = localStorage.getItem("access_token");
       if (token) {
@@ -275,20 +288,23 @@ export default function App() {
 
         if (res.ok) {
           const gymData = await res.json();
-          const gymInfo = {
-            id: gymData.id,
-            user: tempUserId,
-            gym_name: gymData.name || "",
-            gym_address: gymData.address || "",
-            status: "운영중",
-            join_date: new Date().toISOString().split("T")[0],
-          };
-          setSelectedGym(gymInfo);
-          console.log("회원가입 후 헬스장 정보 설정:", gymInfo);
+          if (gymData && gymData.name) {
+            const gymInfo = {
+              id: gymData.id,
+              user: tempUserId || userName,
+              gym_name: gymData.name || "",
+              gym_address: gymData.address || "",
+              status: "운영중",
+              join_date: new Date().toISOString().split("T")[0],
+            };
+            setSelectedGym(gymInfo);
+            console.log("회원가입 후 API 헬스장 정보 업데이트:", gymInfo);
+          }
         }
       }
     } catch (error) {
       console.error("회원가입 후 헬스장 정보 가져오기 실패:", error);
+      // 에러 발생 시에도 기본 헬스장 유지
     }
 
     // 역할에 따라 화면 이동
@@ -363,17 +379,17 @@ export default function App() {
             }
           } else if (res.status === 404) {
             console.warn("User has no gym associated (API returned 404).");
-            // 404인 경우 기본 헬스장 설정 (첫 번째 mock gym)
+            // 404인 경우 기본 헬스장을 "스마트짐"으로 설정
             const defaultGym = {
               id: 1,
               user: userId,
-              gym_name: "헬스장 예제",
+              gym_name: "스마트짐",
               gym_address: "서울시 강남구 테헤란로 123",
               status: "운영중",
               join_date: new Date().toISOString().split("T")[0],
             };
             setSelectedGym(defaultGym);
-            console.log("기본 헬스장 설정 (404 fallback):", defaultGym);
+            console.log("기본 헬스장(스마트짐) 설정 (404 fallback):", defaultGym);
           } else {
             const text = await res.text();
             console.error("Failed fetching gym API:", res.status, text);
