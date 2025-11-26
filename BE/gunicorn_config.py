@@ -1,6 +1,9 @@
 # Gunicorn configuration file
 # SSE 스트리밍 + 2core 2GB 환경 최적화 설정
 
+# PID 파일 (빠른 reload를 위해)
+pidfile = '/tmp/gunicorn.pid'
+
 # Worker 타임아웃 설정 (초 단위)
 # SSE 연결은 장시간 유지되므로 충분히 긴 시간 설정
 timeout = 300  # 5분
