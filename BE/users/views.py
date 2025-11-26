@@ -349,77 +349,128 @@ class InbodyAnalyzeView(APIView):
                                     return num
                 return default
             
-                # InBody 270 typical layout: top 3 numbers are weight, skeletal muscle, body fat mass
-                # Extract sequential values from "X.X (Y.Y-Z.Z)" patterns
-                range_pattern = r'(\d+\.?\d*)\s*\(\s*\d+\.?\d*\s*-\s*\d+\.?\d*\s*\)'
-                range_matches = re.findall(range_pattern, concat)
-            
-                # Weight (체중): First value, typically 30-200 kg
-                parsed['weight_kg'] = find_by_keywords([r"체중", r"몸무게", r"weight"], unit_hint='kg')
-                if not parsed['weight_kg'] and range_matches:
-                    for val_str in range_matches:
-                        val = to_float(val_str)
-                        if val and 30 < val < 200:
-                            parsed['weight_kg'] = val
+                # ---------------- Improved Heuristic Parsing ----------------
+                # Goal: Robustly extract weight, skeletal muscle, body fat mass, height, BMI, body fat %
+                # even when Korean keywords are missing or OCR is noisy.
+
+                parsed_values = {
+                    'weight_kg': None,
+                    'skeletal_muscle_mass_kg': None,
+                    'body_fat_mass_kg': None,
+                    'height_cm': None,
+                    'bmi': None,
+                    'body_fat_percentage': None,
+                    'muscle_mass_kg': None,  # optional
+                }
+
+                # 1. Height (easy): lines ending with 'cm'
+                for line in lines:
+                    m_h = re.match(r'(\d+\.?\d*)\s*cm$', line.strip(), re.IGNORECASE)
+                    if m_h:
+                        val = to_float(m_h.group(1))
+                        if val and 100 < val < 230:
+                            parsed_values['height_cm'] = val
                             break
-            
-                # Skeletal Muscle Mass (골격근량): Second value, typically 10-50 kg
-                # Note: User reports this as 19.3 (second number after weight)
-                parsed['skeletal_muscle_mass_kg'] = find_by_keywords([r"골격근량", r"골격근", r"skeletal muscle"], unit_hint='kg')
-                if not parsed['skeletal_muscle_mass_kg'] and len(range_matches) > 1:
-                    val = to_float(range_matches[1])
-                    if val and 10 < val < 50:
-                        parsed['skeletal_muscle_mass_kg'] = val
-            
-                # Body Fat Mass (체지방량): Third value, typically 3-80 kg
-                # User reports 22.1 as third number
-                parsed['body_fat_mass_kg'] = find_by_keywords([r"체지방량", r"body fat mass"], unit_hint='kg')
-                if not parsed['body_fat_mass_kg'] and len(range_matches) > 2:
-                    val = to_float(range_matches[2])
-                    if val and 3 < val < 80:
-                        parsed['body_fat_mass_kg'] = val
-            
-                # BMI: Look near "BMI" keyword, reasonable range 15-40
-                # User reports 24.0
-                parsed['bmi'] = None
+
+                # 2. Range pattern lines: e.g. "59.1 (45.0-60.8)" -> first number is value
+                range_line_regex = re.compile(r'^(\d+\.?\d*)\s*\(\s*(\d+\.?\d*)\s*-\s*(\d+\.?\d*)\s*\)$')
+                range_candidates = []  # list of dicts {value, low, high, raw}
+                for line in lines:
+                    m_r = range_line_regex.match(line.strip())
+                    if m_r:
+                        value = to_float(m_r.group(1))
+                        low = to_float(m_r.group(2))
+                        high = to_float(m_r.group(3))
+                        if value is not None and low is not None and high is not None:
+                            range_candidates.append({'value': value, 'low': low, 'high': high, 'raw': line})
+
+                # Classify range candidates:
+                # Heuristics:
+                #   - weight: largest value between 30-200 OR line containing 'Weight'
+                #   - body fat mass: value between 3-80 whose high < 25
+                #   - remaining value between 10-50 could be skeletal muscle proxy if not found elsewhere.
+
+                # Explicit weight by keyword first
+                for line in lines:
+                    if re.search(r'weight', line, re.IGNORECASE):
+                        num = find_number_in_text(line)
+                        if num and 30 < num < 200:
+                            parsed_values['weight_kg'] = num
+                            break
+
+                if parsed_values['weight_kg'] is None:
+                    weight_candidate = None
+                    for c in range_candidates:
+                        if 30 < c['value'] < 200:
+                            if weight_candidate is None or c['value'] > weight_candidate['value']:
+                                weight_candidate = c
+                    if weight_candidate:
+                        parsed_values['weight_kg'] = weight_candidate['value']
+
+                # Body fat mass by low/high range characteristics
+                for c in range_candidates:
+                    if 3 < c['value'] < 80 and c['high'] and c['high'] < 25:
+                        parsed_values['body_fat_mass_kg'] = c['value']
+                        break
+
+                # Skeletal muscle mass: look for standalone number followed or preceded by fuzzy muscle label
+                muscle_label_tokens = ['ske', 'skel', 'smm', 'mus', 'musc', 'muncle', 'mast']
+                for idx, line in enumerate(lines):
+                    # standalone numeric line
+                    m_num = re.match(r'^(\d+\.?\d*)$', line.strip())
+                    if m_num:
+                        val = to_float(m_num.group(1))
+                        if not (val and 10 < val < 50):
+                            continue
+                        # check next line for fuzzy muscle label
+                        next_line = lines[idx+1].lower() if idx + 1 < len(lines) else ''
+                        prev_line = lines[idx-1].lower() if idx - 1 >= 0 else ''
+                        def has_muscle_label(t: str):
+                            return any(tok in t for tok in muscle_label_tokens)
+                        if has_muscle_label(next_line) or has_muscle_label(prev_line):
+                            parsed_values['skeletal_muscle_mass_kg'] = val
+                            break
+
+                # Fallback skeletal muscle from remaining range candidate (value 10-50 not already chosen) if still missing
+                if parsed_values['skeletal_muscle_mass_kg'] is None:
+                    for c in range_candidates:
+                        if 10 < c['value'] < 50 and c['value'] != parsed_values['body_fat_mass_kg']:
+                            parsed_values['skeletal_muscle_mass_kg'] = c['value']
+                            break
+
+                # BMI: search near 'BMI'; ignore axis tick lines (integer multiples etc > 50)
                 for i, line in enumerate(lines):
-                    if re.search(r'\bBMI\b', line, re.IGNORECASE):
-                        # BMI keyword found, look in same line and next 2 lines
-                        for j in range(i, min(i+3, len(lines))):
+                    if re.search(r'\bBMI\b', line):
+                        # look ahead a few lines for float 10-50
+                        for j in range(i, min(i+6, len(lines))):
                             num = find_number_in_text(lines[j])
-                            if num and 15 < num < 40:
-                                parsed['bmi'] = num
+                            if num and 10 < num < 50:
+                                parsed_values['bmi'] = num
                                 break
-                        if parsed['bmi']:
+                        break
+
+                # Body fat percentage: find line with % or compute from mass & weight
+                for line in lines:
+                    m_pct = re.search(r'(\d+\.?\d*)\s*%', line)
+                    if m_pct:
+                        val = to_float(m_pct.group(1))
+                        if val and 5 < val < 65:
+                            parsed_values['body_fat_percentage'] = val
                             break
-            
-                # Body Fat Percentage (체지방률): typically 5-60%
-                # User reports 37.5%
-                parsed['body_fat_percentage'] = find_by_keywords([r"체지방률", r"체지방", r"percent body fat"], unit_hint='%')
-                if not parsed['body_fat_percentage']:
-                    # Look for percentage sign with reasonable value
-                    for line in lines:
-                        m = re.search(r'(\d+\.?\d*)\s*%', line)
-                        if m:
-                            val = to_float(m.group(1))
-                            if val and 5 < val < 60:
-                                parsed['body_fat_percentage'] = val
-                                break
-            
-                # Height (신장): typically 100-250 cm
-                # User reports 156.9
-                parsed['height_cm'] = find_by_keywords([r"신장", r"키", r"height"], unit_hint='cm')
-                if not parsed['height_cm']:
-                    # Look for cm unit with reasonable value
-                    m = re.search(r'(\d+\.?\d*)\s*cm', concat, re.IGNORECASE)
-                    if m:
-                        val = to_float(m.group(1))
-                        if val and 100 < val < 250:
-                            parsed['height_cm'] = val
-            
-                # Muscle Mass (근육량): typically 15-100 kg
-                # User reports not found, so this is optional
-                parsed['muscle_mass_kg'] = find_by_keywords([r"근육량", r"muscle mass"], unit_hint='kg')
+
+                # Fallback computations
+                if parsed_values['body_fat_percentage'] is None and parsed_values['body_fat_mass_kg'] and parsed_values['weight_kg']:
+                    pct = (parsed_values['body_fat_mass_kg'] / parsed_values['weight_kg']) * 100.0
+                    if 5 < pct < 65:
+                        parsed_values['body_fat_percentage'] = round(pct, 1)
+
+                if parsed_values['bmi'] is None and parsed_values['weight_kg'] and parsed_values['height_cm']:
+                    h_m = parsed_values['height_cm'] / 100.0
+                    bmi_calc = parsed_values['weight_kg'] / (h_m * h_m)
+                    if 10 < bmi_calc < 60:
+                        parsed_values['bmi'] = round(bmi_calc, 1)
+
+                parsed.update(parsed_values)
 
             raw_lines = [{'text': it['text'], 'type': it['type'], 'confidence': it.get('confidence')} for it in items if it.get('type') == 'LINE']
 

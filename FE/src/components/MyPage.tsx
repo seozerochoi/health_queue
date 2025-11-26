@@ -207,7 +207,11 @@ export function MyPage({
       const data = await res.json();
       // prefer server-parsed values, fall back to heuristic parse of raw_lines
       const serverParsed = data.parsed || null;
-      const serverLines: string[] = data.raw_lines || [];
+      // raw_lines from backend may be array of objects: {text,type,confidence}
+      const serverLinesRaw: any[] = data.raw_lines || [];
+      const serverLines: string[] = serverLinesRaw.map((l: any) =>
+        typeof l === "string" ? l : l && typeof l.text === "string" ? l.text : ""
+      );
       const rec = data.record || null;
       if (serverParsed && Object.keys(serverParsed).length > 0) {
         setParsedResult(serverParsed);
@@ -248,7 +252,10 @@ export function MyPage({
       }
       const data = await res.json();
       const serverParsed = data.parsed || null;
-      const serverLines: string[] = data.raw_lines || [];
+      const serverLinesRaw: any[] = data.raw_lines || [];
+      const serverLines: string[] = serverLinesRaw.map((l: any) =>
+        typeof l === "string" ? l : l && typeof l.text === "string" ? l.text : ""
+      );
       const rec = data.record || null;
       setParsedResult(
         serverParsed || (serverLines.length ? parseFromLines(serverLines) : {})
