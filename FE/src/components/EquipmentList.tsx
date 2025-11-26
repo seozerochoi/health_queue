@@ -289,14 +289,16 @@ export function EquipmentList({
         };
       }
 
-      const status =
-        eq.status === "AVAILABLE"
-          ? "available"
-          : eq.status === "IN_USE"
-          ? "in-use"
-          : eq.status === "WAITING"
-          ? "waiting"
-          : "available";
+      // 백엔드 status 변환: AVAILABLE -> available, IN_USE -> in-use, WAITING -> waiting
+      let status: "available" | "in-use" | "waiting" = "available";
+      const rawStatus = (eq.status || "").toUpperCase();
+      if (rawStatus === "AVAILABLE") {
+        status = "available";
+      } else if (rawStatus === "IN_USE" || rawStatus === "IN-USE") {
+        status = "in-use";
+      } else if (rawStatus === "WAITING") {
+        status = "waiting";
+      }
 
       const imageUrl =
         eq.image_url ||
