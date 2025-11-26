@@ -1,12 +1,16 @@
 # Gunicorn configuration file
 # SSE 스트리밍 + 2core 2GB 환경 최적화 설정
 
+# PID 파일 (빠른 reload를 위해)
+pidfile = '/tmp/gunicorn.pid'
+
 # Worker 타임아웃 설정 (초 단위)
 # SSE 연결은 장시간 유지되므로 충분히 긴 시간 설정
 timeout = 300  # 5분
 
 # Graceful timeout (worker를 graceful하게 종료할 때까지 기다리는 시간)
-graceful_timeout = 300
+# ⚡ 30초로 단축: 빠른 재시작 (SSE 연결은 자동 재연결)
+graceful_timeout = 30
 
 # Worker 클래스: sync worker에 threads 추가하여 동시성 개선
 # SSE는 대부분 idle 상태이므로 thread 방식이 효율적
@@ -37,14 +41,19 @@ errorlog = '-'
 limit_request_line = 4096
 limit_request_fields = 100
 
-# Preload app (메모리 절약, 하지만 코드 변경 시 재시작 필요)
-# ⚡ 2GB RAM 환경에서 메모리 절약 위해 True 권장
-preload_app = True
+# Preload app (메모리 절약 vs 빠른 재시작 트레이드오프)
+# ⚡ False로 변경: 각 워커가 독립적으로 로드 → 재시작 빠름
+# ⚠️ 메모리는 약간 더 사용하지만, 개발/배포 시 리로드 속도 개선
+preload_app = False
 
 # Max requests per worker (메모리 누수 방지)
 # ⚡ 더 자주 재시작하여 메모리 안정성 확보
 max_requests = 500
 max_requests_jitter = 50
+
+# Worker 재시작 후 graceful shutdown
+# 기존 요청 완료 후 종료
+graceful_timeout = 30
 
 # Worker 메모리 제한 (optional, requires setproctitle)
 # 2GB 환경에서 worker당 400MB 제한 권장
