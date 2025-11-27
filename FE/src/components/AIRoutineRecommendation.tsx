@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import { ArrowLeft, Zap, Clock, CheckCircle, Dumbbell, Users } from "lucide-react";
+import { ArrowLeft, Zap, Clock, CheckCircle, Dumbbell, Users, Star } from "lucide-react";
 
 type BodyPart = "등" | "가슴" | "복근" | "힙" | "허벅지" | "종아리" | "유산소" | "어깨";
 type Intensity = "상" | "중" | "하";
@@ -37,6 +37,7 @@ export function AIRoutineRecommendation({ onBack, onReservationComplete }: AIRou
   const [intensity, setIntensity] = useState<Intensity | null>(null);
   const [recommendMethod, setRecommendMethod] = useState<RecommendMethod | null>(null);
   const [recommendedRoutine, setRecommendedRoutine] = useState<RoutineStep[]>([]);
+  const [equipmentRatings, setEquipmentRatings] = useState<{ [key: number]: number }>({});
 
   const bodyParts: BodyPart[] = ["등", "가슴", "복근", "힙", "허벅지", "종아리", "유산소", "어깨"];
   const intensities: Intensity[] = ["상", "중", "하"];
@@ -135,9 +136,18 @@ export function AIRoutineRecommendation({ onBack, onReservationComplete }: AIRou
               </div>
 
               <div className="space-y-3">
+                {/* 별점 헤더 */}
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="font-semibold text-white ml-11">추천된 기구</h3>
+                  <div className="flex items-center gap-4">
+                    <span className="font-semibold text-white mr-6">기구 추천 만족도</span>
+                    <div className="w-20"></div>
+                  </div>
+                </div>
+
                 {recommendedRoutine.map((step, index) => (
                   <div key={index} className="p-3 bg-gray-800 rounded-lg border border-gray-700">
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-center">
                       <div className="flex items-center space-x-3">
                         <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-semibold">
                           {index + 1}
@@ -153,27 +163,53 @@ export function AIRoutineRecommendation({ onBack, onReservationComplete }: AIRou
                           </div>
                         </div>
                       </div>
-                      <div className="flex flex-col items-end gap-2">
-                        <Badge 
-                          className={`${step.status === 'available' ? 
-                            'bg-green-100 text-green-700' : 
-                            'bg-yellow-100 text-yellow-700'} w-20 text-center`}
-                        >
-                          {step.status === 'available' ? '사용가능' : '대기필요'}
-                        </Badge>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="border-blue-500 text-blue-400 hover:bg-blue-500/10 h-6 text-xs px-2 w-20 justify-center"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // 줄서기 로직 (필요시 추가)
-                            console.log(`줄서기: ${step.equipment}`);
-                          }}
-                        >
-                          <Users className="h-3 w-3 mr-1" />
-                          줄서기
-                        </Button>
+                      <div className="flex items-center gap-4">
+                        {/* 별점 평가 */}
+                        <div className="flex gap-1">
+                          {[1, 2, 3, 4, 5].map((rating) => (
+                            <button
+                              key={rating}
+                              onClick={() => {
+                                setEquipmentRatings(prev => ({
+                                  ...prev,
+                                  [index]: rating
+                                }));
+                              }}
+                              className="transition-transform hover:scale-110"
+                            >
+                              <Star 
+                                className={`h-5 w-5 ${
+                                  (equipmentRatings[index] || 0) >= rating 
+                                    ? 'fill-yellow-400 text-yellow-400' 
+                                    : 'text-gray-500'
+                                }`}
+                              />
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="flex flex-col items-end gap-2">
+                          <Badge 
+                            className={`${step.status === 'available' ? 
+                              'bg-green-100 text-green-700' : 
+                              'bg-yellow-100 text-yellow-700'} w-20 text-center`}
+                          >
+                            {step.status === 'available' ? '사용가능' : '대기필요'}
+                          </Badge>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-blue-500 text-blue-400 hover:bg-blue-500/10 h-6 text-xs px-2 w-20 justify-center"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // 줄서기 로직 (필요시 추가)
+                              console.log(`줄서기: ${step.equipment}`);
+                            }}
+                          >
+                            <Users className="h-3 w-3 mr-1" />
+                            줄서기
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>

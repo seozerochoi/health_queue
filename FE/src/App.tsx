@@ -913,6 +913,7 @@ export default function App() {
       waitingCount: eq.waiting_count ?? 0,
       currentUser: eq.current_user ?? undefined,
       timeRemaining: eq.time_remaining ?? undefined,
+      operational_state: eq.operational_state || "NORMAL",
     };
   };
 
