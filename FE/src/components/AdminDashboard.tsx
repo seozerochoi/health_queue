@@ -211,6 +211,88 @@ export function AdminDashboard({
 
       console.log(`기구 ${equipmentId} 상태를 ${newStatus}로 변경 완료`);
 
+      // MAINTENANCE에서 BROKEN으로 변경 시 해당 기구의 모든 예약 취소
+      if (oldStatus === "MAINTENANCE" && newStatus === "BROKEN") {
+        console.log(`⚠️ 기구 ${equipmentId} 고장 처리 - 모든 예약 취소 시작`);
+        
+        try {
+          // 해당 기구의 모든 예약 가져오기
+          const reservationsResponse = await fetch(
+            `http://43.201.88.27/api/reservations/?equipment_id=${equipmentId}`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          );
+
+          if (reservationsResponse.ok) {
+            const reservations = await reservationsResponse.json();
+            console.log(`기구 ${equipmentId}의 예약 목록:`, reservations);
+
+            // 모든 예약 취소 (IN_USE, WAITING, NOTIFIED 상태 모두)
+            const cancelPromises = reservations
+              .filter((r: any) => 
+                r.status === "IN_USE" || 
+                r.status === "WAITING" || 
+                r.status === "NOTIFIED"
+              )
+              .map(async (reservation: any) => {
+                try {
+                  const cancelResponse = await fetch(
+                    `http://43.201.88.27/api/reservations/${reservation.id}/`,
+                    {
+                      method: "DELETE",
+                      headers: {
+                        Authorization: `Bearer ${token}`,
+                      },
+                    }
+                  );
+
+                  if (cancelResponse.ok) {
+                    console.log(`✅ 예약 ${reservation.id} (사용자: ${reservation.user}) 취소 완료`);
+                  } else {
+                    console.error(`❌ 예약 ${reservation.id} 취소 실패:`, await cancelResponse.text());
+                  }
+                } catch (err) {
+                  console.error(`❌ 예약 ${reservation.id} 취소 중 오류:`, err);
+                }
+              });
+
+            await Promise.all(cancelPromises);
+            console.log(`✅ 기구 ${equipmentId}의 모든 예약 취소 완료`);
+          }
+        } catch (err) {
+          console.error("예약 취소 중 오류:", err);
+        }
+      }
+
+      // BROKEN에서 NORMAL로 변경 시 기구 상태를 AVAILABLE로 리셋
+      if (oldStatus === "BROKEN" && newStatus === "NORMAL") {
+        console.log(`✅ 기구 ${equipmentId} 정상 복구 - AVAILABLE 상태로 변경`);
+        
+        try {
+          // 기구 상태를 AVAILABLE로 변경
+          const statusResponse = await fetch(
+            `http://43.201.88.27/api/equipment/${equipmentId}/`,
+            {
+              method: "PATCH",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ status: "AVAILABLE" }),
+            }
+          );
+
+          if (statusResponse.ok) {
+            console.log(`✅ 기구 ${equipmentId} 상태가 AVAILABLE로 변경되어 즉시 사용 가능합니다`);
+          }
+        } catch (err) {
+          console.error("기구 상태 변경 중 오류:", err);
+        }
+      }
+
       // MAINTENANCE에서 NORMAL 또는 BROKEN으로 변경 시 해당 기구의 pending 신고 자동 처리
       if (oldStatus === "MAINTENANCE" && (newStatus === "NORMAL" || newStatus === "BROKEN")) {
         // 해당 기구의 pending 상태 신고 찾기

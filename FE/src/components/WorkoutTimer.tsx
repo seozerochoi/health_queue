@@ -79,7 +79,7 @@ export function WorkoutTimer({
       });
 
       if (response.ok) {
-        console.log("✅ 운동 종료 성공 (뒤로가기)");
+        console.log("✅ 운동 종료 성공 (뒤로가기)");  
       } else {
         console.warn("운동 종료 실패 (뒤로가기):", response.status);
       }

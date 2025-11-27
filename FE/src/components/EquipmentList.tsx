@@ -32,6 +32,7 @@ interface Equipment {
   timeRemaining?: number;
   image: string;
   allocatedTime: number;
+  operational_state?: "NORMAL" | "MAINTENANCE" | "BROKEN";
 }
 
 interface EquipmentListProps {
@@ -51,7 +52,18 @@ interface EquipmentItemProps {
 }
 
 const EquipmentItemInner = ({ eq, onSelect, flashing }: EquipmentItemProps) => {
+  const isBroken = eq.operational_state === "BROKEN";
+  
   const getStatusBadgeLocal = (eq: Equipment) => {
+    // 고장 상태가 최우선
+    if (eq.operational_state === "BROKEN") {
+      return (
+        <Badge className="bg-red-600 text-white font-bold border-2 border-red-800">
+          고장! 사용 불가능
+        </Badge>
+      );
+    }
+    
     switch (eq.status) {
       case "available":
         return (
@@ -76,8 +88,12 @@ const EquipmentItemInner = ({ eq, onSelect, flashing }: EquipmentItemProps) => {
 
   return (
     <Card
-      className="hover:shadow-lg transition-shadow cursor-pointer border-gray-600 bg-card"
-      onClick={() => onSelect(eq)}
+      className={`transition-shadow border-gray-600 bg-card ${
+        isBroken 
+          ? 'opacity-60 cursor-not-allowed' 
+          : 'hover:shadow-lg cursor-pointer'
+      }`}
+      onClick={() => !isBroken && onSelect(eq)}
     >
       <CardContent className="p-4">
         <div className="flex space-x-4">
@@ -107,7 +123,7 @@ const EquipmentItemInner = ({ eq, onSelect, flashing }: EquipmentItemProps) => {
               <span>기본 할당시간: {eq.allocatedTime}분</span>
             </div>
 
-            {(eq.status === "in-use" || eq.status === "waiting") && (
+            {!isBroken && (eq.status === "in-use" || eq.status === "waiting") && (
               <div>
                 <Button
                   size="sm"
@@ -126,6 +142,14 @@ const EquipmentItemInner = ({ eq, onSelect, flashing }: EquipmentItemProps) => {
                       </span>
                     )}
                 </Button>
+              </div>
+            )}
+            
+            {isBroken && (
+              <div className="mt-2 p-2.5 bg-red-900/30 border border-red-600 rounded-lg">
+                <p className="text-red-400 text-xs font-semibold leading-tight">
+                  ⚠️ 이 기구는 현재 고장으로<br />사용할 수 없습니다.
+                </p>
               </div>
             )}
 
@@ -319,6 +343,7 @@ export function EquipmentList({
           eq.waiting_count ?? eq.waitingCount ?? eq.queue_length ?? undefined,
         currentUser: eq.current_user ?? eq.currentUser ?? undefined,
         timeRemaining: eq.time_remaining ?? eq.timeRemaining ?? undefined,
+        operational_state: eq.operational_state || "NORMAL",
       };
     };
 
