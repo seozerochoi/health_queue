@@ -169,19 +169,74 @@ class InbodyAnalyzeView(APIView):
         # INBODY_GPT_ENABLED=true면 GPT 우선 시도
         elif OpenAI and api_key:
             try:
+                # 이미지 크기 최적화 (토큰 절약)
+                from PIL import Image
+                import io
+                
+                try:
+                    img = Image.open(io.BytesIO(img_bytes))
+                    # 최대 크기 제한 (긴 쪽 기준 1024px)
+                    max_size = 1024
+                    if max(img.size) > max_size:
+                        ratio = max_size / max(img.size)
+                        new_size = tuple(int(dim * ratio) for dim in img.size)
+                        img = img.resize(new_size, Image.Resampling.LANCZOS)
+                        
+                        # 리사이즈된 이미지를 bytes로 변환
+                        buffer = io.BytesIO()
+                        img.save(buffer, format='JPEG', quality=85)
+                        img_bytes_optimized = buffer.getvalue()
+                        logger.info(f"📐 이미지 리사이즈: 원본 {len(img_bytes)} bytes → {len(img_bytes_optimized)} bytes")
+                        img_bytes = img_bytes_optimized
+                except Exception as resize_error:
+                    logger.warning(f"이미지 리사이즈 실패, 원본 사용: {resize_error}")
+                
                 b64 = base64.b64encode(img_bytes).decode('utf-8')
                 client = OpenAI(api_key=api_key)
 
                 system_prompt = (
-                    "당신은 인바디 결과표 이미지를 구조화된 데이터로 추출하는 도우미입니다. "
-                    "숫자만 추출하여 JSON으로 반환하세요. 단위는 다음 규칙을 따르세요: "
-                    "weight_kg(kg), body_fat_percentage(%), skeletal_muscle_mass_kg(kg), bmi(값), "
-                    "height_cm(cm, 선택), body_fat_mass_kg(kg, 선택), muscle_mass_kg(kg, 선택). "
-                    "반드시 JSON만 출력하고 설명, 코드블록, 기타 텍스트는 금지합니다."
+                    "당신은 인바디(InBody) 체성분 분석 결과지를 정확하게 읽는 전문가입니다.\n"
+                    "다양한 인바디 모델(270, 770 등)의 결과지를 모두 정확하게 파싱할 수 있습니다.\n\n"
+                    "핵심 추출 규칙:\n"
+                    "1. **체중(kg)**: '체성분분석' 또는 'Body Composition Analysis' 섹션의 체중 측정값\n"
+                    "   - '적정체중', '체중조절량', '목표체중' 등은 무시\n"
+                    "   - 보통 30-200kg 범위\n\n"
+                    "2. **골격근량(kg)**: 'Skeletal Muscle Mass' 또는 '골격근량'\n"
+                    "   - '근육량(Muscle Mass)'와 혼동하지 말 것\n"
+                    "   - 보통 10-50kg 범위\n\n"
+                    "3. **체지방량(kg)**: 'Body Fat Mass' 또는 '체지방량'\n"
+                    "   - 보통 3-80kg 범위\n\n"
+                    "4. **체지방률(%)**: 'Percent Body Fat' 또는 '체지방률'\n"
+                    "   - % 기호와 함께 표시됨\n"
+                    "   - 보통 5-65% 범위\n\n"
+                    "5. **BMI**: 'Body Mass Index' 또는 'BMI'\n"
+                    "   - 비만도 지수\n"
+                    "   - 보통 10-50 범위\n\n"
+                    "6. **키(cm)**: 상단 기본정보의 '신장' 또는 'Height'\n"
+                    "   - 보통 100-230cm 범위\n\n"
+                    "주의: 괄호 안의 권장 범위나 표준값은 무시하고, 실제 측정된 현재 값만 추출하세요.\n"
+                    "반드시 JSON 형식으로만 출력하고, 코드블록(```)이나 설명은 포함하지 마세요."
                 )
 
                 user_prompt = (
-                    "이미지에서 다음 항목을 찾아서 숫자만 반환:")
+                    "이 인바디 결과지에서 현재 측정된 값만 추출하여 JSON으로 반환하세요:\n\n"
+                    "{\n"
+                    '  "weight_kg": 체중(현재값, 적정체중 아님),\n'
+                    '  "skeletal_muscle_mass_kg": 골격근량(근육량 아님),\n'
+                    '  "body_fat_mass_kg": 체지방량,\n'
+                    '  "body_fat_percentage": 체지방률,\n'
+                    '  "bmi": BMI,\n'
+                    '  "height_cm": 키\n'
+                    "}\n\n"
+                    "예시 구분:\n"
+                    "- 77.4 kg (체중조절 표준범위: 59.2-80.2) → weight_kg: 77.4 (현재값)\n"
+                    "- 38.4 kg (골격근량) → skeletal_muscle_mass_kg: 38.4\n"
+                    "- 10.2 kg (체지방량) → body_fat_mass_kg: 10.2\n"
+                    "- 13.2% (체지방률) → body_fat_percentage: 13.2\n"
+                    "- BMI 24.4 → bmi: 24.4\n"
+                    "- 178cm → height_cm: 178\n\n"
+                    "숫자만 추출하고, 괄호 안 권장값은 무시하세요."
+                )
 
                 # Use Chat Completions with multimodal content (gpt-4o-mini)
                 resp = client.chat.completions.create(
