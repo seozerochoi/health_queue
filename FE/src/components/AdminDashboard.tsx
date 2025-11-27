@@ -34,6 +34,8 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "./ui/chart";
 import {
   BarChart as RBarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -672,52 +674,29 @@ export function AdminDashboard({
               </div>
             </CardHeader>
             <CardContent>
-              <div className="w-full h-[500px] bg-gray-900 rounded-lg p-4">
-                {/* Hardcoded bar chart visualization */}
-                <div className="h-full flex flex-col">
-                  <div className="text-gray-300 text-sm mb-4 font-medium">
-                    이용률 (%)
-                  </div>
-                  <div
-                    className="flex items-end justify-between gap-2"
-                    style={{ height: "420px" }}
-                  >
-                    {[
-                      { hour: "06:00", rate: 53 },
-                      { hour: "07:00", rate: 42 },
-                      { hour: "08:00", rate: 12 },
-                      { hour: "09:00", rate: 37 },
-                      { hour: "10:00", rate: 50 },
-                      { hour: "11:00", rate: 66 },
-                      { hour: "12:00", rate: 20 },
-                      { hour: "13:00", rate: 55 },
-                      { hour: "14:00", rate: 68 },
-                      { hour: "15:00", rate: 72 },
-                      { hour: "16:00", rate: 78 },
-                      { hour: "17:00", rate: 85 },
-                      { hour: "18:00", rate: 92 },
-                      { hour: "19:00", rate: 88 },
-                      { hour: "20:00", rate: 75 },
-                      { hour: "21:00", rate: 62 },
-                      { hour: "22:00", rate: 45 },
-                      { hour: "23:00", rate: 28 },
-                    ].map((item) => (
-                      <div
-                        key={item.hour}
-                        className="flex-1 flex flex-col items-center justify-end"
-                        style={{ height: "100%" }}
-                      >
-                        <div
-                          className="w-full bg-blue-500 rounded-t transition-all hover:bg-blue-400 cursor-pointer"
-                          style={{
-                            height: `${item.rate}%`,
-                          }}
-                          title={`${item.hour}: ${item.rate}%`}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              <div style={{ width: "100%", height: "450px" }}>
+                <HourlyUsageChart
+                  data={[
+                    { hour: "6", rate: 53 },
+                    { hour: "7", rate: 42 },
+                    { hour: "8", rate: 12 },
+                    { hour: "9", rate: 37 },
+                    { hour: "10", rate: 50 },
+                    { hour: "11", rate: 66 },
+                    { hour: "12", rate: 20 },
+                    { hour: "13", rate: 55 },
+                    { hour: "14", rate: 68 },
+                    { hour: "15", rate: 72 },
+                    { hour: "16", rate: 78 },
+                    { hour: "17", rate: 85 },
+                    { hour: "18", rate: 92 },
+                    { hour: "19", rate: 88 },
+                    { hour: "20", rate: 75 },
+                    { hour: "21", rate: 62 },
+                    { hour: "22", rate: 45 },
+                    { hour: "23", rate: 28 },
+                  ]}
+                />
               </div>
             </CardContent>
           </Card>
@@ -1185,33 +1164,52 @@ export function AdminDashboard({
 type HourlyDatum = { hour: string; rate: number };
 function HourlyUsageChart({ data }: { data: HourlyDatum[] }) {
   const config = { rate: { label: "이용률", color: "#10b981" } } as const;
+
   return (
     <ChartContainer config={config} className="w-full h-full">
-      <RBarChart
+      <LineChart
         data={data}
-        margin={{ top: 20, right: 20, left: 20, bottom: 20 }}
+        margin={{ top: 20, right: 30, left: 10, bottom: 30 }}
       >
-        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+        <CartesianGrid
+          strokeDasharray="3 3"
+          stroke="#374151"
+          vertical={false}
+        />
         <XAxis
           dataKey="hour"
-          tick={{ fill: "#9ca3af", fontSize: 13 }}
+          tick={{ fill: "#9ca3af", fontSize: 14 }}
           stroke="#6b7280"
-        />
-        <YAxis
-          domain={[0, 100]}
-          tickFormatter={(v) => `${v}%`}
-          tick={{ fill: "#9ca3af", fontSize: 13 }}
-          stroke="#6b7280"
+          ticks={["6", "9", "12", "15", "18", "21", "23"]}
+          padding={{ left: 20, right: 20 }}
           label={{
-            value: "이용률 (%)",
-            angle: -90,
-            position: "insideLeft",
+            value: "시간",
+            position: "insideBottom",
+            offset: -15,
             fill: "#9ca3af",
           }}
         />
-        <ChartTooltip content={<ChartTooltipContent />} />
-        <Bar dataKey="rate" fill="#10b981" radius={[4, 4, 0, 0]} />
-      </RBarChart>
+        <YAxis
+          domain={[0, 100]}
+          ticks={[0, 20, 40, 60, 80, 100]}
+          tickFormatter={(v) => `${v}%`}
+          tick={{ fill: "#9ca3af", fontSize: 14 }}
+          stroke="#6b7280"
+          width={50}
+        />
+        <ChartTooltip
+          content={<ChartTooltipContent />}
+          labelFormatter={(label) => `${label}시`}
+        />
+        <Line
+          type="monotone"
+          dataKey="rate"
+          stroke="#10b981"
+          strokeWidth={3}
+          dot={{ fill: "#10b981", r: 5 }}
+          activeDot={{ r: 7 }}
+        />
+      </LineChart>
     </ChartContainer>
   );
 }
