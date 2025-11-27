@@ -21,7 +21,13 @@ import {
   SelectValue,
 } from "./ui/select";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "./ui/chart";
-import { BarChart as RBarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import {
+  BarChart as RBarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+} from "recharts";
 
 interface Report {
   id: string;
@@ -112,7 +118,7 @@ export function AdminDashboard({
         // 먼저 상태별로 정렬 (pending이 먼저)
         if (a.status === "pending" && b.status !== "pending") return -1;
         if (a.status !== "pending" && b.status === "pending") return 1;
-        
+
         // 같은 상태 내에서는 최신순 정렬 (최근 것이 먼저)
         return b.createdAt.getTime() - a.createdAt.getTime();
       });
@@ -188,11 +194,11 @@ export function AdminDashboard({
   ) => {
     try {
       const token = localStorage.getItem("access_token");
-      
+
       // 현재 기구의 상태 확인
-      const currentEquipment = equipmentList.find(e => e.id === equipmentId);
+      const currentEquipment = equipmentList.find((e) => e.id === equipmentId);
       const oldStatus = currentEquipment?.operational_state;
-      
+
       const response = await fetch(
         `http://43.201.88.27/api/equipment/${equipmentId}/`,
         {
@@ -214,7 +220,7 @@ export function AdminDashboard({
       // MAINTENANCE에서 BROKEN으로 변경 시 해당 기구의 모든 예약 취소
       if (oldStatus === "MAINTENANCE" && newStatus === "BROKEN") {
         console.log(`⚠️ 기구 ${equipmentId} 고장 처리 - 모든 예약 취소 시작`);
-        
+
         try {
           // 해당 기구의 모든 예약 가져오기
           const reservationsResponse = await fetch(
@@ -232,10 +238,11 @@ export function AdminDashboard({
 
             // 모든 예약 취소 (IN_USE, WAITING, NOTIFIED 상태 모두)
             const cancelPromises = reservations
-              .filter((r: any) => 
-                r.status === "IN_USE" || 
-                r.status === "WAITING" || 
-                r.status === "NOTIFIED"
+              .filter(
+                (r: any) =>
+                  r.status === "IN_USE" ||
+                  r.status === "WAITING" ||
+                  r.status === "NOTIFIED"
               )
               .map(async (reservation: any) => {
                 try {
@@ -250,9 +257,14 @@ export function AdminDashboard({
                   );
 
                   if (cancelResponse.ok) {
-                    console.log(`✅ 예약 ${reservation.id} (사용자: ${reservation.user}) 취소 완료`);
+                    console.log(
+                      `✅ 예약 ${reservation.id} (사용자: ${reservation.user}) 취소 완료`
+                    );
                   } else {
-                    console.error(`❌ 예약 ${reservation.id} 취소 실패:`, await cancelResponse.text());
+                    console.error(
+                      `❌ 예약 ${reservation.id} 취소 실패:`,
+                      await cancelResponse.text()
+                    );
                   }
                 } catch (err) {
                   console.error(`❌ 예약 ${reservation.id} 취소 중 오류:`, err);
@@ -270,7 +282,7 @@ export function AdminDashboard({
       // BROKEN에서 NORMAL로 변경 시 기구 상태를 AVAILABLE로 리셋
       if (oldStatus === "BROKEN" && newStatus === "NORMAL") {
         console.log(`✅ 기구 ${equipmentId} 정상 복구 - AVAILABLE 상태로 변경`);
-        
+
         try {
           // 기구 상태를 AVAILABLE로 변경
           const statusResponse = await fetch(
@@ -286,7 +298,9 @@ export function AdminDashboard({
           );
 
           if (statusResponse.ok) {
-            console.log(`✅ 기구 ${equipmentId} 상태가 AVAILABLE로 변경되어 즉시 사용 가능합니다`);
+            console.log(
+              `✅ 기구 ${equipmentId} 상태가 AVAILABLE로 변경되어 즉시 사용 가능합니다`
+            );
           }
         } catch (err) {
           console.error("기구 상태 변경 중 오류:", err);
@@ -294,12 +308,17 @@ export function AdminDashboard({
       }
 
       // MAINTENANCE에서 NORMAL 또는 BROKEN으로 변경 시 해당 기구의 pending 신고 자동 처리
-      if (oldStatus === "MAINTENANCE" && (newStatus === "NORMAL" || newStatus === "BROKEN")) {
+      if (
+        oldStatus === "MAINTENANCE" &&
+        (newStatus === "NORMAL" || newStatus === "BROKEN")
+      ) {
         // 해당 기구의 pending 상태 신고 찾기
         const pendingReport = reports.find(
-          r => r.equipment === (equipmentName || currentEquipment?.name) && r.status === "pending"
+          (r) =>
+            r.equipment === (equipmentName || currentEquipment?.name) &&
+            r.status === "pending"
         );
-        
+
         if (pendingReport) {
           console.log(`자동으로 신고 ${pendingReport.id} 처리 중...`);
           await handleResolveReport(pendingReport.id);
@@ -327,9 +346,11 @@ export function AdminDashboard({
     if (!token) return;
 
     console.log("🔔 [AdminDashboard] 운영자 알림 SSE 연결 시작");
-    
+
     const eventSource = new EventSource(
-      `http://43.201.88.27/api/equipment/operator-notifications/?access_token=${encodeURIComponent(token)}`
+      `http://43.201.88.27/api/operator-notifications/?access_token=${encodeURIComponent(
+        token
+      )}`
     );
 
     eventSource.onopen = () => {
@@ -344,14 +365,16 @@ export function AdminDashboard({
       try {
         const data = JSON.parse(event.data);
         console.log("📢 [AdminDashboard] 새 신고 알림:", data);
-        
+
         // 신고 목록 새로고침
         fetchReports(true);
-        
+
         // 알림 표시 (선택사항)
         if (Notification.permission === "granted") {
           new Notification("새 신고 접수", {
-            body: `${data.reporter_username}님이 ${data.equipment_name || "기구"} 신고를 제출했습니다.`,
+            body: `${data.reporter_username}님이 ${
+              data.equipment_name || "기구"
+            } 신고를 제출했습니다.`,
             icon: "/icon.png",
           });
         }
@@ -481,7 +504,9 @@ export function AdminDashboard({
           <Card className="border-gray-600 bg-card mb-6">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="text-white">시간대별 이용률 통계</CardTitle>
+                <CardTitle className="text-white">
+                  시간대별 이용률 통계
+                </CardTitle>
                 <Button
                   size="sm"
                   variant="outline"
@@ -496,33 +521,42 @@ export function AdminDashboard({
               <div className="w-full h-[500px] bg-gray-900 rounded-lg p-4">
                 {/* Hardcoded bar chart visualization */}
                 <div className="h-full flex flex-col">
-                  <div className="text-gray-300 text-sm mb-4 font-medium">이용률 (%)</div>
-                  <div className="flex items-end justify-between gap-2" style={{ height: '420px' }}>
+                  <div className="text-gray-300 text-sm mb-4 font-medium">
+                    이용률 (%)
+                  </div>
+                  <div
+                    className="flex items-end justify-between gap-2"
+                    style={{ height: "420px" }}
+                  >
                     {[
-                      { hour: '06:00', rate: 53 },
-                      { hour: '07:00', rate: 42 },
-                      { hour: '08:00', rate: 12 },
-                      { hour: '09:00', rate: 37 },
-                      { hour: '10:00', rate: 50 },
-                      { hour: '11:00', rate: 66 },
-                      { hour: '12:00', rate: 20 },
-                      { hour: '13:00', rate: 55 },
-                      { hour: '14:00', rate: 68 },
-                      { hour: '15:00', rate: 72 },
-                      { hour: '16:00', rate: 78 },
-                      { hour: '17:00', rate: 85 },
-                      { hour: '18:00', rate: 92 },
-                      { hour: '19:00', rate: 88 },
-                      { hour: '20:00', rate: 75 },
-                      { hour: '21:00', rate: 62 },
-                      { hour: '22:00', rate: 45 },
-                      { hour: '23:00', rate: 28 },
+                      { hour: "06:00", rate: 53 },
+                      { hour: "07:00", rate: 42 },
+                      { hour: "08:00", rate: 12 },
+                      { hour: "09:00", rate: 37 },
+                      { hour: "10:00", rate: 50 },
+                      { hour: "11:00", rate: 66 },
+                      { hour: "12:00", rate: 20 },
+                      { hour: "13:00", rate: 55 },
+                      { hour: "14:00", rate: 68 },
+                      { hour: "15:00", rate: 72 },
+                      { hour: "16:00", rate: 78 },
+                      { hour: "17:00", rate: 85 },
+                      { hour: "18:00", rate: 92 },
+                      { hour: "19:00", rate: 88 },
+                      { hour: "20:00", rate: 75 },
+                      { hour: "21:00", rate: 62 },
+                      { hour: "22:00", rate: 45 },
+                      { hour: "23:00", rate: 28 },
                     ].map((item) => (
-                      <div key={item.hour} className="flex-1 flex flex-col items-center justify-end" style={{ height: '100%' }}>
+                      <div
+                        key={item.hour}
+                        className="flex-1 flex flex-col items-center justify-end"
+                        style={{ height: "100%" }}
+                      >
                         <div
                           className="w-full bg-blue-500 rounded-t transition-all hover:bg-blue-400 cursor-pointer"
-                          style={{ 
-                            height: `${item.rate}%`
+                          style={{
+                            height: `${item.rate}%`,
                           }}
                           title={`${item.hour}: ${item.rate}%`}
                         />
@@ -569,8 +603,12 @@ export function AdminDashboard({
                     onClick={handleManualRefresh}
                     disabled={isRefreshing}
                   >
-                    <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                    {isRefreshing ? '새로고침 중...' : '새로고침'}
+                    <RefreshCw
+                      className={`h-4 w-4 mr-2 ${
+                        isRefreshing ? "animate-spin" : ""
+                      }`}
+                    />
+                    {isRefreshing ? "새로고침 중..." : "새로고침"}
                   </Button>
                 </div>
               </CardHeader>
@@ -623,8 +661,9 @@ export function AdminDashboard({
                             <div className="flex items-center gap-2">
                               <Select
                                 value={
-                                  equipmentList.find((e) => e.name === report.equipment)
-                                    ?.operational_state
+                                  equipmentList.find(
+                                    (e) => e.name === report.equipment
+                                  )?.operational_state
                                 }
                                 onValueChange={(value) => {
                                   const equipment = equipmentList.find(
@@ -633,7 +672,10 @@ export function AdminDashboard({
                                   if (equipment) {
                                     handleChangeEquipmentStatus(
                                       equipment.id,
-                                      value as "NORMAL" | "MAINTENANCE" | "BROKEN",
+                                      value as
+                                        | "NORMAL"
+                                        | "MAINTENANCE"
+                                        | "BROKEN",
                                       report.equipment
                                     );
                                   }
@@ -643,13 +685,22 @@ export function AdminDashboard({
                                   <SelectValue placeholder="상태 변경" />
                                 </SelectTrigger>
                                 <SelectContent className="bg-gray-800 border-gray-600">
-                                  <SelectItem value="NORMAL" className="text-green-400">
+                                  <SelectItem
+                                    value="NORMAL"
+                                    className="text-green-400"
+                                  >
                                     정상
                                   </SelectItem>
-                                  <SelectItem value="MAINTENANCE" className="text-yellow-400">
+                                  <SelectItem
+                                    value="MAINTENANCE"
+                                    className="text-yellow-400"
+                                  >
                                     점검중
                                   </SelectItem>
-                                  <SelectItem value="BROKEN" className="text-red-400">
+                                  <SelectItem
+                                    value="BROKEN"
+                                    className="text-red-400"
+                                  >
                                     고장
                                   </SelectItem>
                                 </SelectContent>
@@ -713,7 +764,8 @@ export function AdminDashboard({
                               className={
                                 equipment.operational_state === "NORMAL"
                                   ? "bg-green-900/50 text-green-300 border-green-700 mt-1"
-                                  : equipment.operational_state === "MAINTENANCE"
+                                  : equipment.operational_state ===
+                                    "MAINTENANCE"
                                   ? "bg-yellow-900/50 text-yellow-300 border-yellow-700 mt-1"
                                   : "bg-red-900/50 text-red-300 border-red-700 mt-1"
                               }
@@ -740,13 +792,22 @@ export function AdminDashboard({
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent className="bg-gray-800 border-gray-600">
-                                <SelectItem value="NORMAL" className="text-green-400">
+                                <SelectItem
+                                  value="NORMAL"
+                                  className="text-green-400"
+                                >
                                   정상
                                 </SelectItem>
-                                <SelectItem value="MAINTENANCE" className="text-yellow-400">
+                                <SelectItem
+                                  value="MAINTENANCE"
+                                  className="text-yellow-400"
+                                >
                                   점검중
                                 </SelectItem>
-                                <SelectItem value="BROKEN" className="text-red-400">
+                                <SelectItem
+                                  value="BROKEN"
+                                  className="text-red-400"
+                                >
                                   고장
                                 </SelectItem>
                               </SelectContent>
@@ -800,19 +861,27 @@ function HourlyUsageChart({ data }: { data: HourlyDatum[] }) {
   const config = { rate: { label: "이용률", color: "#10b981" } } as const;
   return (
     <ChartContainer config={config} className="w-full h-full">
-      <RBarChart data={data} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
+      <RBarChart
+        data={data}
+        margin={{ top: 20, right: 20, left: 20, bottom: 20 }}
+      >
         <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-        <XAxis 
-          dataKey="hour" 
-          tick={{ fill: '#9ca3af', fontSize: 13 }} 
+        <XAxis
+          dataKey="hour"
+          tick={{ fill: "#9ca3af", fontSize: 13 }}
           stroke="#6b7280"
         />
-        <YAxis 
-          domain={[0, 100]} 
-          tickFormatter={(v) => `${v}%`} 
-          tick={{ fill: '#9ca3af', fontSize: 13 }}
+        <YAxis
+          domain={[0, 100]}
+          tickFormatter={(v) => `${v}%`}
+          tick={{ fill: "#9ca3af", fontSize: 13 }}
           stroke="#6b7280"
-          label={{ value: '이용률 (%)', angle: -90, position: 'insideLeft', fill: '#9ca3af' }}
+          label={{
+            value: "이용률 (%)",
+            angle: -90,
+            position: "insideLeft",
+            fill: "#9ca3af",
+          }}
         />
         <ChartTooltip content={<ChartTooltipContent />} />
         <Bar dataKey="rate" fill="#10b981" radius={[4, 4, 0, 0]} />

@@ -9,7 +9,8 @@ router = DefaultRouter()
 router.register(r'equipment', EquipmentViewSet, basename='equipment')
 
 urlpatterns = [
+    # SSE 스트림은 DRF 라우터보다 먼저 매칭되도록 상단에 배치
     path('equipment/stream/', equipment_stream, name='equipment-stream'),
-    path('equipment/operator-notifications/', operator_notification_stream, name='operator-notifications'),
+    path('operator-notifications/', operator_notification_stream, name='operator-notifications'),
     path('', include(router.urls)),
 ]

@@ -2,6 +2,7 @@ import logging
 logger = logging.getLogger(__name__)
 from django.shortcuts import render, get_object_or_404
 from django.db import transaction
+from django.views.decorators.csrf import csrf_exempt
 # equipment/views.py
 
 from rest_framework import viewsets, status
@@ -464,6 +465,7 @@ def equipment_stream(request):
     return response
 
 
+@csrf_exempt
 def operator_notification_stream(request):
     """
     운영자 전용 SSE 엔드포인트. 신고, 기구 고장 등의 알림을 실시간으로 전송합니다.
