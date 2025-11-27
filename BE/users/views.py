@@ -160,16 +160,14 @@ class InbodyAnalyzeView(APIView):
 
         # Try GPT Vision first (if OPENAI_API_KEY is configured); fallback to AWS Rekognition heuristic
         api_key = os.getenv('OPENAI_API_KEY') or getattr(settings, 'OPENAI_API_KEY', None)
-        use_gpt = getattr(settings, 'INBODY_GPT_ENABLED', False)
+        use_gpt = getattr(settings, 'INBODY_GPT_ENABLED', True)  # 기본값 True
         
-        # Check configuration and provide clear error messages
-        if use_gpt and not api_key:
-            return Response({
-                'detail': 'INBODY_GPT_ENABLED is true but OPENAI_API_KEY is not configured. '
-                          'Please set OPENAI_API_KEY or disable GPT by setting INBODY_GPT_ENABLED=false'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        if OpenAI and api_key and use_gpt:
+        # INBODY_GPT_ENABLED=false면 바로 AWS Rekognition 사용
+        if not use_gpt:
+            logger.info("ℹ️ INBODY_GPT_ENABLED=false, AWS Rekognition으로 분석")
+            # Skip GPT, go directly to Rekognition fallback below
+        # INBODY_GPT_ENABLED=true면 GPT 우선 시도
+        elif OpenAI and api_key:
             try:
                 b64 = base64.b64encode(img_bytes).decode('utf-8')
                 client = OpenAI(api_key=api_key)
@@ -251,19 +249,13 @@ class InbodyAnalyzeView(APIView):
 
             except Exception as e:
                 logger.exception('Inbody analyze via GPT failed; falling back to Rekognition')
-                # If GPT is explicitly enabled, return error instead of silent fallback
-                if use_gpt:
-                    import traceback
-                    error_detail = str(e)
-                    stack_trace = traceback.format_exc()
-                    logger.error(f"GPT Vision Error Detail: {error_detail}\n{stack_trace}")
-                    return Response({
-                        'detail': f'GPT Vision analysis failed: {error_detail}',
-                        'error_type': type(e).__name__,
-                        'hint': 'Check OPENAI_API_KEY validity and account credits. '
-                                'You can disable GPT by setting INBODY_GPT_ENABLED=false to use AWS Rekognition instead.'
-                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                # continue to Rekognition fallback only if GPT is not explicitly enabled
+                # GPT 실패 시 자동으로 AWS Rekognition으로 폴백
+                logger.warning(f"⚠️ GPT Vision 실패 (크레딧 부족 또는 오류), AWS Rekognition으로 폴백: {str(e)}")
+                # continue to Rekognition fallback below
+        else:
+            # GPT가 활성화되어 있지만 API 키가 없는 경우
+            if use_gpt:
+                logger.warning("⚠️ INBODY_GPT_ENABLED=true이지만 OPENAI_API_KEY가 없음, AWS Rekognition 사용")
 
         # Fallback: AWS Rekognition OCR + heuristics
         try:
