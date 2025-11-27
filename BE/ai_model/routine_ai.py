@@ -33,23 +33,38 @@ class RoutineRanker:
         self.criterion = nn.MSELoss()
 
     def _extract_features(self, user_profile, equipment):
-        """DB 데이터를 AI가 이해하는 텐서(숫자 배열)로 변환"""
+        """DB 데이터를 AI가 이해하는 텐서(숫자 배열)로 변환
+        
+        기존 DB 구조에 맞춰 매핑:
+        - user_profile: users.models.UserProfile
+        - equipment: equipment.models.Equipment
+        """
+        # gender: MALE=0, FEMALE=1로 변환
+        gender_numeric = 1 if user_profile.gender == 'FEMALE' else 0
+        
+        # goal: DIET=0, BULK_UP=1로 변환
+        goal_numeric = 1 if user_profile.goal == 'BULK_UP' else 0
+        
+        # body_part: UPPER=0, LOWER=1, 나머지=2로 변환
+        body_part_upper = 1.0 if equipment.body_part == 'UPPER' else 0.0
+        body_part_lower = 1.0 if equipment.body_part == 'LOWER' else 0.0
+        
         features = [
-            # User Features
-            user_profile.inbody_score / 100.0,
-            user_profile.fat_rate / 50.0,
-            user_profile.muscle_mass / 50.0,
-            user_profile.gender,
-            user_profile.goal,
-            user_profile.r_arm / 100.0,
-            user_profile.trunk / 100.0,
-            user_profile.r_leg / 100.0,
+            # User Features (InBody 데이터)
+            user_profile.inbody_score / 100.0 if user_profile.inbody_score else 0.5,
+            user_profile.body_fat_percentage / 50.0 if user_profile.body_fat_percentage else 0.5,
+            user_profile.skeletal_muscle_mass / 50.0 if user_profile.skeletal_muscle_mass else 0.5,
+            gender_numeric,
+            goal_numeric,
+            user_profile.right_arm_muscle / 100.0 if user_profile.right_arm_muscle else 0.5,
+            user_profile.trunk_muscle / 100.0 if user_profile.trunk_muscle else 0.5,
+            user_profile.right_leg_muscle / 100.0 if user_profile.right_leg_muscle else 0.5,
             
             # Equipment Features
-            equipment.main_part, # 0 or 1
+            body_part_upper,
+            body_part_lower,
             1.0 if equipment.difficulty == 'HIGH' else 0.0,
             1.0 if equipment.difficulty == 'LOW' else 0.0,
-            1.0 # Bias term
         ]
         return torch.FloatTensor(features)
 
