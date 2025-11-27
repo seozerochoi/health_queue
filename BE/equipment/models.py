@@ -89,10 +89,16 @@ class Equipment(models.Model):
         default='MID',
         help_text="운동 난이도 (상/중/하)"
     )
-    # 유효 조합 맵
+    # 유효 조합 맵: body_part별로 허용되는 subcategory 그룹
     SUBCATEGORY_BY_BODY_PART = {
-        'UPPER': {c for c, _ in SUBCATEGORY_CHOICES if c.startswith('UPPER_')},
-        'LOWER': {c for c, _ in SUBCATEGORY_CHOICES if c.startswith('LOWER_')},
+        'UPPER': {
+            'CHEST_PRESS_MAIN', 'CHEST_PRESS_UPPER', 'CHEST_FLY',
+            'BACK_PULL_VERTICAL', 'BACK_ROW_HORIZONTAL',
+            'SHOULDER_PRESS', 'SHOULDER_SIDE'
+        },
+        'LOWER': {
+            'LEG_PRESS_MAIN', 'LEG_EXTENSION', 'LEG_CURL'
+        },
         'CORE': set(),
         'CARDIO': set(),
         'ETC': set(),
@@ -107,17 +113,15 @@ class Equipment(models.Model):
 
     def clean(self):
         """body_part와 subcategory의 유효 조합을 검증합니다."""
-        allowed = self.SUBCATEGORY_BY_BODY_PART.get(self.body_part, set())
-        # 상체/하체: 하위 카테고리 필수 및 허용된 값만 가능
-        if self.body_part in ('UPPER', 'LOWER'):
-            if not self.subcategory:
-                raise ValidationError({'subcategory': '상체/하체 선택 시 세부 부위를 반드시 지정해야 합니다.'})
-            if self.subcategory not in allowed:
+        # subcategory는 선택사항 (NULL 허용)
+        # 만약 subcategory가 지정된 경우에만 body_part와의 조합을 검증
+        if self.subcategory:
+            allowed = self.SUBCATEGORY_BY_BODY_PART.get(self.body_part, set())
+            if self.body_part in ('UPPER', 'LOWER') and self.subcategory not in allowed:
                 raise ValidationError({'subcategory': '선택한 상/하체와 세부 부위 조합이 올바르지 않습니다.'})
-        else:
-            # 코어/유산소/기타: 세부 부위는 비워두어야 함
-            if self.subcategory:
-                raise ValidationError({'subcategory': '코어/유산소/기타 카테고리에서는 세부 부위를 비워두세요.'})
+            elif self.body_part not in ('UPPER', 'LOWER'):
+                # 코어/유산소/기타에서는 subcategory를 비워두는 것을 권장 (하지만 강제는 아님)
+                pass
 
 
 # Signal to automatically publish SSE events when Equipment status changes

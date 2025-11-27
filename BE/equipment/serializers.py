@@ -17,15 +17,11 @@ class EquipmentSerializer(serializers.ModelSerializer):
         body_part = attrs.get('body_part', getattr(self.instance, 'body_part', None))
         subcategory = attrs.get('subcategory', getattr(self.instance, 'subcategory', None))
 
-        allowed = Equipment.SUBCATEGORY_BY_BODY_PART.get(body_part, set())
-
-        if body_part in ('UPPER', 'LOWER'):
-            if not subcategory:
-                raise serializers.ValidationError({'subcategory': '상체/하체 선택 시 세부 부위를 반드시 지정해야 합니다.'})
-            if subcategory not in allowed:
+        # subcategory는 선택사항 (NULL 허용)
+        # 만약 subcategory가 지정된 경우에만 body_part와의 조합을 검증
+        if subcategory:
+            allowed = Equipment.SUBCATEGORY_BY_BODY_PART.get(body_part, set())
+            if body_part in ('UPPER', 'LOWER') and subcategory not in allowed:
                 raise serializers.ValidationError({'subcategory': '선택한 상/하체와 세부 부위 조합이 올바르지 않습니다.'})
-        else:
-            if subcategory:
-                raise serializers.ValidationError({'subcategory': '코어/유산소/기타 카테고리에서는 세부 부위를 비워두세요.'})
 
         return attrs

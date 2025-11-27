@@ -298,7 +298,7 @@ class EquipmentViewSet(viewsets.ModelViewSet):
             return Response({"detail": "운영자 권한이 필요합니다."}, status=status.HTTP_403_FORBIDDEN)
 
         required_fields = [
-            'name', 'type', 'subcategory', 'difficulty'
+            'name', 'type', 'difficulty'
         ]
         missing = [f for f in required_fields if not request.data.get(f)]
         if missing:
