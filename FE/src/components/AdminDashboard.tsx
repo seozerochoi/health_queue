@@ -12,6 +12,13 @@ import {
   BarChart3,
   LogOut,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "./ui/chart";
 import { BarChart as RBarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
@@ -32,6 +39,15 @@ interface Usage {
   satisfaction: number;
 }
 
+interface EquipmentItem {
+  id: number;
+  name: string;
+  type: string;
+  status: string;
+  operational_state: "NORMAL" | "MAINTENANCE" | "BROKEN";
+  image?: string;
+}
+
 interface AdminDashboardProps {
   onBack: () => void;
   gymName?: string;
@@ -45,6 +61,8 @@ export function AdminDashboard({
 }: AdminDashboardProps) {
   const [reports, setReports] = useState<Report[]>([]);
   const [isLoadingReports, setIsLoadingReports] = useState(false);
+  const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>([]);
+  const [isLoadingEquipment, setIsLoadingEquipment] = useState(false);
 
   // 신고 목록 가져오기
   const fetchReports = async () => {
@@ -121,9 +139,68 @@ export function AdminDashboard({
     }
   };
 
-  // 컴포넌트 마운트 시 신고 목록 가져오기
+  // 기구 목록 가져오기
+  const fetchEquipment = async () => {
+    setIsLoadingEquipment(true);
+    try {
+      const token = localStorage.getItem("access_token");
+      const response = await fetch("http://43.201.88.27/api/equipment/", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("기구 목록 조회 실패");
+      }
+
+      const data = await response.json();
+      console.log("기구 목록 API 응답:", data);
+      setEquipmentList(data);
+    } catch (error) {
+      console.error("기구 목록 조회 에러:", error);
+    } finally {
+      setIsLoadingEquipment(false);
+    }
+  };
+
+  // 기구 상태 변경
+  const handleChangeEquipmentStatus = async (
+    equipmentId: number,
+    newStatus: "NORMAL" | "MAINTENANCE" | "BROKEN"
+  ) => {
+    try {
+      const token = localStorage.getItem("access_token");
+      const response = await fetch(
+        `http://43.201.88.27/api/equipment/${equipmentId}/`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ operational_state: newStatus }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("기구 상태 변경 실패");
+      }
+
+      console.log(`기구 ${equipmentId} 상태를 ${newStatus}로 변경 완료`);
+
+      // 목록 새로고침
+      fetchEquipment();
+    } catch (error) {
+      console.error("기구 상태 변경 에러:", error);
+      alert("기구 상태 변경 중 오류가 발생했습니다.");
+    }
+  };
+
+  // 컴포넌트 마운트 시 신고 목록 및 기구 목록 가져오기
   useEffect(() => {
     fetchReports();
+    fetchEquipment();
   }, []);
 
   const [usageStats] = useState<Usage[]>([
@@ -348,13 +425,43 @@ export function AdminDashboard({
                             </Badge>
                           </div>
                           {report.status === "pending" && (
-                            <Button
-                              size="sm"
-                              className="bg-blue-500 hover:bg-blue-600 text-sm px-3 py-1.5 whitespace-nowrap flex-shrink-0"
-                              onClick={() => handleResolveReport(report.id)}
-                            >
-                              처리하기
-                            </Button>
+                            <div className="flex items-center gap-2">
+                              <Select
+                                onValueChange={(value) => {
+                                  const equipment = equipmentList.find(
+                                    (e) => e.name === report.equipment
+                                  );
+                                  if (equipment) {
+                                    handleChangeEquipmentStatus(
+                                      equipment.id,
+                                      value as "NORMAL" | "MAINTENANCE" | "BROKEN"
+                                    );
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="w-[120px] h-9 bg-gray-700 border-gray-600 text-gray-300">
+                                  <SelectValue placeholder="상태 변경" />
+                                </SelectTrigger>
+                                <SelectContent className="bg-gray-800 border-gray-600">
+                                  <SelectItem value="NORMAL" className="text-green-400">
+                                    정상
+                                  </SelectItem>
+                                  <SelectItem value="MAINTENANCE" className="text-yellow-400">
+                                    점검중
+                                  </SelectItem>
+                                  <SelectItem value="BROKEN" className="text-red-400">
+                                    고장
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                size="sm"
+                                className="bg-blue-500 hover:bg-blue-600 text-sm px-3 py-1.5 whitespace-nowrap flex-shrink-0 h-9"
+                                onClick={() => handleResolveReport(report.id)}
+                              >
+                                처리하기
+                              </Button>
+                            </div>
                           )}
                         </div>
                         <div className="space-y-2">
@@ -382,42 +489,73 @@ export function AdminDashboard({
                 <CardTitle className="text-white">기구 상태 관리</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[
-                    "러닝머신 1",
-                    "러닝머신 2",
-                    "벤치프레스",
-                    "스쿼트 랙",
-                    "덤벨",
-                    "스텝밀",
-                  ].map((equipment) => (
-                    <div
-                      key={equipment}
-                      className="p-4 border border-gray-700 rounded-lg bg-gray-800"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h4 className="font-semibold text-white">
-                            {equipment}
-                          </h4>
-                          <Badge className="bg-green-900/50 text-green-300 border-green-700 mt-1">
-                            정상
-                          </Badge>
-                        </div>
-                        <div className="space-x-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="border-gray-600 text-gray-300 hover:bg-gray-700"
-                          >
-                            <Settings className="h-3 w-3 mr-1" />
-                            설정
-                          </Button>
+                {isLoadingEquipment ? (
+                  <div className="text-center text-gray-400 py-8">
+                    기구 목록을 불러오는 중...
+                  </div>
+                ) : equipmentList.length === 0 ? (
+                  <div className="text-center text-gray-400 py-8">
+                    등록된 기구가 없습니다.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {equipmentList.map((equipment) => (
+                      <div
+                        key={equipment.id}
+                        className="p-4 border border-gray-700 rounded-lg bg-gray-800"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-semibold text-white">
+                              {equipment.name}
+                            </h4>
+                            <Badge
+                              className={
+                                equipment.operational_state === "NORMAL"
+                                  ? "bg-green-900/50 text-green-300 border-green-700 mt-1"
+                                  : equipment.operational_state === "MAINTENANCE"
+                                  ? "bg-yellow-900/50 text-yellow-300 border-yellow-700 mt-1"
+                                  : "bg-red-900/50 text-red-300 border-red-700 mt-1"
+                              }
+                            >
+                              {equipment.operational_state === "NORMAL"
+                                ? "정상"
+                                : equipment.operational_state === "MAINTENANCE"
+                                ? "점검중"
+                                : "고장"}
+                            </Badge>
+                          </div>
+                          <div className="space-x-2">
+                            <Select
+                              value={equipment.operational_state}
+                              onValueChange={(value) =>
+                                handleChangeEquipmentStatus(
+                                  equipment.id,
+                                  value as "NORMAL" | "MAINTENANCE" | "BROKEN"
+                                )
+                              }
+                            >
+                              <SelectTrigger className="w-[120px] bg-gray-700 border-gray-600 text-gray-300">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="bg-gray-800 border-gray-600">
+                                <SelectItem value="NORMAL" className="text-green-400">
+                                  정상
+                                </SelectItem>
+                                <SelectItem value="MAINTENANCE" className="text-yellow-400">
+                                  점검중
+                                </SelectItem>
+                                <SelectItem value="BROKEN" className="text-red-400">
+                                  고장
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
