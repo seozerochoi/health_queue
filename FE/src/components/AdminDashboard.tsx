@@ -208,6 +208,19 @@ export function AdminDashboard({
     }
   };
 
+  // 기구 상태 변경
+  const handleChangeEquipmentStatus = async (
+    equipmentId: number,
+    newStatus: "NORMAL" | "MAINTENANCE" | "BROKEN",
+    equipmentName?: string
+  ) => {
+    try {
+      const token = localStorage.getItem("access_token");
+
+      // 현재 기구의 상태 확인
+      const currentEquipment = equipmentList.find((e) => e.id === equipmentId);
+      const oldStatus = currentEquipment?.operational_state;
+
       // gym_id 가져오기 (현재 운영자의 gym)
       const userResponse = await fetch(
         "http://43.201.88.27/api/user/profile/",
