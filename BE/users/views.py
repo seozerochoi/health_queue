@@ -201,27 +201,107 @@ class InbodyAnalyzeView(APIView):
                 client = OpenAI(api_key=api_key)
 
                 system_prompt = (
-                    "InBody 체성분 결과지 파싱 전문가. 모델 270, 770 등 모두 지원.\n\n"
-                    "구조: 상단(키) / 중앙좌(체성분분석: 체중,골격근량,체지방량) / 우하단(비만평가: 체지방률,BMI)\n\n"
-                    "추출규칙:\n"
-                    "1. weight_kg: 체성분분석 1번째, 30-200kg 범위, 괄호안 범위 무시\n"
-                    "2. skeletal_muscle_mass_kg: 체성분분석 2번째, 10-50kg, 근육량보다 작음\n"
-                    "3. body_fat_mass_kg: 체성분분석 3번째, 3-80kg\n"
-                    "4. body_fat_percentage: 비만평가, % 기호, 5-65%\n"
-                    "5. bmi: 비만평가 BMI 레이블, 10-50\n"
-                    "6. height_cm: 상단, 100-230cm\n\n"
-                    "주의: 괄호안 범위 무시, 적정/목표체중 제외, 섹션별 구분, JSON만 출력"
+                        "당신은 InBody 체성분 분석 결과지를 정확하게 파싱하는 전문가입니다.\n"
+                        "InBody 270, 370, 570, 770 등 모든 모델을 지원하며, 한국어/영어 결과지를 처리합니다.\n\n"
+                    
+                        "=== InBody 결과지 레이아웃 구조 ===\n"
+                        "1. 최상단: 신장(키) 정보 - 'cm' 단위로 표시됨\n"
+                        "2. 중앙 좌측: '체성분분석' 또는 'Body Composition Analysis' 섹션\n"
+                        "   - 첫 번째 항목: 체중 (Weight)\n"
+                        "   - 두 번째 항목: 골격근량 (Skeletal Muscle Mass)\n"
+                        "   - 세 번째 항목: 체지방량 (Body Fat Mass)\n"
+                        "3. 우측 하단: '비만평가' 또는 'Obesity Evaluation' 섹션\n"
+                        "   - 체지방률 (Body Fat Percentage) - '%' 기호 포함\n"
+                        "   - BMI (Body Mass Index) - 'BMI' 레이블 근처\n\n"
+                    
+                        "=== 중요 규칙 ===\n"
+                        "규칙 1: 괄호 안의 숫자는 '정상 범위'이므로 절대 추출하지 마세요\n"
+                        "   예시: '59.1 (45.0-60.8)' → 59.1만 추출 (괄호 안 45.0, 60.8은 무시)\n"
+                        "   예시: '체중 75.3 (52.1-70.9)' → 75.3만 추출\n\n"
+                    
+                        "규칙 2: '체성분분석' 섹션에서 항목 순서를 엄격히 지키세요\n"
+                        "   1번째 = 체중 (가장 큰 값, 보통 30-200kg)\n"
+                        "   2번째 = 골격근량 (중간 값, 보통 10-50kg, '골격근', 'Skeletal Muscle' 키워드)\n"
+                        "   3번째 = 체지방량 (작은 값, 보통 3-80kg, '체지방', 'Body Fat' 키워드)\n\n"
+                    
+                        "규칙 3: '적정체중', '목표체중', '표준체중'은 추출하지 마세요 (체중과 혼동 방지)\n\n"
+                    
+                        "규칙 4: 체지방률(%)과 BMI는 '비만평가' 섹션에서만 추출하세요\n"
+                        "   - 체지방률: '%' 기호가 있는 숫자 (5-65% 범위)\n"
+                        "   - BMI: 'BMI' 레이블 근처의 숫자 (10-50 범위)\n\n"
+                    
+                        "규칙 5: 각 값의 유효 범위를 확인하세요\n"
+                        "   - height_cm: 100-230\n"
+                        "   - weight_kg: 30-200\n"
+                        "   - skeletal_muscle_mass_kg: 10-50\n"
+                        "   - body_fat_mass_kg: 3-80\n"
+                        "   - body_fat_percentage: 5-65\n"
+                        "   - bmi: 10-50\n\n"
+                    
+                        "=== 출력 형식 ===\n"
+                        "순수한 JSON 객체만 반환하세요. 설명이나 마크다운 없이 JSON만 출력하세요.\n"
+                        '{"weight_kg": 숫자, "skeletal_muscle_mass_kg": 숫자, "body_fat_mass_kg": 숫자, '
+                        '"body_fat_percentage": 숫자, "bmi": 숫자, "height_cm": 숫자}'
                 )
 
                 user_prompt = (
-                    "섹션별 분석 후 JSON 반환:\n"
-                    "1. 상단→height_cm\n"
-                    "2. 체성분분석→weight_kg(1번),skeletal_muscle_mass_kg(2번),body_fat_mass_kg(3번)\n"
-                    "3. 비만평가→body_fat_percentage(%기호),bmi(BMI레이블)\n\n"
-                    "예: '59.1 (45.0-60.8)'→59.1, '36.2%'→36.2\n"
-                    "괄호안 값 무시!\n\n"
-                    '{"weight_kg":숫자,"skeletal_muscle_mass_kg":숫자,"body_fat_mass_kg":숫자,'
-                    '"body_fat_percentage":숫자,"bmi":숫자,"height_cm":숫자}'
+                        "이 InBody 결과지 이미지를 분석하여 다음 6가지 값을 정확히 추출해주세요.\n\n"
+                    
+                        "📍 추출 단계별 가이드:\n\n"
+                    
+                        "1단계: 상단에서 신장(키) 찾기\n"
+                        "   - 'cm' 단위가 붙은 숫자 (100-230cm 범위)\n"
+                        "   - 키워드: '신장', 'Height', 'Ht'\n"
+                        "   → height_cm에 저장\n\n"
+                    
+                        "2단계: '체성분분석' 섹션 찾기\n"
+                        "   - 중앙 좌측 영역, '체성분분석' 또는 'Body Composition' 헤더\n"
+                        "   - 3개의 측정값이 순서대로 나열됨\n\n"
+                    
+                        "3단계: 체성분분석의 첫 번째 값 = 체중\n"
+                        "   - 가장 위에 있는 값 (보통 가장 큰 숫자)\n"
+                        "   - 키워드: '체중', 'Weight', 'Wt'\n"
+                        "   - 괄호 밖의 숫자만 추출! 예: '59.1 (45.0-60.8)' → 59.1\n"
+                        "   - 30-200kg 범위\n"
+                        "   → weight_kg에 저장\n\n"
+                    
+                        "4단계: 체성분분석의 두 번째 값 = 골격근량\n"
+                        "   - 체중 바로 아래 값\n"
+                        "   - 키워드: '골격근', 'Skeletal Muscle Mass', 'SMM'\n"
+                        "   - 괄호 밖의 숫자만! 예: '25.8 (20.5-27.5)' → 25.8\n"
+                        "   - 10-50kg 범위\n"
+                        "   → skeletal_muscle_mass_kg에 저장\n\n"
+                    
+                        "5단계: 체성분분석의 세 번째 값 = 체지방량\n"
+                        "   - 골격근량 바로 아래 값\n"
+                        "   - 키워드: '체지방', 'Body Fat Mass', 'BFM'\n"
+                        "   - 괄호 밖의 숫자만! 예: '18.2 (5.9-15.9)' → 18.2\n"
+                        "   - 3-80kg 범위\n"
+                        "   → body_fat_mass_kg에 저장\n\n"
+                    
+                        "6단계: '비만평가' 섹션에서 체지방률 찾기\n"
+                        "   - 우측 하단 영역, '비만평가' 또는 'Obesity Evaluation' 섹션\n"
+                        "   - '%' 기호가 붙은 숫자 (5-65% 범위)\n"
+                        "   - 키워드: '체지방률', 'Body Fat Percentage', 'PBF'\n"
+                        "   - 예: '36.2%' → 36.2 (% 기호 제거)\n"
+                        "   → body_fat_percentage에 저장\n\n"
+                    
+                        "7단계: '비만평가' 섹션에서 BMI 찾기\n"
+                        "   - 'BMI' 레이블 근처의 숫자 (10-50 범위)\n"
+                        "   - 예: 'BMI 27.3' → 27.3\n"
+                        "   → bmi에 저장\n\n"
+                    
+                        "⚠️ 주의사항:\n"
+                        "- 괄호 안의 범위 값(정상 범위)은 절대 추출하지 마세요\n"
+                        "- '적정체중', '목표체중'은 무시하세요\n"
+                        "- 각 섹션을 명확히 구분하여 값을 찾으세요\n"
+                        "- 순서가 중요합니다: 체중→골격근량→체지방량 순서를 지키세요\n\n"
+                    
+                        "출력 예시:\n"
+                        '{"weight_kg": 59.1, "skeletal_muscle_mass_kg": 25.8, "body_fat_mass_kg": 18.2, '
+                        '"body_fat_percentage": 36.2, "bmi": 27.3, "height_cm": 156.0}\n\n'
+                    
+                        "이제 이미지를 분석하여 JSON만 반환해주세요:"
                 )
 
                 # Use Chat Completions with multimodal content (gpt-4o-mini)
