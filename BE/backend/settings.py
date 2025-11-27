@@ -95,6 +95,7 @@ TEMPLATES = [
 # 프론트엔드 배포 지점이 수시로 바뀌어도 막히지 않도록 기본값은 모든
 # 오리진을 허용하고, 인증은 JWT Authorization 헤더/쿼리 파라미터로 처리.
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True  # 추가: 쿠키/인증 정보 허용
 # EventSource에서 cache-control, authorization 등을 허용하도록 헤더 화이트리스트
 CORS_ALLOW_HEADERS = [
     "accept",
@@ -111,6 +112,15 @@ CORS_ALLOW_HEADERS = [
 CORS_EXPOSE_HEADERS = [
     "Content-Type",
     "X-CSRFToken",
+]
+# SSE를 위한 메서드 허용
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
 ]
 
 WSGI_APPLICATION = 'backend.wsgi.application'
