@@ -47,6 +47,7 @@ export function WorkoutTimer({
   // 요구사항: 이용 시간 중에는 일시정지 기능 제거
   const [isPaused] = useState(false);
   const [isBroken, setIsBroken] = useState(false);
+  const [isMaintenance, setIsMaintenance] = useState(false);
 
   const heartbeatIntervalRef = useRef<number | null>(null);
   const workerRef = useRef<Worker | null>(null);
@@ -130,32 +131,23 @@ export function WorkoutTimer({
     const token = localStorage.getItem("access_token");
     if (!token) return;
 
-    // SSE 연결 (올바른 파라미터명 사용)
+    // SSE 연결
     const eventSource = new EventSource(
-      `${getApiBase()}/api/equipment/stream/?access_token=${encodeURIComponent(token)}`
+      `${getApiBase()}/api/equipment/stream/?token=${encodeURIComponent(token)}`
     );
     sseRef.current = eventSource;
-
-    eventSource.onopen = () => {
-      console.log("✅ [WorkoutTimer] SSE 연결 성공");
-    };
 
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         console.log("🔔 [WorkoutTimer] SSE 메시지:", data);
 
-        // equipment.id를 숫자로 변환하여 비교
-        const currentEquipmentId = parseInt(equipment.id, 10);
-        const dataEquipmentId = parseInt(data.equipment_id || data.id, 10);
-
         // 현재 사용 중인 기구가 BROKEN 으로 변경된 경우
         if (
-          dataEquipmentId === currentEquipmentId &&
+          data.equipment_id === equipment.id &&
           data.operational_state === "BROKEN"
         ) {
           console.log("⚠️ 기구 고장 감지 - 운동 강제 종료");
-          alert("⚠️ 기구에 문제가 발생하여 운동이 종료되었습니다.");
           setIsBroken(true);
           setIsRunning(false);
 
@@ -169,80 +161,39 @@ export function WorkoutTimer({
             workerRef.current.terminate();
             workerRef.current = null;
           }
+        }
+        
+        // 현재 사용 중인 기구가 MAINTENANCE 로 변경된 경우
+        if (
+          data.equipment_id === equipment.id &&
+          data.operational_state === "MAINTENANCE"
+        ) {
+          console.log("🛠️ 기구 점검중 감지 - 운동 강제 종료");
+          setIsMaintenance(true);
+          setIsRunning(false);
 
-          // 자동으로 운동 종료 처리
-          setTimeout(() => {
-            endSession().finally(() => onBack());
-          }, 2000);
+          // heartbeat 중지
+          if (heartbeatIntervalRef.current) {
+            window.clearInterval(heartbeatIntervalRef.current);
+            heartbeatIntervalRef.current = null;
+          }
+          if (workerRef.current) {
+            workerRef.current.postMessage({ type: "stop" });
+            workerRef.current.terminate();
+            workerRef.current = null;
+          }
         }
       } catch (err) {
         console.error("SSE 파싱 오류:", err);
       }
     };
 
-    // initial 이벤트 리스너 추가 (서버가 초기 데이터를 전송할 때)
-    eventSource.addEventListener("initial", (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data);
-        console.log("📦 [WorkoutTimer] SSE 초기 데이터:", data);
-      } catch (err) {
-        console.error("SSE initial 파싱 오류:", err);
-      }
-    });
-
-    // update 이벤트 리스너 추가 (서버가 업데이트를 전송할 때)
-    eventSource.addEventListener("update", (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data);
-        console.log("🔄 [WorkoutTimer] SSE 업데이트:", data);
-
-        // equipment.id를 숫자로 변환하여 비교
-        const currentEquipmentId = parseInt(equipment.id, 10);
-        const dataEquipmentId = parseInt(data.equipment_id || data.id, 10);
-
-        // 현재 사용 중인 기구의 operational_state 확인
-        if (dataEquipmentId === currentEquipmentId) {
-          console.log(`🔧 [WorkoutTimer] 기구 상태 변경: ${data.operational_state}`);
-          
-          if (data.operational_state === "BROKEN") {
-            console.log("⚠️ 기구 고장 감지 (update) - 운동 강제 종료");
-            alert("⚠️ 기구에 문제가 발생하여 운동이 종료되었습니다.");
-            setIsBroken(true);
-            setIsRunning(false);
-
-            // heartbeat 중지
-            if (heartbeatIntervalRef.current) {
-              window.clearInterval(heartbeatIntervalRef.current);
-              heartbeatIntervalRef.current = null;
-            }
-            if (workerRef.current) {
-              workerRef.current.postMessage({ type: "stop" });
-              workerRef.current.terminate();
-              workerRef.current = null;
-            }
-
-            // 자동으로 운동 종료 처리
-            setTimeout(() => {
-              endSession().finally(() => onBack());
-            }, 2000);
-          } else if (data.operational_state === "MAINTENANCE") {
-            console.log("🔧 기구가 점검 중으로 변경되었습니다.");
-            // 점검 중일 때는 운동은 계속하되 알림만 표시
-            alert("ℹ️ 이 기구가 점검 중으로 설정되었습니다. 운동은 계속하실 수 있습니다.");
-          }
-        }
-      } catch (err) {
-        console.error("SSE update 파싱 오류:", err);
-      }
-    });
-
-    eventSource.onerror = (error) => {
-      console.error("❌ [WorkoutTimer] SSE 연결 오류:", error);
+    eventSource.onerror = () => {
+      console.error("SSE 연결 오류");
       eventSource.close();
     };
 
     return () => {
-      console.log("🔌 [WorkoutTimer] SSE 연결 종료");
       eventSource.close();
       sseRef.current = null;
     };
@@ -541,6 +492,35 @@ export function WorkoutTimer({
               <Button
                 onClick={() => {
                   setIsBroken(false);
+                  onBack();
+                }}
+                className="w-full bg-blue-600 hover:bg-blue-700"
+              >
+                확인
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {isMaintenance && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <Card className="border-orange-600 bg-card max-w-md w-full">
+            <CardContent className="p-6 space-y-4">
+              <div className="text-center space-y-3">
+                <div className="text-6xl">🛠️</div>
+                <h2 className="text-xl font-bold text-orange-400">
+                  기구 점검 안내
+                </h2>
+                <p className="text-gray-300 leading-relaxed">
+                  이 기구는 현재 점검 중입니다.<br />
+                  더 이상 기구를 사용할 수 없습니다.<br />
+                  이용에 불편을 드려 죄송합니다.
+                </p>
+              </div>
+              <Button
+                onClick={() => {
+                  setIsMaintenance(false);
                   onBack();
                 }}
                 className="w-full bg-blue-600 hover:bg-blue-700"
