@@ -11,6 +11,7 @@ import {
   Settings,
   BarChart3,
   LogOut,
+  RefreshCw,
 } from "lucide-react";
 import {
   Select,
@@ -30,6 +31,7 @@ interface Report {
   description: string;
   status: "pending" | "resolved";
   timestamp: string;
+  createdAt: Date;
 }
 
 interface Usage {
@@ -63,10 +65,13 @@ export function AdminDashboard({
   const [isLoadingReports, setIsLoadingReports] = useState(false);
   const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>([]);
   const [isLoadingEquipment, setIsLoadingEquipment] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // 신고 목록 가져오기
-  const fetchReports = async () => {
-    setIsLoadingReports(true);
+  const fetchReports = async (silent = false) => {
+    if (!silent) {
+      setIsLoadingReports(true);
+    }
     try {
       const token = localStorage.getItem("access_token");
       const response = await fetch("http://43.201.88.27/api/reports/", {
@@ -99,13 +104,17 @@ export function AdminDashboard({
           hour: "2-digit",
           minute: "2-digit",
         }),
+        createdAt: new Date(report.created_at), // 정렬용 Date 객체 추가
       }));
 
-      // 처리 대기 상태를 먼저 표시하도록 정렬
+      // 1) pending 우선 2) 각 그룹 내에서 최신순 정렬
       const sortedReports = transformedReports.sort((a, b) => {
+        // 먼저 상태별로 정렬 (pending이 먼저)
         if (a.status === "pending" && b.status !== "pending") return -1;
         if (a.status !== "pending" && b.status === "pending") return 1;
-        return 0;
+        
+        // 같은 상태 내에서는 최신순 정렬 (최근 것이 먼저)
+        return b.createdAt.getTime() - a.createdAt.getTime();
       });
 
       setReports(sortedReports);
@@ -228,7 +237,27 @@ export function AdminDashboard({
   useEffect(() => {
     fetchReports();
     fetchEquipment();
+
+    // 10초마다 자동으로 신고 목록 새로고침 (백그라운드)
+    const intervalId = setInterval(() => {
+      console.log("🔄 자동 신고 목록 새로고침");
+      fetchReports(true); // silent 모드로 실행하여 깜빡임 방지
+    }, 10000); // 10초
+
+    // 컴포넌트 언마운트 시 interval 정리
+    return () => clearInterval(intervalId);
   }, []);
+
+  // 수동 새로고침 함수
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([fetchReports(), fetchEquipment()]);
+      console.log("✅ 수동 새로고침 완료");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const [usageStats] = useState<Usage[]>([
     {
@@ -404,7 +433,19 @@ export function AdminDashboard({
           <TabsContent value="reports" className="space-y-4">
             <Card className="border-gray-600 bg-card">
               <CardHeader>
-                <CardTitle className="text-white">신고 목록</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-white">신고 목록</CardTitle>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-gray-600 text-gray-300 hover:bg-gray-700"
+                    onClick={handleManualRefresh}
+                    disabled={isRefreshing}
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                    {isRefreshing ? '새로고침 중...' : '새로고침'}
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {isLoadingReports ? (
