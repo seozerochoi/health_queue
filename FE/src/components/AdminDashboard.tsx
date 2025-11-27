@@ -101,7 +101,14 @@ export function AdminDashboard({
         }),
       }));
 
-      setReports(transformedReports);
+      // 처리 대기 상태를 먼저 표시하도록 정렬
+      const sortedReports = transformedReports.sort((a, b) => {
+        if (a.status === "pending" && b.status !== "pending") return -1;
+        if (a.status !== "pending" && b.status === "pending") return 1;
+        return 0;
+      });
+
+      setReports(sortedReports);
     } catch (error) {
       console.error("신고 목록 조회 에러:", error);
     } finally {
@@ -167,10 +174,16 @@ export function AdminDashboard({
   // 기구 상태 변경
   const handleChangeEquipmentStatus = async (
     equipmentId: number,
-    newStatus: "NORMAL" | "MAINTENANCE" | "BROKEN"
+    newStatus: "NORMAL" | "MAINTENANCE" | "BROKEN",
+    equipmentName?: string
   ) => {
     try {
       const token = localStorage.getItem("access_token");
+      
+      // 현재 기구의 상태 확인
+      const currentEquipment = equipmentList.find(e => e.id === equipmentId);
+      const oldStatus = currentEquipment?.operational_state;
+      
       const response = await fetch(
         `http://43.201.88.27/api/equipment/${equipmentId}/`,
         {
@@ -189,8 +202,22 @@ export function AdminDashboard({
 
       console.log(`기구 ${equipmentId} 상태를 ${newStatus}로 변경 완료`);
 
-      // 목록 새로고침
-      fetchEquipment();
+      // MAINTENANCE에서 NORMAL 또는 BROKEN으로 변경 시 해당 기구의 pending 신고 자동 처리
+      if (oldStatus === "MAINTENANCE" && (newStatus === "NORMAL" || newStatus === "BROKEN")) {
+        // 해당 기구의 pending 상태 신고 찾기
+        const pendingReport = reports.find(
+          r => r.equipment === (equipmentName || currentEquipment?.name) && r.status === "pending"
+        );
+        
+        if (pendingReport) {
+          console.log(`자동으로 신고 ${pendingReport.id} 처리 중...`);
+          await handleResolveReport(pendingReport.id);
+        }
+      }
+
+      // 목록 새로고침 (기구 목록과 신고 목록 모두)
+      await fetchEquipment();
+      await fetchReports();
     } catch (error) {
       console.error("기구 상태 변경 에러:", error);
       alert("기구 상태 변경 중 오류가 발생했습니다.");
@@ -427,6 +454,10 @@ export function AdminDashboard({
                           {report.status === "pending" && (
                             <div className="flex items-center gap-2">
                               <Select
+                                value={
+                                  equipmentList.find((e) => e.name === report.equipment)
+                                    ?.operational_state
+                                }
                                 onValueChange={(value) => {
                                   const equipment = equipmentList.find(
                                     (e) => e.name === report.equipment
@@ -434,7 +465,8 @@ export function AdminDashboard({
                                   if (equipment) {
                                     handleChangeEquipmentStatus(
                                       equipment.id,
-                                      value as "NORMAL" | "MAINTENANCE" | "BROKEN"
+                                      value as "NORMAL" | "MAINTENANCE" | "BROKEN",
+                                      report.equipment
                                     );
                                   }
                                 }}
@@ -531,7 +563,8 @@ export function AdminDashboard({
                               onValueChange={(value) =>
                                 handleChangeEquipmentStatus(
                                   equipment.id,
-                                  value as "NORMAL" | "MAINTENANCE" | "BROKEN"
+                                  value as "NORMAL" | "MAINTENANCE" | "BROKEN",
+                                  equipment.name
                                 )
                               }
                             >
