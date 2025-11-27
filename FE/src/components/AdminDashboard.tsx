@@ -219,20 +219,41 @@ export function AdminDashboard({
       const currentEquipment = equipmentList.find((e) => e.id === equipmentId);
       const oldStatus = currentEquipment?.operational_state;
 
-      const response = await fetch(
-        `http://43.201.88.27/api/equipment/${equipmentId}/`,
+      // gym_id 가져오기 (현재 운영자의 gym)
+      const userResponse = await fetch(
+        "http://43.201.88.27/api/user/profile/",
         {
-          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      let gymId = 1; // 기본값
+      if (userResponse.ok) {
+        const userData = await userResponse.json();
+        gymId = userData.gym_id || 1;
+      }
+
+      // set_operational_state 액션 사용
+      const response = await fetch(
+        `http://43.201.88.27/api/equipment/${equipmentId}/set_operational_state/`,
+        {
+          method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ operational_state: newStatus }),
+          body: JSON.stringify({
+            gym_id: gymId,
+            operational_state: newStatus,
+          }),
         }
       );
 
       if (!response.ok) {
-        throw new Error("기구 상태 변경 실패");
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "기구 상태 변경 실패");
       }
 
       console.log(`기구 ${equipmentId} 상태를 ${newStatus}로 변경 완료`);

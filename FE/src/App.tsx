@@ -1237,6 +1237,7 @@ export default function App() {
                       id: existing.id,
                       name: existing.name,
                       status: existing.status,
+                      operational_state: existing.operational_state,
                       waitingCount: existing.waitingCount,
                     });
 
@@ -1251,12 +1252,16 @@ export default function App() {
                         formattedItem.timeRemaining !== undefined
                           ? formattedItem.timeRemaining
                           : existing.timeRemaining,
+                      operational_state:
+                        formattedItem.operational_state ||
+                        existing.operational_state,
                     };
 
                     console.log(`✅ [SSE Update] 머지된 상태:`, {
                       id: merged.id,
                       name: merged.name,
                       status: merged.status,
+                      operational_state: merged.operational_state,
                       waitingCount: merged.waitingCount,
                     });
 
