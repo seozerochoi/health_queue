@@ -46,11 +46,13 @@ export function WorkoutTimer({
   const [isRunning, setIsRunning] = useState(true);
   // 요구사항: 이용 시간 중에는 일시정지 기능 제거
   const [isPaused] = useState(false);
+  const [isBroken, setIsBroken] = useState(false);
 
   const heartbeatIntervalRef = useRef<number | null>(null);
   const workerRef = useRef<Worker | null>(null);
   const usingWorkerRef = useRef<boolean>(false);
   const consecutiveHeartbeatFailures = useRef(0);
+  const sseRef = useRef<EventSource | null>(null);
 
   // 뒤로가기 핸들러 - 운동 종료 API 호출
   const handleBack = async () => {
@@ -122,6 +124,58 @@ export function WorkoutTimer({
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRunning, isPaused, timeRemaining]);
+
+  // 기구 고장 SSE 감지
+  useEffect(() => {
+    const token = localStorage.getItem("access_token");
+    if (!token) return;
+
+    // SSE 연결
+    const eventSource = new EventSource(
+      `${getApiBase()}/api/equipment/stream/?token=${encodeURIComponent(token)}`
+    );
+    sseRef.current = eventSource;
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log("🔔 [WorkoutTimer] SSE 메시지:", data);
+
+        // 현재 사용 중인 기구가 BROKEN 으로 변경된 경우
+        if (
+          data.equipment_id === equipment.id &&
+          data.operational_state === "BROKEN"
+        ) {
+          console.log("⚠️ 기구 고장 감지 - 운동 강제 종료");
+          setIsBroken(true);
+          setIsRunning(false);
+
+          // heartbeat 중지
+          if (heartbeatIntervalRef.current) {
+            window.clearInterval(heartbeatIntervalRef.current);
+            heartbeatIntervalRef.current = null;
+          }
+          if (workerRef.current) {
+            workerRef.current.postMessage({ type: "stop" });
+            workerRef.current.terminate();
+            workerRef.current = null;
+          }
+        }
+      } catch (err) {
+        console.error("SSE 파싱 오류:", err);
+      }
+    };
+
+    eventSource.onerror = () => {
+      console.error("SSE 연결 오류");
+      eventSource.close();
+    };
+
+    return () => {
+      eventSource.close();
+      sseRef.current = null;
+    };
+  }, [equipment.id]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -398,6 +452,35 @@ export function WorkoutTimer({
 
   return (
     <div className="min-h-screen bg-background p-4">
+      {isBroken && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <Card className="border-red-600 bg-card max-w-md w-full">
+            <CardContent className="p-6 space-y-4">
+              <div className="text-center space-y-3">
+                <div className="text-6xl">⚠️</div>
+                <h2 className="text-xl font-bold text-red-400">
+                  기구 고장 안내
+                </h2>
+                <p className="text-gray-300 leading-relaxed">
+                  이 기구는 고장 접수가 되었습니다.<br />
+                  더 이상 기구를 사용할 수 없습니다.<br />
+                  이용에 불편을 드려 죄송합니다.
+                </p>
+              </div>
+              <Button
+                onClick={() => {
+                  setIsBroken(false);
+                  onBack();
+                }}
+                className="w-full bg-blue-600 hover:bg-blue-700"
+              >
+                확인
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <div className="max-w-md mx-auto">
         <div className="flex items-center justify-between mb-6">
           <Button

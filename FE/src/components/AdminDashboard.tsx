@@ -319,15 +319,6 @@ export function AdminDashboard({
   useEffect(() => {
     fetchReports();
     fetchEquipment();
-
-    // 10초마다 자동으로 신고 목록 새로고침 (백그라운드)
-    const intervalId = setInterval(() => {
-      console.log("🔄 자동 신고 목록 새로고침");
-      fetchReports(true); // silent 모드로 실행하여 깜빡임 방지
-    }, 10000); // 10초
-
-    // 컴포넌트 언마운트 시 interval 정리
-    return () => clearInterval(intervalId);
   }, []);
 
   // 수동 새로고침 함수
