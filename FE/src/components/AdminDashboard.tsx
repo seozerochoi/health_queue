@@ -12,7 +12,17 @@ import {
   BarChart3,
   LogOut,
   RefreshCw,
+  Plus,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "./ui/dialog";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 import {
   Select,
   SelectContent,
@@ -72,6 +82,14 @@ export function AdminDashboard({
   const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>([]);
   const [isLoadingEquipment, setIsLoadingEquipment] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showAddEquipmentDialog, setShowAddEquipmentDialog] = useState(false);
+  const [newEquipment, setNewEquipment] = useState({
+    name: "",
+    type: "",
+    subcategory: "",
+    difficulty: "MID",
+  });
+  const [isAddingEquipment, setIsAddingEquipment] = useState(false);
 
   // 신고 목록 가져오기
   const fetchReports = async (silent = false) => {
@@ -383,6 +401,18 @@ export function AdminDashboard({
       }
     });
 
+    eventSource.addEventListener("equipment_created", (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log("🆕 [AdminDashboard] 새 기구 등록:", data);
+
+        // 기구 목록 새로고침
+        fetchEquipment();
+      } catch (err) {
+        console.error("기구 등록 알림 파싱 오류:", err);
+      }
+    });
+
     eventSource.addEventListener("heartbeat", () => {
       // heartbeat는 조용히 처리
     });
@@ -406,6 +436,103 @@ export function AdminDashboard({
       console.log("✅ 수동 새로고침 완료");
     } finally {
       setIsRefreshing(false);
+    }
+  };
+
+  // 기구 이름 기반 이미지 URL 자동 생성
+  const generateEquipmentImage = (name: string): string => {
+    const imageMap: { [key: string]: string } = {
+      "벤치프레스": "https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=400",
+      "스쿼트": "https://images.unsplash.com/photo-1574680096145-d05b474e2155?w=400",
+      "데드리프트": "https://images.unsplash.com/photo-1605296867304-46d5465a13f1?w=400",
+      "레그프레스": "https://images.unsplash.com/photo-1434682772747-f16d3ea162c3?w=400",
+      "렛풀다운": "https://images.unsplash.com/photo-1584863231364-2edc166de576?w=400",
+      "케이블": "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=400",
+      "덤벨": "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=400",
+      "런닝머신": "https://images.unsplash.com/photo-1538805060514-97d9cc17730c?w=400",
+      "사이클": "https://images.unsplash.com/photo-1541534741688-6078c6bfb5c5?w=400",
+    };
+
+    // 이름에 포함된 키워드로 매칭
+    for (const [keyword, url] of Object.entries(imageMap)) {
+      if (name.includes(keyword)) {
+        return url;
+      }
+    }
+
+    // 기본 이미지
+    return "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=400";
+  };
+
+  // 기구 등록 처리
+  const handleAddEquipment = async () => {
+    if (!newEquipment.name || !newEquipment.type || !newEquipment.subcategory || !newEquipment.difficulty) {
+      alert("모든 필수 항목을 입력해주세요.");
+      return;
+    }
+
+    setIsAddingEquipment(true);
+    try {
+      const token = localStorage.getItem("access_token");
+      const userStr = localStorage.getItem("user");
+      if (!userStr) {
+        alert("로그인 정보가 없습니다.");
+        return;
+      }
+
+      const user = JSON.parse(userStr);
+      const gymId = user.gym_id;
+
+      if (!gymId) {
+        alert("헬스장 정보가 없습니다.");
+        return;
+      }
+
+      const imageUrl = generateEquipmentImage(newEquipment.name);
+
+      const response = await fetch("http://43.201.88.27/api/equipment/", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: newEquipment.name,
+          type: newEquipment.type,
+          subcategory: newEquipment.subcategory,
+          difficulty: newEquipment.difficulty,
+          gym: gymId,
+          status: "AVAILABLE",
+          operational_state: "NORMAL",
+          image_url: imageUrl,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "기구 등록 실패");
+      }
+
+      const data = await response.json();
+      console.log("✅ 기구 등록 성공:", data);
+
+      // 다이얼로그 닫기 및 폼 초기화
+      setShowAddEquipmentDialog(false);
+      setNewEquipment({
+        name: "",
+        type: "",
+        subcategory: "",
+        difficulty: "MID",
+      });
+
+      // SSE로 자동 업데이트되지만, 확실하게 수동으로도 새로고침
+      await fetchEquipment();
+      alert(`${data.name} 기구가 등록되었습니다!`);
+    } catch (error) {
+      console.error("기구 등록 에러:", error);
+      alert(error instanceof Error ? error.message : "기구 등록 중 오류가 발생했습니다.");
+    } finally {
+      setIsAddingEquipment(false);
     }
   };
 
@@ -459,16 +586,26 @@ export function AdminDashboard({
             <h1 className="text-2xl font-bold text-white">운영자 대시보드</h1>
             {gymName && <p className="text-gray-300">{gymName}</p>}
           </div>
-          {onLogout && (
+          <div className="flex items-center gap-3">
             <Button
-              onClick={onLogout}
+              onClick={() => setShowAddEquipmentDialog(true)}
               variant="outline"
-              className="border-red-600 text-red-400 hover:bg-red-900/20 hover:text-red-300"
+              className="border-blue-600 text-blue-400 hover:bg-blue-900/20 hover:text-blue-300"
             >
-              <LogOut className="h-4 w-4 mr-2" />
-              로그아웃
+              <Plus className="h-4 w-4 mr-2" />
+              기구 등록
             </Button>
-          )}
+            {onLogout && (
+              <Button
+                onClick={onLogout}
+                variant="outline"
+                className="border-red-600 text-red-400 hover:bg-red-900/20 hover:text-red-300"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                로그아웃
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4 mb-6">
@@ -850,6 +987,117 @@ export function AdminDashboard({
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* 기구 등록 다이얼로그 */}
+        <Dialog open={showAddEquipmentDialog} onOpenChange={setShowAddEquipmentDialog}>
+          <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-xl">새 기구 등록</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {/* 기구 이름 */}
+              <div className="space-y-2">
+                <Label htmlFor="equipment-name" className="text-gray-300">
+                  기구 이름 <span className="text-red-400">*</span>
+                </Label>
+                <Input
+                  id="equipment-name"
+                  placeholder="예: 벤치프레스, 스쿼트 랙"
+                  value={newEquipment.name}
+                  onChange={(e) => setNewEquipment({ ...newEquipment, name: e.target.value })}
+                  className="bg-gray-800 border-gray-600 text-white"
+                />
+              </div>
+
+              {/* 기구 타입 */}
+              <div className="space-y-2">
+                <Label htmlFor="equipment-type" className="text-gray-300">
+                  기구 타입 <span className="text-red-400">*</span>
+                </Label>
+                <Select
+                  value={newEquipment.type}
+                  onValueChange={(value) => setNewEquipment({ ...newEquipment, type: value })}
+                >
+                  <SelectTrigger className="bg-gray-800 border-gray-600 text-white">
+                    <SelectValue placeholder="타입 선택" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-800 border-gray-600">
+                    <SelectItem value="FREE_WEIGHT" className="text-white">프리웨이트</SelectItem>
+                    <SelectItem value="MACHINE" className="text-white">머신</SelectItem>
+                    <SelectItem value="PLATE_LOADED" className="text-white">플레이트로디드</SelectItem>
+                    <SelectItem value="CABLE" className="text-white">케이블</SelectItem>
+                    <SelectItem value="SMITH_MACHINE" className="text-white">스미스머신</SelectItem>
+                    <SelectItem value="CARDIO" className="text-white">유산소</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* 세부 카테고리 */}
+              <div className="space-y-2">
+                <Label htmlFor="equipment-subcategory" className="text-gray-300">
+                  세부 카테고리 <span className="text-red-400">*</span>
+                </Label>
+                <Select
+                  value={newEquipment.subcategory}
+                  onValueChange={(value) => setNewEquipment({ ...newEquipment, subcategory: value })}
+                >
+                  <SelectTrigger className="bg-gray-800 border-gray-600 text-white">
+                    <SelectValue placeholder="세부 카테고리 선택" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-800 border-gray-600">
+                    <SelectItem value="CHEST_PRESS_MAIN" className="text-white">가슴 프레스 메인</SelectItem>
+                    <SelectItem value="CHEST_PRESS_UPPER" className="text-white">가슴 프레스 상부</SelectItem>
+                    <SelectItem value="CHEST_FLY" className="text-white">가슴 플라이</SelectItem>
+                    <SelectItem value="BACK_PULL_VERTICAL" className="text-white">등 풀다운/풀업</SelectItem>
+                    <SelectItem value="BACK_ROW_HORIZONTAL" className="text-white">등 로우</SelectItem>
+                    <SelectItem value="LEG_PRESS_MAIN" className="text-white">하체 프레스/스쿼트</SelectItem>
+                    <SelectItem value="LEG_EXTENSION" className="text-white">다리 익스텐션</SelectItem>
+                    <SelectItem value="LEG_CURL" className="text-white">다리 컬</SelectItem>
+                    <SelectItem value="SHOULDER_PRESS" className="text-white">어깨 프레스</SelectItem>
+                    <SelectItem value="SHOULDER_SIDE" className="text-white">어깨 사이드</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* 난이도 */}
+              <div className="space-y-2">
+                <Label htmlFor="equipment-difficulty" className="text-gray-300">
+                  난이도 <span className="text-red-400">*</span>
+                </Label>
+                <Select
+                  value={newEquipment.difficulty}
+                  onValueChange={(value) => setNewEquipment({ ...newEquipment, difficulty: value })}
+                >
+                  <SelectTrigger className="bg-gray-800 border-gray-600 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-800 border-gray-600">
+                    <SelectItem value="HIGH" className="text-white">상</SelectItem>
+                    <SelectItem value="MID" className="text-white">중</SelectItem>
+                    <SelectItem value="LOW" className="text-white">하</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setShowAddEquipmentDialog(false)}
+                className="border-gray-600 text-gray-300 hover:bg-gray-700"
+                disabled={isAddingEquipment}
+              >
+                취소
+              </Button>
+              <Button
+                onClick={handleAddEquipment}
+                className="bg-blue-600 hover:bg-blue-700"
+                disabled={isAddingEquipment}
+              >
+                {isAddingEquipment ? "등록 중..." : "등록하기"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

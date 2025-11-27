@@ -330,6 +330,36 @@ class EquipmentViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
+        
+        # 기구 생성 후 SSE 브로드캐스트 (사용자들에게)
+        try:
+            from equipment.event_bus import publish_equipment_update
+            equipment = serializer.instance
+            publish_equipment_update(equipment)
+            logger.info(f"📡 [Equipment] 기구 생성 SSE 브로드캐스트: equipment_id={equipment.id}, name={equipment.name}")
+        except Exception as e:
+            logger.exception(f"❌ [Equipment] 기구 SSE 브로드캐스트 실패: {e}")
+        
+        # 기구 생성 후 운영자 알림 전송
+        try:
+            from equipment.event_bus import publish_operator_notification
+            equipment = serializer.instance
+            
+            payload = {
+                'equipment_id': equipment.id,
+                'equipment_name': equipment.name,
+                'equipment_type': equipment.type,
+                'gym_id': equipment.gym.id,
+                'gym_name': equipment.gym.name,
+                'created_by': user.username,
+            }
+            
+            publish_operator_notification('equipment_created', payload)
+            logger.info(f"📢 [Equipment] 기구 생성 알림 발송: equipment_id={equipment.id}, name={equipment.name}")
+        except Exception as e:
+            logger.exception(f"❌ [Equipment] 기구 생성 알림 발송 실패: {e}")
+            # 알림 실패해도 기구는 정상 생성
+        
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
