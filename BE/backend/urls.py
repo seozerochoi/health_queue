@@ -40,6 +40,7 @@ urlpatterns = [
     path('api/', include('workouts.urls')),
     path('api/', include('reports.urls')),
     path('api/routines/', include('routines.urls')),
+    path('api/ai/', include('ai_model.urls')),
 ]
 
 # Serve media files in development
