@@ -175,109 +175,53 @@ class InbodyAnalyzeView(APIView):
                 
                 try:
                     img = Image.open(io.BytesIO(img_bytes))
-                    # 최대 크기 제한 (긴 쪽 기준 1024px)
+                    
+                    # 1. 흑백 변환 (컬러 정보 제거로 30-40% 토큰 절약)
+                    if img.mode != 'L':
+                        img = img.convert('L')
+                        logger.info(f"🎨 이미지 흑백 변환: {img.mode}")
+                    
+                    # 2. 최대 크기 제한 (긴 쪽 기준 1024px)
                     max_size = 1024
                     if max(img.size) > max_size:
                         ratio = max_size / max(img.size)
                         new_size = tuple(int(dim * ratio) for dim in img.size)
                         img = img.resize(new_size, Image.Resampling.LANCZOS)
-                        
-                        # 리사이즈된 이미지를 bytes로 변환
-                        buffer = io.BytesIO()
-                        img.save(buffer, format='JPEG', quality=85)
-                        img_bytes_optimized = buffer.getvalue()
-                        logger.info(f"📐 이미지 리사이즈: 원본 {len(img_bytes)} bytes → {len(img_bytes_optimized)} bytes")
-                        img_bytes = img_bytes_optimized
+                    
+                    # 3. WebP 포맷으로 저장 (JPEG보다 20-30% 효율적)
+                    buffer = io.BytesIO()
+                    img.save(buffer, format='WEBP', quality=80, method=6)
+                    img_bytes_optimized = buffer.getvalue()
+                    logger.info(f"📐 이미지 최적화: 원본 {len(img_bytes)} bytes → {len(img_bytes_optimized)} bytes ({100 - int(len(img_bytes_optimized)/len(img_bytes)*100)}% 절감)")
+                    img_bytes = img_bytes_optimized
                 except Exception as resize_error:
-                    logger.warning(f"이미지 리사이즈 실패, 원본 사용: {resize_error}")
+                    logger.warning(f"이미지 최적화 실패, 원본 사용: {resize_error}")
                 
                 b64 = base64.b64encode(img_bytes).decode('utf-8')
                 client = OpenAI(api_key=api_key)
 
                 system_prompt = (
-                    "당신은 인바디(InBody) 체성분 분석 결과지를 정확하게 읽는 전문가입니다.\n"
-                    "다양한 인바디 모델(270, 770 등)의 결과지를 모두 정확하게 파싱할 수 있습니다.\n\n"
-                    "📋 **결과지 구조 이해:**\n"
-                    "인바디 결과지는 크게 3개 섹션으로 구성됩니다:\n"
-                    "1. 상단: 기본정보 (이름, 성별, 나이, 키)\n"
-                    "2. 중앙 왼쪽: 체성분 분석 (Body Composition Analysis) - 체중, 골격근량, 체지방량\n"
-                    "3. 중앙 오른쪽/하단: 비만 평가, BMI, 체지방률, 체중조절 등\n\n"
-                    "🎯 **정확한 추출 규칙:**\n\n"
-                    "1. **체중(weight_kg)**: 체성분분석(Body Composition) 섹션의 첫 번째 항목\n"
-                    "   - 레이블: 'Weight', '체중'\n"
-                    "   - 형식: 숫자 (괄호안 범위 무시)\n"
-                    "   - 예: '59.1 (45.0-60.8)' → 59.1\n"
-                    "   - 범위: 30-200kg\n"
-                    "   - ❌ 주의: '적정체중', '체중조절', '목표체중'과 혼동 금지\n\n"
-                    "2. **골격근량(skeletal_muscle_mass_kg)**: 체성분분석 섹션의 두 번째 항목\n"
-                    "   - 레이블: 'Skeletal Muscle Mass', '골격근량', 'SMM'\n"
-                    "   - 근육량(Muscle Mass)보다 작은 값\n"
-                    "   - 예: '20.2 (18.2-24.5)' → 20.2\n"
-                    "   - 범위: 10-50kg\n"
-                    "   - ❌ 주의: '근육량(Muscle Mass)'와 다름 (골격근이 더 작음)\n\n"
-                    "3. **체지방량(body_fat_mass_kg)**: 체성분분석 섹션의 세 번째 항목\n"
-                    "   - 레이블: 'Body Fat Mass', '체지방량', 'BFM'\n"
-                    "   - 예: '21.3 (10.0-18.2)' → 21.3\n"
-                    "   - 범위: 3-80kg\n"
-                    "   - ❌ 주의: BMI(21.3)와 값이 같을 수 있지만 다른 항목\n\n"
-                    "4. **체지방률(body_fat_percentage)**: 비만평가 섹션, % 기호 포함\n"
-                    "   - 레이블: 'Percent Body Fat', '체지방률', 'PBF', 'Body Fat %'\n"
-                    "   - 예: '36.2%' → 36.2 (% 제거)\n"
-                    "   - 범위: 5-65%\n\n"
-                    "5. **BMI**: 비만평가 섹션\n"
-                    "   - 레이블: 'BMI', 'Body Mass Index'\n"
-                    "   - 예: '21.3' → 21.3\n"
-                    "   - 범위: 10-50\n"
-                    "   - ❌ 주의: 체지방량과 값이 우연히 같을 수 있음\n\n"
-                    "6. **키(height_cm)**: 상단 기본정보\n"
-                    "   - 레이블: 'Height', '신장'\n"
-                    "   - 예: '165cm' → 165\n"
-                    "   - 범위: 100-230cm\n\n"
-                    "⚠️ **값 혼동 방지 체크리스트:**\n"
-                    "- 체성분분석 섹션에서만 체중/골격근량/체지방량 추출\n"
-                    "- 괄호 안 범위(예: 45.0-60.8)는 절대 추출 금지\n"
-                    "- BMI와 체지방량이 같은 숫자여도 섹션으로 구분\n"
-                    "- 골격근량 < 근육량 관계 확인\n"
-                    "- 체지방률은 반드시 % 기호 근처에서 추출\n\n"
-                    "반드시 JSON 형식으로만 출력하고, 코드블록(```)이나 설명은 포함하지 마세요."
+                    "InBody 체성분 결과지 파싱 전문가. 모델 270, 770 등 모두 지원.\n\n"
+                    "구조: 상단(키) / 중앙좌(체성분분석: 체중,골격근량,체지방량) / 우하단(비만평가: 체지방률,BMI)\n\n"
+                    "추출규칙:\n"
+                    "1. weight_kg: 체성분분석 1번째, 30-200kg 범위, 괄호안 범위 무시\n"
+                    "2. skeletal_muscle_mass_kg: 체성분분석 2번째, 10-50kg, 근육량보다 작음\n"
+                    "3. body_fat_mass_kg: 체성분분석 3번째, 3-80kg\n"
+                    "4. body_fat_percentage: 비만평가, % 기호, 5-65%\n"
+                    "5. bmi: 비만평가 BMI 레이블, 10-50\n"
+                    "6. height_cm: 상단, 100-230cm\n\n"
+                    "주의: 괄호안 범위 무시, 적정/목표체중 제외, 섹션별 구분, JSON만 출력"
                 )
 
                 user_prompt = (
-                    "이 인바디 결과지를 섹션별로 분석하여 JSON으로 반환하세요.\n\n"
-                    "📍 **추출 순서:**\n"
-                    "1단계: 상단에서 키(height_cm) 찾기\n"
-                    "2단계: '체성분분석' 또는 'Body Composition Analysis' 섹션 찾기\n"
-                    "3단계: 해당 섹션에서 순서대로:\n"
-                    "   - 첫 번째 값 → weight_kg (체중)\n"
-                    "   - 두 번째 값 → skeletal_muscle_mass_kg (골격근량)\n"
-                    "   - 세 번째 값 → body_fat_mass_kg (체지방량)\n"
-                    "4단계: 비만평가 섹션에서:\n"
-                    "   - % 기호 있는 값 → body_fat_percentage\n"
-                    "   - BMI 레이블 옆 값 → bmi\n\n"
-                    "💡 **실제 예시:**\n"
-                    "```\n"
-                    "체성분분석\n"
-                    "체중    59.1 (45.0-60.8)\n"
-                    "골격근량 20.2 (18.2-24.5)\n"
-                    "체지방량 21.3 (10.0-18.2)\n"
-                    "```\n"
-                    "→ weight_kg: 59.1, skeletal_muscle_mass_kg: 20.2, body_fat_mass_kg: 21.3\n\n"
-                    "```\n"
-                    "비만평가\n"
-                    "체지방률 36.2%\n"
-                    "BMI 21.3\n"
-                    "```\n"
-                    "→ body_fat_percentage: 36.2, bmi: 21.3\n\n"
-                    "⚠️ **중요:** 괄호 안 값(45.0-60.8)은 절대 추출하지 마세요!\n\n"
-                    "출력 형식:\n"
-                    "{\n"
-                    '  "weight_kg": 체중,\n'
-                    '  "skeletal_muscle_mass_kg": 골격근량,\n'
-                    '  "body_fat_mass_kg": 체지방량,\n'
-                    '  "body_fat_percentage": 체지방률,\n'
-                    '  "bmi": BMI,\n'
-                    '  "height_cm": 키\n'
-                    "}"
+                    "섹션별 분석 후 JSON 반환:\n"
+                    "1. 상단→height_cm\n"
+                    "2. 체성분분석→weight_kg(1번),skeletal_muscle_mass_kg(2번),body_fat_mass_kg(3번)\n"
+                    "3. 비만평가→body_fat_percentage(%기호),bmi(BMI레이블)\n\n"
+                    "예: '59.1 (45.0-60.8)'→59.1, '36.2%'→36.2\n"
+                    "괄호안 값 무시!\n\n"
+                    '{"weight_kg":숫자,"skeletal_muscle_mass_kg":숫자,"body_fat_mass_kg":숫자,'
+                    '"body_fat_percentage":숫자,"bmi":숫자,"height_cm":숫자}'
                 )
 
                 # Use Chat Completions with multimodal content (gpt-4o-mini)
@@ -292,7 +236,10 @@ class InbodyAnalyzeView(APIView):
                                 {"type": "text", "text": user_prompt},
                                 {
                                     "type": "image_url",
-                                    "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
+                                    "image_url": {
+                                        "url": f"data:image/webp;base64,{b64}",
+                                        "detail": "high"  # InBody 결과지 텍스트 읽기에는 high detail 필요
+                                    }
                                 }
                             ],
                         },
