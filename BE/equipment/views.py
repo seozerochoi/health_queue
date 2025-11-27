@@ -222,12 +222,20 @@ class EquipmentViewSet(viewsets.ModelViewSet):
         equipment.operational_state = new_state
         equipment.save(update_fields=['operational_state'])
         
-        # SSE 업데이트 발행
+        # SSE 업데이트 발행 (operational_state 변경 포함)
         waiting_count = Reservation.objects.filter(
             equipment=equipment,
             status__in=['WAITING', 'NOTIFIED']
         ).count()
-        publish_equipment_update(equipment, waiting_count=waiting_count)
+        
+        # operational_state 정보를 extra 필드로 추가
+        extra = {
+            'operational_state': new_state,
+            'operational_state_display': equipment.get_operational_state_display(),
+            'previous_state': old_state,
+        }
+        publish_equipment_update(equipment, waiting_count=waiting_count, extra=extra)
+        logger.info(f"📡 [SSE] operational_state 변경 이벤트 발행: {equipment.name} ({old_state} → {new_state})")
 
         serializer = self.get_serializer(equipment)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -275,6 +283,54 @@ class EquipmentViewSet(viewsets.ModelViewSet):
 
         return Response(results, status=status.HTTP_200_OK)
 
+    def create(self, request, *args, **kwargs):
+        """
+        운영자만 기구를 추가할 수 있는 API (POST /api/equipment/)
+        필수 정보 누락 시 명확한 에러 메시지 반환
+        gym, nfc_tag_id는 서버에서 자동 할당, 이미지는 업로드 지원
+        """
+        user = request.user
+        try:
+            profile = user.userprofile
+        except Exception:
+            return Response({"detail": "운영자 프로필이 필요합니다."}, status=status.HTTP_403_FORBIDDEN)
+        if profile.role != 'OPERATOR':
+            return Response({"detail": "운영자 권한이 필요합니다."}, status=status.HTTP_403_FORBIDDEN)
+
+        required_fields = [
+            'name', 'type', 'subcategory', 'difficulty'
+        ]
+        missing = [f for f in required_fields if not request.data.get(f)]
+        if missing:
+            return Response({
+                "detail": f"필수 정보가 누락되었습니다: {', '.join(missing)}",
+                "required_fields": required_fields
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # gym 자동 할당: 운영자가 관리하는 첫 번째 gym
+        owner_gyms = Gym.objects.filter(owner=user)
+        if not owner_gyms.exists():
+            return Response({"detail": "운영자 소유 gym이 없습니다. 먼저 gym을 등록하세요."}, status=status.HTTP_400_BAD_REQUEST)
+        gym = owner_gyms.first()
+
+        # nfc_tag_id 자동 생성 (예: 'NFC' + 0-padded id)
+        last_id = Equipment.objects.order_by('-id').first()
+        next_id = (last_id.id + 1) if last_id else 1
+        nfc_tag_id = f"NFC{str(next_id).zfill(3)}"
+        arduino_id = f"ARD{str(next_id).zfill(3)}"
+
+        # 이미지 업로드 지원 (multipart/form-data)
+        data = request.data.copy()
+        data['gym'] = gym.id
+        data['nfc_tag_id'] = nfc_tag_id
+        data['arduino_id'] = arduino_id
+        if 'image' in request.FILES:
+            data['image'] = request.FILES['image']
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
 def equipment_stream(request):
     """
@@ -331,6 +387,7 @@ def equipment_stream(request):
                 'name': eq.name,
                 'type': getattr(eq, 'type', None),
                 'status': getattr(eq, 'status', None),
+                'operational_state': getattr(eq, 'operational_state', None),
                 'image_url': getattr(eq, 'image_url', '') or getattr(eq, 'image', ''),
                 'base_session_time_minutes': getattr(eq, 'base_session_time_minutes', None),
                 'waiting_count': eq.waiting_count,

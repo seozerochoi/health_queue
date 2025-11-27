@@ -14,6 +14,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 REDIS_CHANNEL = "equipment_events"
+OPERATOR_CHANNEL = "operator_notifications"
 
 def _get_redis_client():
     broker_url = getattr(settings, "CELERY_BROKER_URL", "redis://localhost:6379/0")
@@ -106,6 +107,7 @@ def _serialize_equipment(equipment) -> Dict[str, Any]:
         "name": equipment.name,
         "type": getattr(equipment, "type", None),
         "status": getattr(equipment, "status", None),
+        "operational_state": getattr(equipment, "operational_state", None),
         "image_url": image,
         "base_session_time_minutes": getattr(
             equipment, "base_session_time_minutes", None
@@ -234,6 +236,41 @@ def publish_reservation_event(reservation, *, timeout_seconds: Optional[int] = N
     }
     publish_equipment_update(equipment, extra=extra)
 
+
+def publish_operator_notification(event_type: str, payload: Dict[str, Any]):
+    """
+    운영자에게 알림을 전송합니다 (신고, 기구 고장 등).
+    
+    Args:
+        event_type: 알림 타입 ('report_created', 'equipment_broken', etc.)
+        payload: 알림 데이터 (report_id, equipment_id, gym_id 등)
+    """
+    import time
+    start_time = time.time()
+    
+    message = {
+        "type": event_type,
+        "payload": payload,
+        "timestamp": timezone.now().isoformat(),
+    }
+    
+    try:
+        redis_client = _get_redis_publisher()
+        redis_client.publish(OPERATOR_CHANNEL, json.dumps(message))
+        
+        elapsed = (time.time() - start_time) * 1000
+        logger.info(
+            f"📢 [OperatorNotification] Published {event_type} to operators - "
+            f"elapsed: {elapsed:.1f}ms | payload: {payload}"
+        )
+    except redis.exceptions.ConnectionError as e:
+        logger.error(f"❌ [OperatorNotification] Redis 연결 실패: {e}")
+    except redis.exceptions.TimeoutError as e:
+        logger.error(f"❌ [OperatorNotification] Redis 타임아웃: {e}")
+    except Exception as e:
+        logger.exception(f"❌ [OperatorNotification] Redis publish 실패: {e}")
+
+
 def redis_subscribe_generator(max_backoff_seconds: int = 30):
     """Redis Pub/Sub generator with auto-reconnect & non-blocking backoff.
 
@@ -328,4 +365,90 @@ def redis_subscribe_generator(max_backoff_seconds: int = 30):
                 delay = min(2 ** (backoff_attempt - 1), max_backoff_seconds)
                 reconnect_wait_until = time.time() + delay
                 logger.info(f"⏳ [EventBus] Redis 재연결 예약: {delay}s (attempt {backoff_attempt})")
+                yield None
+
+
+def redis_operator_subscribe_generator(max_backoff_seconds: int = 30):
+    """
+    운영자 알림 전용 Redis Pub/Sub generator.
+    
+    OPERATOR_CHANNEL을 구독하여 신고, 기구 고장 등의 알림을 수신합니다.
+    """
+    backoff_attempt = 0
+    reconnect_wait_until: Optional[float] = None
+    pubsub = None
+
+    def _connect_pubsub():
+        nonlocal pubsub, backoff_attempt, reconnect_wait_until
+        try:
+            client = _get_redis_client()
+            pubsub = client.pubsub(ignore_subscribe_messages=True)
+            pubsub.subscribe(OPERATOR_CHANNEL)
+            logger.info("🔌 [OperatorNotification] Redis 구독 연결 수립")
+            backoff_attempt = 0
+            reconnect_wait_until = None
+            return True
+        except Exception as e:
+            logger.warning(f"⚠️ [OperatorNotification] Redis 구독 연결 실패: {e}")
+            return False
+
+    # 초기 연결 시도
+    _connect_pubsub()
+
+    while True:
+        # 재연결 대기 중이면 즉시 None yield
+        if reconnect_wait_until and time.time() < reconnect_wait_until:
+            yield None
+            time.sleep(0.5)
+            continue
+
+        if pubsub is None:
+            backoff_attempt += 1
+            delay = min(2 ** (backoff_attempt - 1), max_backoff_seconds)
+            reconnect_wait_until = time.time() + delay
+            logger.info(f"⏳ [OperatorNotification] Redis 재연결 대기: {delay}s (attempt {backoff_attempt})")
+            yield None
+            continue
+
+        try:
+            raw = pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+        except Exception as e:
+            logger.warning(f"⚠️ [OperatorNotification] get_message() 오류: {e}")
+            pubsub = None
+            yield None
+            continue
+
+        if not raw:
+            yield None
+            continue
+
+        msg_type = raw.get("type")
+        if msg_type != "message":
+            yield None
+            continue
+
+        try:
+            data = json.loads(raw.get("data"))
+            backoff_attempt = 0
+            reconnect_wait_until = None
+            yield data
+        except Exception:
+            logger.exception("❌ [OperatorNotification] Redis 메시지 파싱 실패")
+            yield None
+
+        # 연결 상태 주기적 확인
+        try:
+            if backoff_attempt == 0 and int(time.time()) % 60 == 0:
+                _get_redis_client().ping()
+        except Exception as e:
+            logger.warning(f"⚠️ [OperatorNotification] ping 실패, 재연결 준비: {e}")
+            pubsub = None
+            continue
+
+        if pubsub is None:
+            if not _connect_pubsub():
+                backoff_attempt += 1
+                delay = min(2 ** (backoff_attempt - 1), max_backoff_seconds)
+                reconnect_wait_until = time.time() + delay
+                logger.info(f"⏳ [OperatorNotification] Redis 재연결 예약: {delay}s (attempt {backoff_attempt})")
                 yield None

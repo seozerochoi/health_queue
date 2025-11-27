@@ -11,15 +11,18 @@ class Equipment(models.Model):
     name = models.CharField(max_length=100)
     
     TYPE_CHOICES = [
-        ('CARDIO', 'Cardio'),
-        ('STRENGTH', 'Strength'),
-        ('ETC', 'Etc'),
+        ('FREE_WEIGHT', '프리웨이트'),
+        ('MACHINE', '머신'),
+        ('PLATE_LOADED', '플레이트로디드'),
+        ('CABLE', '케이블'),
+        ('SMITH_MACHINE', '스미스머신'),
+        ('CARDIO', '유산소'),
     ]
-    type = models.CharField(max_length=50, choices=TYPE_CHOICES)
-    
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+
     nfc_tag_id = models.CharField(max_length=100, unique=True)
     arduino_id = models.CharField(max_length=100, unique=True)
-    
+
     STATUS_CHOICES = [
         ('AVAILABLE', 'Available'),
         ('IN_USE', 'In Use'),
@@ -27,7 +30,6 @@ class Equipment(models.Model):
         ('OUT_OF_ORDER', 'Out of Order'),
     ]
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='AVAILABLE')
-    # 운영자에 의해 설정되는 기구 운영 상태 (정상 / 점검중 / 고장)
     OPERATIONAL_STATE_CHOICES = [
         ('NORMAL', '정상'),
         ('MAINTENANCE', '점검중'),
@@ -57,22 +59,35 @@ class Equipment(models.Model):
     )
     # 세부 부위(하부 카테고리)
     SUBCATEGORY_CHOICES = [
-        # 상체
-        ('UPPER_BICEPS', '이두'),
-        ('UPPER_TRICEPS', '삼두'),
-        ('UPPER_CHEST', '가슴'),
-        ('UPPER_SHOULDER', '어깨'),
-        ('UPPER_BACK', '등'),
-        # 하체
-        ('LOWER_THIGH', '허벅지'),
-        ('LOWER_CALF', '종아리'),
+        ('CHEST_PRESS_MAIN', '가슴 프레스 메인'),
+        ('CHEST_PRESS_UPPER', '가슴 프레스 상부'),
+        ('CHEST_FLY', '가슴 플라이'),
+        ('BACK_PULL_VERTICAL', '등 풀다운/풀업'),
+        ('BACK_ROW_HORIZONTAL', '등 로우'),
+        ('LEG_PRESS_MAIN', '하체 프레스/스쿼트'),
+        ('LEG_EXTENSION', '다리 익스텐션'),
+        ('LEG_CURL', '다리 컬'),
+        ('SHOULDER_PRESS', '어깨 프레스'),
+        ('SHOULDER_SIDE', '어깨 사이드'),
     ]
     subcategory = models.CharField(
-        max_length=20,
+        max_length=30,
         choices=SUBCATEGORY_CHOICES,
         blank=True,
         null=True,
-        help_text="상세 운동 부위 (예: 상체-이두, 하체-허벅지). 상체/하체에서만 선택 필요"
+        help_text="상세 운동 부위 (AI 추천/대체 그룹)"
+    )
+
+    DIFFICULTY_CHOICES = [
+        ('HIGH', '상'),
+        ('MID', '중'),
+        ('LOW', '하'),
+    ]
+    difficulty = models.CharField(
+        max_length=10,
+        choices=DIFFICULTY_CHOICES,
+        default='MID',
+        help_text="운동 난이도 (상/중/하)"
     )
     # 유효 조합 맵
     SUBCATEGORY_BY_BODY_PART = {
