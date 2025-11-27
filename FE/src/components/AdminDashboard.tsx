@@ -321,6 +321,60 @@ export function AdminDashboard({
     fetchEquipment();
   }, []);
 
+  // 운영자 알림 SSE 구독
+  useEffect(() => {
+    const token = localStorage.getItem("access_token");
+    if (!token) return;
+
+    console.log("🔔 [AdminDashboard] 운영자 알림 SSE 연결 시작");
+    
+    const eventSource = new EventSource(
+      `http://43.201.88.27/api/equipment/operator-notifications/?access_token=${encodeURIComponent(token)}`
+    );
+
+    eventSource.onopen = () => {
+      console.log("✅ [AdminDashboard] 운영자 알림 SSE 연결 성공");
+    };
+
+    eventSource.addEventListener("connected", (event: MessageEvent) => {
+      console.log("🎉 [AdminDashboard] 운영자 알림 스트림 연결됨:", event.data);
+    });
+
+    eventSource.addEventListener("report_created", (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log("📢 [AdminDashboard] 새 신고 알림:", data);
+        
+        // 신고 목록 새로고침
+        fetchReports(true);
+        
+        // 알림 표시 (선택사항)
+        if (Notification.permission === "granted") {
+          new Notification("새 신고 접수", {
+            body: `${data.reporter_username}님이 ${data.equipment_name || "기구"} 신고를 제출했습니다.`,
+            icon: "/icon.png",
+          });
+        }
+      } catch (err) {
+        console.error("신고 알림 파싱 오류:", err);
+      }
+    });
+
+    eventSource.addEventListener("heartbeat", () => {
+      // heartbeat는 조용히 처리
+    });
+
+    eventSource.onerror = (error) => {
+      console.error("❌ [AdminDashboard] 운영자 알림 SSE 오류:", error);
+      eventSource.close();
+    };
+
+    return () => {
+      console.log("🔌 [AdminDashboard] 운영자 알림 SSE 연결 종료");
+      eventSource.close();
+    };
+  }, []);
+
   // 수동 새로고침 함수
   const handleManualRefresh = async () => {
     setIsRefreshing(true);

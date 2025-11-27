@@ -130,23 +130,32 @@ export function WorkoutTimer({
     const token = localStorage.getItem("access_token");
     if (!token) return;
 
-    // SSE 연결
+    // SSE 연결 (올바른 파라미터명 사용)
     const eventSource = new EventSource(
-      `${getApiBase()}/api/equipment/stream/?token=${encodeURIComponent(token)}`
+      `${getApiBase()}/api/equipment/stream/?access_token=${encodeURIComponent(token)}`
     );
     sseRef.current = eventSource;
+
+    eventSource.onopen = () => {
+      console.log("✅ [WorkoutTimer] SSE 연결 성공");
+    };
 
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         console.log("🔔 [WorkoutTimer] SSE 메시지:", data);
 
+        // equipment.id를 숫자로 변환하여 비교
+        const currentEquipmentId = parseInt(equipment.id, 10);
+        const dataEquipmentId = parseInt(data.equipment_id || data.id, 10);
+
         // 현재 사용 중인 기구가 BROKEN 으로 변경된 경우
         if (
-          data.equipment_id === equipment.id &&
+          dataEquipmentId === currentEquipmentId &&
           data.operational_state === "BROKEN"
         ) {
           console.log("⚠️ 기구 고장 감지 - 운동 강제 종료");
+          alert("⚠️ 기구에 문제가 발생하여 운동이 종료되었습니다.");
           setIsBroken(true);
           setIsRunning(false);
 
@@ -160,18 +169,80 @@ export function WorkoutTimer({
             workerRef.current.terminate();
             workerRef.current = null;
           }
+
+          // 자동으로 운동 종료 처리
+          setTimeout(() => {
+            endSession().finally(() => onBack());
+          }, 2000);
         }
       } catch (err) {
         console.error("SSE 파싱 오류:", err);
       }
     };
 
-    eventSource.onerror = () => {
-      console.error("SSE 연결 오류");
+    // initial 이벤트 리스너 추가 (서버가 초기 데이터를 전송할 때)
+    eventSource.addEventListener("initial", (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log("📦 [WorkoutTimer] SSE 초기 데이터:", data);
+      } catch (err) {
+        console.error("SSE initial 파싱 오류:", err);
+      }
+    });
+
+    // update 이벤트 리스너 추가 (서버가 업데이트를 전송할 때)
+    eventSource.addEventListener("update", (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log("🔄 [WorkoutTimer] SSE 업데이트:", data);
+
+        // equipment.id를 숫자로 변환하여 비교
+        const currentEquipmentId = parseInt(equipment.id, 10);
+        const dataEquipmentId = parseInt(data.equipment_id || data.id, 10);
+
+        // 현재 사용 중인 기구의 operational_state 확인
+        if (dataEquipmentId === currentEquipmentId) {
+          console.log(`🔧 [WorkoutTimer] 기구 상태 변경: ${data.operational_state}`);
+          
+          if (data.operational_state === "BROKEN") {
+            console.log("⚠️ 기구 고장 감지 (update) - 운동 강제 종료");
+            alert("⚠️ 기구에 문제가 발생하여 운동이 종료되었습니다.");
+            setIsBroken(true);
+            setIsRunning(false);
+
+            // heartbeat 중지
+            if (heartbeatIntervalRef.current) {
+              window.clearInterval(heartbeatIntervalRef.current);
+              heartbeatIntervalRef.current = null;
+            }
+            if (workerRef.current) {
+              workerRef.current.postMessage({ type: "stop" });
+              workerRef.current.terminate();
+              workerRef.current = null;
+            }
+
+            // 자동으로 운동 종료 처리
+            setTimeout(() => {
+              endSession().finally(() => onBack());
+            }, 2000);
+          } else if (data.operational_state === "MAINTENANCE") {
+            console.log("🔧 기구가 점검 중으로 변경되었습니다.");
+            // 점검 중일 때는 운동은 계속하되 알림만 표시
+            alert("ℹ️ 이 기구가 점검 중으로 설정되었습니다. 운동은 계속하실 수 있습니다.");
+          }
+        }
+      } catch (err) {
+        console.error("SSE update 파싱 오류:", err);
+      }
+    });
+
+    eventSource.onerror = (error) => {
+      console.error("❌ [WorkoutTimer] SSE 연결 오류:", error);
       eventSource.close();
     };
 
     return () => {
+      console.log("🔌 [WorkoutTimer] SSE 연결 종료");
       eventSource.close();
       sseRef.current = null;
     };

@@ -462,3 +462,123 @@ def equipment_stream(request):
     response['X-Accel-Buffering'] = 'no'  # nginx 버퍼링 비활성화
     response['Connection'] = 'keep-alive'
     return response
+
+
+def operator_notification_stream(request):
+    """
+    운영자 전용 SSE 엔드포인트. 신고, 기구 고장 등의 알림을 실시간으로 전송합니다.
+    
+    인증: JWT 토큰 (query parameter의 access_token) 또는 세션
+    권한: 운영자(OPERATOR) 권한 필요
+    """
+    # 인증 처리
+    token = request.GET.get('access_token')
+    user = None
+    if token:
+        try:
+            tb = TokenBackend(algorithm=settings.SIMPLE_JWT.get('ALGORITHM', 'HS256'), 
+                            signing_key=settings.SIMPLE_JWT.get('SIGNING_KEY', settings.SECRET_KEY))
+            payload = tb.decode(token, verify=True)
+            user_id = payload.get('user_id') or payload.get('user')
+            if not user_id:
+                return HttpResponse(status=401)
+            User = get_user_model()
+            try:
+                user = User.objects.get(pk=user_id)
+            except User.DoesNotExist:
+                return HttpResponse(status=401)
+        except Exception:
+            return HttpResponse(status=401)
+    else:
+        if request.user and request.user.is_authenticated:
+            user = request.user
+        else:
+            return HttpResponse(status=401)
+    
+    # 운영자 권한 확인
+    try:
+        profile = user.userprofile
+        if profile.role != 'OPERATOR':
+            return HttpResponse("Operator role required", status=403)
+    except Exception:
+        return HttpResponse("Operator profile required", status=403)
+    
+    def event_stream():
+        # 초기 연결 성공 메시지
+        yield "event: connected\ndata: {\"message\": \"Operator notification stream connected\"}\n\n"
+        yield "event: heartbeat\ndata: {}\n\n"
+        
+        heartbeat = getattr(settings, 'OPERATOR_SSE_HEARTBEAT_SECONDS', 15)
+        iteration_count = 0
+        
+        logger.info(f"🚀 [OperatorSSE] Notification stream started for user={user.username} - heartbeat: {heartbeat}s")
+        
+        from equipment.event_bus import redis_operator_subscribe_generator
+        import time
+        
+        redis_gen = redis_operator_subscribe_generator()
+        last_activity = time.time()
+        
+        try:
+            while True:
+                iteration_count += 1
+                try:
+                    # Redis 운영자 알림 채널에서 메시지 수신
+                    got_message = False
+                    for _ in range(5):  # 최대 5개 메시지 처리
+                        msg = next(redis_gen)
+                        if not msg:
+                            break
+                        
+                        event_type = msg.get('type', 'notification')
+                        payload = msg.get('payload', {})
+                        
+                        # gym_id 필터링 (운영자가 관리하는 gym만)
+                        gym_id = payload.get('gym_id')
+                        if gym_id:
+                            # 운영자가 해당 gym을 관리하는지 확인
+                            owner_gyms = Gym.objects.filter(owner=user).values_list('id', flat=True)
+                            member_gyms = GymMembership.objects.filter(user=user, status='APPROVED').values_list('gym_id', flat=True)
+                            managed_gym_ids = set(list(owner_gyms) + list(member_gyms))
+                            
+                            if gym_id not in managed_gym_ids:
+                                # 이 운영자가 관리하지 않는 gym의 알림은 스킵
+                                continue
+                        
+                        yield f"event: {event_type}\ndata: {json.dumps(payload)}\n\n"
+                        last_activity = time.time()
+                        got_message = True
+                        
+                        logger.debug(f"📨 [OperatorSSE] Sent {event_type} to user={user.username}")
+                    
+                    # 주기적 상태 로그
+                    if iteration_count % 12 == 0:
+                        logger.info(f"⏰ [OperatorSSE] alive iter={iteration_count} user={user.username} last_activity={int(time.time()-last_activity)}s")
+                    
+                    # heartbeat 전송
+                    if time.time() - last_activity >= heartbeat:
+                        yield "event: heartbeat\ndata: {}\n\n"
+                        last_activity = time.time()
+                    elif not got_message:
+                        time.sleep(0.05)
+                        
+                except StopIteration:
+                    logger.warning("⚠️ [OperatorSSE] Redis generator ended; recreating")
+                    redis_gen = redis_operator_subscribe_generator()
+                    yield "event: heartbeat\ndata: {}\n\n"
+                except Exception:
+                    logger.exception("❌ [OperatorSSE] loop error; sending heartbeat")
+                    yield "event: heartbeat\ndata: {}\n\n"
+                    
+        except GeneratorExit:
+            logger.info(f"🔌 [OperatorSSE] 클라이언트 연결 종료 user={user.username} - iterations: {iteration_count}")
+            return
+        except Exception:
+            logger.exception(f"❌ [OperatorSSE] event_stream error user={user.username} - iterations: {iteration_count}")
+            return
+    
+    response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'
+    response['Connection'] = 'keep-alive'
+    return response

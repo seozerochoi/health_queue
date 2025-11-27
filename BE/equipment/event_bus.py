@@ -104,6 +104,7 @@ def _serialize_equipment(equipment) -> Dict[str, Any]:
     image = getattr(equipment, "image_url", None) or getattr(equipment, "image", "")
     return {
         "id": str(equipment.id),
+        "equipment_id": equipment.id,  # 추가: 숫자 형식의 equipment_id도 포함
         "name": equipment.name,
         "type": getattr(equipment, "type", None),
         "status": getattr(equipment, "status", None),
