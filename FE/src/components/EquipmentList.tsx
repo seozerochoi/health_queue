@@ -53,13 +53,24 @@ interface EquipmentItemProps {
 
 const EquipmentItemInner = ({ eq, onSelect, flashing }: EquipmentItemProps) => {
   const isBroken = eq.operational_state === "BROKEN";
+  const isMaintenance = eq.operational_state === "MAINTENANCE";
+  const isUnavailable = isBroken || isMaintenance;
   
   const getStatusBadgeLocal = (eq: Equipment) => {
-    // 고장 상태가 최우선
+    // 고장 상태
     if (eq.operational_state === "BROKEN") {
       return (
         <Badge className="bg-red-600 text-white font-bold border-2 border-red-800">
           고장! 사용 불가능
+        </Badge>
+      );
+    }
+    
+    // 점검중 상태
+    if (eq.operational_state === "MAINTENANCE") {
+      return (
+        <Badge className="bg-yellow-600 text-white font-bold border-2 border-yellow-700">
+          점검중! 사용 불가능
         </Badge>
       );
     }
@@ -89,11 +100,11 @@ const EquipmentItemInner = ({ eq, onSelect, flashing }: EquipmentItemProps) => {
   return (
     <Card
       className={`transition-shadow border-gray-600 bg-card ${
-        isBroken 
+        isUnavailable
           ? 'opacity-60 cursor-not-allowed' 
           : 'hover:shadow-lg cursor-pointer'
       }`}
-      onClick={() => !isBroken && onSelect(eq)}
+      onClick={() => !isUnavailable && onSelect(eq)}
     >
       <CardContent className="p-4">
         <div className="flex space-x-4">
@@ -123,7 +134,7 @@ const EquipmentItemInner = ({ eq, onSelect, flashing }: EquipmentItemProps) => {
               <span>기본 할당시간: {eq.allocatedTime}분</span>
             </div>
 
-            {!isBroken && (eq.status === "in-use" || eq.status === "waiting") && (
+            {!isUnavailable && (eq.status === "in-use" || eq.status === "waiting") && (
               <div>
                 <Button
                   size="sm"
@@ -149,6 +160,14 @@ const EquipmentItemInner = ({ eq, onSelect, flashing }: EquipmentItemProps) => {
               <div className="mt-2 p-2.5 bg-red-900/30 border border-red-600 rounded-lg">
                 <p className="text-red-400 text-xs font-semibold leading-tight">
                   ⚠️ 이 기구는 현재 고장으로<br />사용할 수 없습니다.
+                </p>
+              </div>
+            )}
+            
+            {isMaintenance && (
+              <div className="mt-2 p-2.5 bg-yellow-900/30 border border-yellow-600 rounded-lg">
+                <p className="text-yellow-400 text-xs font-semibold leading-tight">
+                  🛠️ 이 기구는 현재 점검 중으로<br />사용할 수 없습니다.
                 </p>
               </div>
             )}
