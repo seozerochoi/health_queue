@@ -322,19 +322,23 @@ class EquipmentViewSet(viewsets.ModelViewSet):
 
         # 이미지 업로드 지원 (multipart/form-data)
         data = request.data.copy()
-        data['gym'] = gym.id
         data['nfc_tag_id'] = nfc_tag_id
         data['arduino_id'] = arduino_id
         if 'image' in request.FILES:
             data['image'] = request.FILES['image']
+        
+        # serializer는 gym을 ReadOnlyField로 설정했으므로 직접 생성해야 함
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
+        
+        # gym을 직접 할당하여 저장
+        equipment = serializer.save(gym=gym)
+        # gym을 직접 할당하여 저장
+        equipment = serializer.save(gym=gym)
         
         # 기구 생성 후 SSE 브로드캐스트 (사용자들에게)
         try:
             from equipment.event_bus import publish_equipment_update
-            equipment = serializer.instance
             publish_equipment_update(equipment)
             logger.info(f"📡 [Equipment] 기구 생성 SSE 브로드캐스트: equipment_id={equipment.id}, name={equipment.name}")
         except Exception as e:
@@ -343,7 +347,6 @@ class EquipmentViewSet(viewsets.ModelViewSet):
         # 기구 생성 후 운영자 알림 전송
         try:
             from equipment.event_bus import publish_operator_notification
-            equipment = serializer.instance
             
             payload = {
                 'equipment_id': equipment.id,

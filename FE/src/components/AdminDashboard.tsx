@@ -442,15 +442,23 @@ export function AdminDashboard({
   // 기구 이름 기반 이미지 URL 자동 생성
   const generateEquipmentImage = (name: string): string => {
     const imageMap: { [key: string]: string } = {
-      "벤치프레스": "https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=400",
-      "스쿼트": "https://images.unsplash.com/photo-1574680096145-d05b474e2155?w=400",
-      "데드리프트": "https://images.unsplash.com/photo-1605296867304-46d5465a13f1?w=400",
-      "레그프레스": "https://images.unsplash.com/photo-1434682772747-f16d3ea162c3?w=400",
-      "렛풀다운": "https://images.unsplash.com/photo-1584863231364-2edc166de576?w=400",
-      "케이블": "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=400",
-      "덤벨": "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=400",
-      "런닝머신": "https://images.unsplash.com/photo-1538805060514-97d9cc17730c?w=400",
-      "사이클": "https://images.unsplash.com/photo-1541534741688-6078c6bfb5c5?w=400",
+      벤치프레스:
+        "https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=400",
+      스쿼트:
+        "https://images.unsplash.com/photo-1574680096145-d05b474e2155?w=400",
+      데드리프트:
+        "https://images.unsplash.com/photo-1605296867304-46d5465a13f1?w=400",
+      레그프레스:
+        "https://images.unsplash.com/photo-1434682772747-f16d3ea162c3?w=400",
+      렛풀다운:
+        "https://images.unsplash.com/photo-1584863231364-2edc166de576?w=400",
+      케이블:
+        "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=400",
+      덤벨: "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=400",
+      런닝머신:
+        "https://images.unsplash.com/photo-1538805060514-97d9cc17730c?w=400",
+      사이클:
+        "https://images.unsplash.com/photo-1541534741688-6078c6bfb5c5?w=400",
     };
 
     // 이름에 포함된 키워드로 매칭
@@ -466,7 +474,12 @@ export function AdminDashboard({
 
   // 기구 등록 처리
   const handleAddEquipment = async () => {
-    if (!newEquipment.name || !newEquipment.type || !newEquipment.subcategory || !newEquipment.difficulty) {
+    if (
+      !newEquipment.name ||
+      !newEquipment.type ||
+      !newEquipment.subcategory ||
+      !newEquipment.difficulty
+    ) {
       alert("모든 필수 항목을 입력해주세요.");
       return;
     }
@@ -474,21 +487,27 @@ export function AdminDashboard({
     setIsAddingEquipment(true);
     try {
       const token = localStorage.getItem("access_token");
-      const userStr = localStorage.getItem("user");
-      if (!userStr) {
-        alert("로그인 정보가 없습니다.");
-        return;
-      }
+      console.log("🔑 [기구 등록] access_token:", token ? "존재" : "없음");
 
-      const user = JSON.parse(userStr);
-      const gymId = user.gym_id;
-
-      if (!gymId) {
-        alert("헬스장 정보가 없습니다.");
+      if (!token) {
+        alert("로그인 정보가 없습니다. 다시 로그인해주세요.");
         return;
       }
 
       const imageUrl = generateEquipmentImage(newEquipment.name);
+
+      // 백엔드에서 gym을 자동 할당하므로 gym 필드를 보내지 않습니다
+      const requestBody = {
+        name: newEquipment.name,
+        type: newEquipment.type,
+        subcategory: newEquipment.subcategory,
+        difficulty: newEquipment.difficulty,
+        status: "AVAILABLE",
+        operational_state: "NORMAL",
+        image_url: imageUrl,
+      };
+
+      console.log("📤 [기구 등록] Request body:", requestBody);
 
       const response = await fetch("http://43.201.88.27/api/equipment/", {
         method: "POST",
@@ -496,20 +515,14 @@ export function AdminDashboard({
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          name: newEquipment.name,
-          type: newEquipment.type,
-          subcategory: newEquipment.subcategory,
-          difficulty: newEquipment.difficulty,
-          gym: gymId,
-          status: "AVAILABLE",
-          operational_state: "NORMAL",
-          image_url: imageUrl,
-        }),
+        body: JSON.stringify(requestBody),
       });
+
+      console.log("📥 [기구 등록] Response status:", response.status);
 
       if (!response.ok) {
         const errorData = await response.json();
+        console.error("❌ [기구 등록] Error response:", errorData);
         throw new Error(errorData.detail || "기구 등록 실패");
       }
 
@@ -530,7 +543,11 @@ export function AdminDashboard({
       alert(`${data.name} 기구가 등록되었습니다!`);
     } catch (error) {
       console.error("기구 등록 에러:", error);
-      alert(error instanceof Error ? error.message : "기구 등록 중 오류가 발생했습니다.");
+      alert(
+        error instanceof Error
+          ? error.message
+          : "기구 등록 중 오류가 발생했습니다."
+      );
     } finally {
       setIsAddingEquipment(false);
     }
@@ -989,7 +1006,10 @@ export function AdminDashboard({
         </Tabs>
 
         {/* 기구 등록 다이얼로그 */}
-        <Dialog open={showAddEquipmentDialog} onOpenChange={setShowAddEquipmentDialog}>
+        <Dialog
+          open={showAddEquipmentDialog}
+          onOpenChange={setShowAddEquipmentDialog}
+        >
           <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-md">
             <DialogHeader>
               <DialogTitle className="text-xl">새 기구 등록</DialogTitle>
@@ -1004,7 +1024,9 @@ export function AdminDashboard({
                   id="equipment-name"
                   placeholder="예: 벤치프레스, 스쿼트 랙"
                   value={newEquipment.name}
-                  onChange={(e) => setNewEquipment({ ...newEquipment, name: e.target.value })}
+                  onChange={(e) =>
+                    setNewEquipment({ ...newEquipment, name: e.target.value })
+                  }
                   className="bg-gray-800 border-gray-600 text-white"
                 />
               </div>
@@ -1016,45 +1038,93 @@ export function AdminDashboard({
                 </Label>
                 <Select
                   value={newEquipment.type}
-                  onValueChange={(value) => setNewEquipment({ ...newEquipment, type: value })}
+                  onValueChange={(value) =>
+                    setNewEquipment({ ...newEquipment, type: value })
+                  }
                 >
                   <SelectTrigger className="bg-gray-800 border-gray-600 text-white">
                     <SelectValue placeholder="타입 선택" />
                   </SelectTrigger>
                   <SelectContent className="bg-gray-800 border-gray-600">
-                    <SelectItem value="FREE_WEIGHT" className="text-white">프리웨이트</SelectItem>
-                    <SelectItem value="MACHINE" className="text-white">머신</SelectItem>
-                    <SelectItem value="PLATE_LOADED" className="text-white">플레이트로디드</SelectItem>
-                    <SelectItem value="CABLE" className="text-white">케이블</SelectItem>
-                    <SelectItem value="SMITH_MACHINE" className="text-white">스미스머신</SelectItem>
-                    <SelectItem value="CARDIO" className="text-white">유산소</SelectItem>
+                    <SelectItem value="FREE_WEIGHT" className="text-white">
+                      프리웨이트
+                    </SelectItem>
+                    <SelectItem value="MACHINE" className="text-white">
+                      머신
+                    </SelectItem>
+                    <SelectItem value="PLATE_LOADED" className="text-white">
+                      플레이트로디드
+                    </SelectItem>
+                    <SelectItem value="CABLE" className="text-white">
+                      케이블
+                    </SelectItem>
+                    <SelectItem value="SMITH_MACHINE" className="text-white">
+                      스미스머신
+                    </SelectItem>
+                    <SelectItem value="CARDIO" className="text-white">
+                      유산소
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               {/* 세부 카테고리 */}
               <div className="space-y-2">
-                <Label htmlFor="equipment-subcategory" className="text-gray-300">
+                <Label
+                  htmlFor="equipment-subcategory"
+                  className="text-gray-300"
+                >
                   세부 카테고리 <span className="text-red-400">*</span>
                 </Label>
                 <Select
                   value={newEquipment.subcategory}
-                  onValueChange={(value) => setNewEquipment({ ...newEquipment, subcategory: value })}
+                  onValueChange={(value) =>
+                    setNewEquipment({ ...newEquipment, subcategory: value })
+                  }
                 >
                   <SelectTrigger className="bg-gray-800 border-gray-600 text-white">
                     <SelectValue placeholder="세부 카테고리 선택" />
                   </SelectTrigger>
                   <SelectContent className="bg-gray-800 border-gray-600">
-                    <SelectItem value="CHEST_PRESS_MAIN" className="text-white">가슴 프레스 메인</SelectItem>
-                    <SelectItem value="CHEST_PRESS_UPPER" className="text-white">가슴 프레스 상부</SelectItem>
-                    <SelectItem value="CHEST_FLY" className="text-white">가슴 플라이</SelectItem>
-                    <SelectItem value="BACK_PULL_VERTICAL" className="text-white">등 풀다운/풀업</SelectItem>
-                    <SelectItem value="BACK_ROW_HORIZONTAL" className="text-white">등 로우</SelectItem>
-                    <SelectItem value="LEG_PRESS_MAIN" className="text-white">하체 프레스/스쿼트</SelectItem>
-                    <SelectItem value="LEG_EXTENSION" className="text-white">다리 익스텐션</SelectItem>
-                    <SelectItem value="LEG_CURL" className="text-white">다리 컬</SelectItem>
-                    <SelectItem value="SHOULDER_PRESS" className="text-white">어깨 프레스</SelectItem>
-                    <SelectItem value="SHOULDER_SIDE" className="text-white">어깨 사이드</SelectItem>
+                    <SelectItem value="CHEST_PRESS_MAIN" className="text-white">
+                      가슴 프레스 메인
+                    </SelectItem>
+                    <SelectItem
+                      value="CHEST_PRESS_UPPER"
+                      className="text-white"
+                    >
+                      가슴 프레스 상부
+                    </SelectItem>
+                    <SelectItem value="CHEST_FLY" className="text-white">
+                      가슴 플라이
+                    </SelectItem>
+                    <SelectItem
+                      value="BACK_PULL_VERTICAL"
+                      className="text-white"
+                    >
+                      등 풀다운/풀업
+                    </SelectItem>
+                    <SelectItem
+                      value="BACK_ROW_HORIZONTAL"
+                      className="text-white"
+                    >
+                      등 로우
+                    </SelectItem>
+                    <SelectItem value="LEG_PRESS_MAIN" className="text-white">
+                      하체 프레스/스쿼트
+                    </SelectItem>
+                    <SelectItem value="LEG_EXTENSION" className="text-white">
+                      다리 익스텐션
+                    </SelectItem>
+                    <SelectItem value="LEG_CURL" className="text-white">
+                      다리 컬
+                    </SelectItem>
+                    <SelectItem value="SHOULDER_PRESS" className="text-white">
+                      어깨 프레스
+                    </SelectItem>
+                    <SelectItem value="SHOULDER_SIDE" className="text-white">
+                      어깨 사이드
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1066,15 +1136,23 @@ export function AdminDashboard({
                 </Label>
                 <Select
                   value={newEquipment.difficulty}
-                  onValueChange={(value) => setNewEquipment({ ...newEquipment, difficulty: value })}
+                  onValueChange={(value) =>
+                    setNewEquipment({ ...newEquipment, difficulty: value })
+                  }
                 >
                   <SelectTrigger className="bg-gray-800 border-gray-600 text-white">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-gray-800 border-gray-600">
-                    <SelectItem value="HIGH" className="text-white">상</SelectItem>
-                    <SelectItem value="MID" className="text-white">중</SelectItem>
-                    <SelectItem value="LOW" className="text-white">하</SelectItem>
+                    <SelectItem value="HIGH" className="text-white">
+                      상
+                    </SelectItem>
+                    <SelectItem value="MID" className="text-white">
+                      중
+                    </SelectItem>
+                    <SelectItem value="LOW" className="text-white">
+                      하
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
