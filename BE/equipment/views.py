@@ -365,6 +365,66 @@ class EquipmentViewSet(viewsets.ModelViewSet):
         
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    
+    @action(detail=False, methods=['get'], url_path='daily-stats')
+    def daily_stats(self, request):
+        """
+        운영자 전용: 오늘 날짜의 기구별 이용 통계 조회
+        
+        Response:
+        [
+            {
+                "equipment_id": 1,
+                "equipment_name": "벤치프레스",
+                "usage_count": 32,
+                "average_time_minutes": 22.5
+            },
+            ...
+        ]
+        """
+        from django.utils import timezone
+        from .daily_stats_models import EquipmentDailyStats
+        
+        user = request.user
+        try:
+            profile = user.userprofile
+        except Exception:
+            return Response({"detail": "운영자 프로필이 필요합니다."}, status=status.HTTP_403_FORBIDDEN)
+        
+        if profile.role != 'OPERATOR':
+            return Response({"detail": "운영자 권한이 필요합니다."}, status=status.HTTP_403_FORBIDDEN)
+        
+        # 운영자가 관리하는 gym의 기구들만 조회
+        from gyms.models import Gym
+        owner_gyms = Gym.objects.filter(owner=user)
+        if not owner_gyms.exists():
+            return Response({"detail": "운영자 소유 gym이 없습니다."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        gym = owner_gyms.first()
+        today = timezone.now().date()
+        
+        # 해당 gym의 모든 기구 가져오기
+        equipments = Equipment.objects.filter(gym=gym).order_by('name')
+        
+        result = []
+        for equipment in equipments:
+            # 오늘 통계 가져오기 (없으면 0으로 초기화)
+            try:
+                stats = EquipmentDailyStats.objects.get(equipment=equipment, date=today)
+                usage_count = stats.usage_count
+                average_time = round(stats.average_time_minutes, 1)
+            except EquipmentDailyStats.DoesNotExist:
+                usage_count = 0
+                average_time = 0.0
+            
+            result.append({
+                'equipment_id': equipment.id,
+                'equipment_name': equipment.name,
+                'usage_count': usage_count,
+                'average_time_minutes': average_time,
+            })
+        
+        return Response(result, status=status.HTTP_200_OK)
 
 def equipment_stream(request):
     """

@@ -92,6 +92,8 @@ export function AdminDashboard({
     difficulty: "MID",
   });
   const [isAddingEquipment, setIsAddingEquipment] = useState(false);
+  const [usageStats, setUsageStats] = useState<Usage[]>([]);
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
 
   // 신고 목록 가져오기
   const fetchReports = async (silent = false) => {
@@ -206,35 +208,42 @@ export function AdminDashboard({
     }
   };
 
-  // 기구 상태 변경
-  const handleChangeEquipmentStatus = async (
-    equipmentId: number,
-    newStatus: "NORMAL" | "MAINTENANCE" | "BROKEN",
-    equipmentName?: string
-  ) => {
-    try {
-      const token = localStorage.getItem("access_token");
-
-      // 현재 기구의 상태 확인
-      const currentEquipment = equipmentList.find((e) => e.id === equipmentId);
-      const oldStatus = currentEquipment?.operational_state;
-
-      const response = await fetch(
-        `http://43.201.88.27/api/equipment/${equipmentId}/`,
+      // gym_id 가져오기 (현재 운영자의 gym)
+      const userResponse = await fetch(
+        "http://43.201.88.27/api/user/profile/",
         {
-          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      let gymId = 1; // 기본값
+      if (userResponse.ok) {
+        const userData = await userResponse.json();
+        gymId = userData.gym_id || 1;
+      }
+
+      // set_operational_state 액션 사용
+      const response = await fetch(
+        `http://43.201.88.27/api/equipment/${equipmentId}/set_operational_state/`,
+        {
+          method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ operational_state: newStatus }),
+          body: JSON.stringify({
+            gym_id: gymId,
+            operational_state: newStatus,
+          }),
         }
       );
 
       if (!response.ok) {
-        throw new Error("기구 상태 변경 실패");
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "기구 상태 변경 실패");
       }
-
       console.log(`기구 ${equipmentId} 상태를 ${newStatus}로 변경 완료`);
 
       // MAINTENANCE에서 BROKEN으로 변경 시 해당 기구의 모든 예약 취소
@@ -358,6 +367,7 @@ export function AdminDashboard({
   useEffect(() => {
     fetchReports();
     fetchEquipment();
+    fetchUsageStats();
   }, []);
 
   // 운영자 알림 SSE 구독
@@ -555,33 +565,39 @@ export function AdminDashboard({
     }
   };
 
-  const [usageStats] = useState<Usage[]>([
-    {
-      equipment: "러닝머신 1",
-      totalUsage: 45,
-      averageTime: 28,
-      satisfaction: 4.2,
-    },
-    {
-      equipment: "러닝머신 2",
-      totalUsage: 38,
-      averageTime: 32,
-      satisfaction: 3.8,
-    },
-    {
-      equipment: "벤치프레스",
-      totalUsage: 32,
-      averageTime: 22,
-      satisfaction: 4.5,
-    },
-    {
-      equipment: "스쿼트 랙",
-      totalUsage: 28,
-      averageTime: 25,
-      satisfaction: 4.3,
-    },
-    { equipment: "덤벨", totalUsage: 52, averageTime: 18, satisfaction: 4.1 },
-  ]);
+  // 이용 통계 가져오기
+  const fetchUsageStats = async () => {
+    setIsLoadingStats(true);
+    try {
+      const token = localStorage.getItem("access_token");
+      const response = await fetch("http://43.201.88.27/api/equipment/daily-stats/", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("이용 통계 조회 실패");
+      }
+
+      const data = await response.json();
+      console.log("이용 통계 API 응답:", data);
+      
+      // API 응답을 Usage 형식으로 변환
+      const transformedStats: Usage[] = data.map((stat: any) => ({
+        equipment: stat.equipment_name,
+        totalUsage: stat.usage_count,
+        averageTime: stat.average_time_minutes,
+        satisfaction: 0, // 만족도는 현재 미사용
+      }));
+      
+      setUsageStats(transformedStats);
+    } catch (error) {
+      console.error("이용 통계 조회 에러:", error);
+    } finally {
+      setIsLoadingStats(false);
+    }
+  };
 
   const pendingReports = reports.filter((r) => r.status === "pending");
 

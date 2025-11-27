@@ -162,6 +162,37 @@ def finalize_session(session: UsageSession, now=None, *, reason: Optional[str] =
     session.end_time = now
     session.save()
 
+    # 📊 일일 통계 업데이트
+    try:
+        from equipment.daily_stats_models import EquipmentDailyStats
+        from datetime import timedelta
+        
+        # 실제 사용 시간 계산 (분 단위)
+        session_duration = (session.end_time - session.start_time).total_seconds() / 60
+        session_duration_minutes = int(session_duration)
+        
+        # 오늘 날짜의 통계 가져오거나 생성
+        today = now.date()
+        stats, created = EquipmentDailyStats.objects.get_or_create(
+            equipment=session.equipment,
+            date=today,
+            defaults={
+                'usage_count': 0,
+                'total_usage_minutes': 0,
+                'average_time_minutes': 0.0,
+            }
+        )
+        
+        # 통계 업데이트
+        stats.update_stats(session_duration_minutes)
+        logger.info(
+            f"📊 [Stats] {session.equipment.name} 통계 업데이트: "
+            f"이용 {stats.usage_count}회, 평균 {stats.average_time_minutes:.1f}분"
+        )
+    except Exception as e:
+        logger.exception(f"❌ [Stats] 통계 업데이트 실패: {e}")
+        # 통계 업데이트 실패해도 세션 종료는 계속 진행
+
     equipment = Equipment.objects.select_for_update().get(pk=session.equipment.pk)
     released = _release_equipment_to_available(equipment, now=now)
     logger.info(
