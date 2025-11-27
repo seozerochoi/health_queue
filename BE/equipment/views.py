@@ -1,6 +1,7 @@
 import logging
 logger = logging.getLogger(__name__)
 from django.shortcuts import render, get_object_or_404
+from django.db import transaction
 # equipment/views.py
 
 from rest_framework import viewsets, status
@@ -95,12 +96,21 @@ class EquipmentViewSet(viewsets.ModelViewSet):
         운영자 전용: 운영자의 JWT 토큰, gym id, equipment id, 그리고 변경할 상태를 받아
         해당 기구의 운영 상태를 설정합니다.
 
+        상태 변경 로직:
+        1. NORMAL → MAINTENANCE: 현재 사용 중인 사용자를 큐 1순위로, 기존 큐는 순번 +1
+        2. MAINTENANCE → NORMAL: 큐 1순위 사용자에게 알림 (NOTIFIED 상태로 변경)
+        3. ANY → BROKEN: 모든 대기/알림 예약을 EXPIRED 처리
+
         요청 바디 예시:
         {
             "gym_id": 1,
-            "operational_state": "NORMAL"  # 또는 "MAINTENANCE"
+            "operational_state": "NORMAL"  # 또는 "MAINTENANCE", "BROKEN"
         }
         """
+        from workouts.models import Reservation, WorkoutSession
+        from django.utils import timezone
+        from equipment.event_bus import publish_equipment_update
+        
         user = request.user
         # userprofile 존재 및 운영자 권한 확인
         try:
@@ -126,8 +136,98 @@ class EquipmentViewSet(viewsets.ModelViewSet):
         if new_state not in dict(Equipment.OPERATIONAL_STATE_CHOICES).keys():
             return Response({"detail": f"허용되지 않은 상태입니다. 허용값: {list(dict(Equipment.OPERATIONAL_STATE_CHOICES).keys())}"}, status=status.HTTP_400_BAD_REQUEST)
 
+        old_state = equipment.operational_state
+        
+        # 상태 변경 시 큐 관리 로직
+        if old_state != new_state:
+            logger.info(f"🔧 [Equipment] operational_state 변경: {equipment.name} ({old_state} → {new_state})")
+            
+            # CASE 1: NORMAL → MAINTENANCE
+            if old_state == 'NORMAL' and new_state == 'MAINTENANCE':
+                # 현재 사용 중인 세션 확인
+                active_session = WorkoutSession.objects.filter(
+                    equipment=equipment,
+                    end_time__isnull=True
+                ).first()
+                
+                if active_session:
+                    logger.info(f"📍 [Maintenance] 사용 중인 세션 발견: user={active_session.user.username}")
+                    # 현재 사용자를 큐 1순위로 이동
+                    # 기존 큐의 waiting_position을 +1
+                    with transaction.atomic():
+                        existing_queue = Reservation.objects.filter(
+                            equipment=equipment,
+                            status__in=['WAITING', 'NOTIFIED']
+                        ).select_for_update().order_by('waiting_position')
+                        
+                        # 기존 큐 순번 +1
+                        for res in existing_queue:
+                            res.waiting_position += 1
+                            res.save(update_fields=['waiting_position'])
+                        
+                        # 현재 사용자를 큐 1순위로 추가
+                        Reservation.objects.create(
+                            user=active_session.user,
+                            equipment=equipment,
+                            status='WAITING',
+                            waiting_position=1,
+                            reserved_at=timezone.now()
+                        )
+                        
+                        # 세션 종료
+                        active_session.end_time = timezone.now()
+                        active_session.save(update_fields=['end_time'])
+                        
+                        # 기구 상태 변경
+                        equipment.status = 'AVAILABLE'
+                        equipment.save(update_fields=['status'])
+                        
+                    logger.info(f"✅ [Maintenance] 사용자를 큐 1순위로 이동 완료")
+            
+            # CASE 2: MAINTENANCE → NORMAL
+            elif old_state == 'MAINTENANCE' and new_state == 'NORMAL':
+                # 큐 1순위 사용자를 NOTIFIED로 변경
+                first_in_queue = Reservation.objects.filter(
+                    equipment=equipment,
+                    status__in=['WAITING', 'NOTIFIED']
+                ).order_by('waiting_position').first()
+                
+                if first_in_queue:
+                    logger.info(f"🔔 [Normal] 큐 1순위 사용자 알림: user={first_in_queue.user.username}")
+                    first_in_queue.status = 'NOTIFIED'
+                    first_in_queue.notified_at = timezone.now()
+                    first_in_queue.save(update_fields=['status', 'notified_at'])
+                    
+                    # 기구 상태 업데이트
+                    equipment.status = 'WAITING'
+                    equipment.save(update_fields=['status'])
+                    
+                    logger.info(f"✅ [Normal] 큐 1순위 사용자 알림 완료")
+            
+            # CASE 3: ANY → BROKEN
+            elif new_state == 'BROKEN':
+                # 모든 대기/알림 예약을 EXPIRED 처리
+                expired_count = Reservation.objects.filter(
+                    equipment=equipment,
+                    status__in=['WAITING', 'NOTIFIED']
+                ).update(status='EXPIRED', expired_at=timezone.now())
+                
+                logger.info(f"❌ [Broken] {expired_count}개의 예약을 EXPIRED 처리")
+                
+                # 기구 상태를 OUT_OF_ORDER로 변경
+                equipment.status = 'OUT_OF_ORDER'
+                equipment.save(update_fields=['status'])
+
+        # operational_state 변경
         equipment.operational_state = new_state
-        equipment.save()
+        equipment.save(update_fields=['operational_state'])
+        
+        # SSE 업데이트 발행
+        waiting_count = Reservation.objects.filter(
+            equipment=equipment,
+            status__in=['WAITING', 'NOTIFIED']
+        ).count()
+        publish_equipment_update(equipment, waiting_count=waiting_count)
 
         serializer = self.get_serializer(equipment)
         return Response(serializer.data, status=status.HTTP_200_OK)
