@@ -1,3 +1,11 @@
+
+# gevent monkey patching for async worker support
+try:
+	from gevent import monkey
+	monkey.patch_all()
+except ImportError:
+	pass
+
 """
 WSGI config for backend project.
 

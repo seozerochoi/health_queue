@@ -324,28 +324,30 @@ export function AIRoutineRecommendation({
                         </div>
 
                         <div className="flex flex-col items-end gap-2">
-                          <Badge
-                            className={`${
-                              step.wait_time === 0
-                                ? "bg-green-100 text-green-700"
-                                : "bg-yellow-100 text-yellow-700"
-                            } w-20 text-center`}
-                          >
-                            {step.wait_time === 0 ? "사용가능" : "대기필요"}
-                          </Badge>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="border-blue-500 text-blue-400 hover:bg-blue-500/10 h-6 text-xs px-2 w-20 justify-center"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              // 줄서기 로직 (필요시 추가)
-                              console.log(`줄서기: ${step.name}`);
-                            }}
-                          >
-                            <Users className="h-3 w-3 mr-1" />
-                            줄서기
-                          </Button>
+                          {step.wait_time === 0 ? (
+                            <Badge className="bg-green-100 text-green-700 w-20 text-center">
+                              바로 사용 가능
+                            </Badge>
+                          ) : (
+                            <>
+                              <Badge className="bg-yellow-100 text-yellow-700 w-20 text-center">
+                                대기필요
+                              </Badge>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="border-blue-500 text-blue-400 hover:bg-blue-500/10 h-6 text-xs px-2 w-20 justify-center"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // 줄서기 로직 (필요시 추가)
+                                  console.log(`줄서기: ${step.name}`);
+                                }}
+                              >
+                                <Users className="h-3 w-3 mr-1" />
+                                줄서기
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
