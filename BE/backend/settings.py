@@ -280,12 +280,20 @@ LOGGING = {
         "verbose": {
             "format": "[%(asctime)s] %(levelname)s %(name)s %(message)s",
             "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+        "detailed": {
+            "format": "[%(asctime)s] %(levelname)s %(name)s:%(lineno)d - %(funcName)s() - %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
         }
     },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "verbose",
+        },
+        "detailed_console": {
+            "class": "logging.StreamHandler",
+            "formatter": "detailed",
         }
     },
     "loggers": {
@@ -293,34 +301,74 @@ LOGGING = {
             "handlers": ["console"],
             "level": "DEBUG" if DEBUG else "INFO",
         },
-        "django.request": {
-            "handlers": ["console"],
-            "level": "INFO",  # DEBUG -> INFO
-            "propagate": False,
-        },
-        "users": {
-            "handlers": ["console"],
-            "level": "INFO",  # DEBUG -> INFO
-            "propagate": False,
-        },
-        "gunicorn.error": {
-            "handlers": ["console"],
-            "level": "WARNING",  # DEBUG -> WARNING (epipe 로그 숨김)
-            "propagate": False,
-        },
-        "gunicorn.access": {
+        "django": {
             "handlers": ["console"],
             "level": "INFO",
             "propagate": False,
         },
+        "django.request": {
+            "handlers": ["detailed_console"],
+            "level": "DEBUG",  # 모든 API 요청 상세 로깅
+            "propagate": False,
+        },
+        "django.db.backends": {
+            "handlers": ["detailed_console"],
+            "level": "DEBUG",  # ⚡ DB 쿼리 로깅 (성능 분석 용)
+            "propagate": False,
+        },
+        "users": {
+            "handlers": ["detailed_console"],
+            "level": "DEBUG",  # 모든 user 관련 로그
+            "propagate": False,
+        },
+        "gyms": {
+            "handlers": ["detailed_console"],
+            "level": "DEBUG",  # gyms API 로그
+            "propagate": False,
+        },
+        "equipment": {
+            "handlers": ["detailed_console"],
+            "level": "DEBUG",  # equipment API 로그
+            "propagate": False,
+        },
+        "workouts": {
+            "handlers": ["detailed_console"],
+            "level": "DEBUG",  # workouts API 로그
+            "propagate": False,
+        },
+        "reports": {
+            "handlers": ["detailed_console"],
+            "level": "DEBUG",  # reports API 로그
+            "propagate": False,
+        },
+        "routines": {
+            "handlers": ["detailed_console"],
+            "level": "DEBUG",  # routines API 로그
+            "propagate": False,
+        },
+        "ai_model": {
+            "handlers": ["detailed_console"],
+            "level": "DEBUG",  # AI 모델 로그
+            "propagate": False,
+        },
+        "gunicorn.error": {
+            "handlers": ["console"],
+            "level": "INFO",  # 에러만 로깅
+            "propagate": False,
+        },
+        "gunicorn.access": {
+            "handlers": ["console"],
+            "level": "INFO",  # ✅ 모든 HTTP 요청 로깅
+            "propagate": False,
+        },
         "equipment.views": {
             "handlers": ["console"],
-            "level": "WARNING",  # SSE alive 로그 줄이기
+            "level": "INFO",  # SSE 로그
             "propagate": False,
         },
         "equipment.event_bus": {
             "handlers": ["console"],
-            "level": "WARNING",  # Redis 재연결 로그 줄이기
+            "level": "WARNING",
             "propagate": False,
         },
     },
