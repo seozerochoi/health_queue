@@ -130,9 +130,17 @@ class RoutineGenerateView(BaseAIView):
             return Response({"error": "인바디 정보가 없습니다."}, status=400)
 
         # 3. 현재 헬스장 기구 점유 상태 가져오기 (실시간성)
-        # 예: Equipment 모델에 is_occupied 필드가 있다고 가정
+        # Equipment 모델에는 is_occupied 필드가 없고 status/operational_state로 표현됩니다.
+        # 점유로 간주: status가 IN_USE 또는 WAITING이거나, 운영 상태가 정상(NORMAL)이 아닌 경우.
         all_eq = Equipment.objects.all()
-        current_occupancy = {eq.id: eq.is_occupied for eq in all_eq}
+        def is_occupied(eq):
+            try:
+                status_val = getattr(eq, 'status', 'AVAILABLE') or 'AVAILABLE'
+                operational = getattr(eq, 'operational_state', 'NORMAL') or 'NORMAL'
+                return (status_val in ['IN_USE', 'WAITING']) or (operational != 'NORMAL')
+            except Exception:
+                return False
+        current_occupancy = {eq.id: is_occupied(eq) for eq in all_eq}
 
         # 4. AI 루틴 생성 실행
         routine_result = routine_engine.generate_routine(

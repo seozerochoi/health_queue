@@ -161,7 +161,9 @@ class RoutineAIEngine:
             # 2-4. 가용성 모드 체크
             if availability_mode == 'AVAILABLE_ONLY':
                 # 사용 중이면 1차 필터링에서 제외 (나중에 대체제로 찾을 수 있음)
-                if current_occupancy.get(eq.equip_id, False): 
+                # occupancy key can be DB id or ai_model.Equipment.equip_id
+                occ_key = getattr(eq, 'equip_id', getattr(eq, 'id', None))
+                if current_occupancy.get(occ_key, False): 
                     continue 
             
             candidates.append(eq)
@@ -183,8 +185,10 @@ class RoutineAIEngine:
                 
                 # [Rule-based Boosting] 초보자에게는 쉬운 기구에 가산점 부여
                 if is_beginner:
-                    if getattr(eq, 'difficulty', 'MID') == 'LOW': score += 0.2
-                    if eq_type == 'MACHINE': score += 0.1
+                    if getattr(eq, 'difficulty', 'MID') == 'LOW':
+                        score += 0.2
+                    if str(getattr(eq, 'type', 'MACHINE')).upper() == 'MACHINE':
+                        score += 0.1
 
                 scored_candidates.append({'score': score, 'equip': eq})
         
@@ -212,7 +216,8 @@ class RoutineAIEngine:
                 continue
 
             # 점유 상태 확인
-            is_occupied = current_occupancy.get(candidate.equip_id, False)
+            occ_key = getattr(candidate, 'equip_id', getattr(candidate, 'id', None))
+            is_occupied = current_occupancy.get(occ_key, False)
             
             if not is_occupied:
                 final_selection.append(candidate)
@@ -238,7 +243,8 @@ class RoutineAIEngine:
         for eq in final_routine:
             # time_ai를 통해 개인화된 수행 시간 예측
             rec_time = self.time_ai.predict_time(user, eq)
-            is_active = current_occupancy.get(eq.equip_id, False)
+            occ_key = getattr(eq, 'equip_id', getattr(eq, 'id', None))
+            is_active = current_occupancy.get(occ_key, False)
             wait_time = random.randint(5, 15) if is_active else 0
             
             routine_result.append({
@@ -259,7 +265,7 @@ class RoutineAIEngine:
         avail_subs = [
             eq for eq in all_equipments 
             if getattr(eq, 'subcategory', '') == group_code 
-            and not current_occupancy.get(eq.equip_id, False)
+            and not current_occupancy.get(getattr(eq, 'equip_id', getattr(eq, 'id', None)), False)
         ]
         # 발견된 것 중 첫 번째 반환 (추후 점수순 정렬 가능)
         return avail_subs[0] if avail_subs else None
