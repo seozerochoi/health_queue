@@ -278,22 +278,32 @@ LOGGING = {
         },
         "django.request": {
             "handlers": ["console"],
-            "level": "DEBUG",
+            "level": "INFO",  # DEBUG -> INFO
             "propagate": False,
         },
         "users": {
             "handlers": ["console"],
-            "level": "DEBUG",
+            "level": "INFO",  # DEBUG -> INFO
             "propagate": False,
         },
         "gunicorn.error": {
             "handlers": ["console"],
-            "level": "DEBUG",
+            "level": "WARNING",  # DEBUG -> WARNING (epipe 로그 숨김)
             "propagate": False,
         },
         "gunicorn.access": {
             "handlers": ["console"],
             "level": "INFO",
+            "propagate": False,
+        },
+        "equipment.views": {
+            "handlers": ["console"],
+            "level": "WARNING",  # SSE alive 로그 줄이기
+            "propagate": False,
+        },
+        "equipment.event_bus": {
+            "handlers": ["console"],
+            "level": "WARNING",  # Redis 재연결 로그 줄이기
             "propagate": False,
         },
     },
