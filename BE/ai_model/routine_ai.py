@@ -68,8 +68,16 @@ class RoutineAIEngine:
 
     def _get_user_tensor(self, user):
         """time_ai의 로직을 재사용하여 User Feature 추출 (12차원)"""
-        # 임시 기구 객체를 넣어 User 정보만 뽑아냄
-        return self.time_ai._extract_features(user, self.equipments[0])[:12]
+        # time_ai의 feature 추출은 equipment.main_part 등을 요구하므로
+        # DB Equipment가 없거나 호환 객체가 아니면 안전한 더미를 사용
+        if not self.equipments:
+            dummy = Equipment(0, "DUMMY", 0, "GENERAL")
+            return self.time_ai._extract_features(user, dummy)[:12]
+
+        # DB Equipment를 time_ai.Equipment로 변환해 사용
+        db_eq = self.equipments[0]
+        ai_eq = self._to_ai_equipment(db_eq)
+        return self.time_ai._extract_features(user, ai_eq)[:12]
 
     def _get_equip_tensor(self, equipment):
         """
@@ -241,8 +249,9 @@ class RoutineAIEngine:
         # --- [Logic 6] 시간 계산 (time_ai 연동) ---
         routine_result = []
         for eq in final_routine:
-            # time_ai를 통해 개인화된 수행 시간 예측
-            rec_time = self.time_ai.predict_time(user, eq)
+            # time_ai는 AIEquipment 형태를 기대하므로 변환 후 예측
+            ai_eq = self._to_ai_equipment(eq)
+            rec_time = self.time_ai.predict_time(user, ai_eq)
             occ_key = getattr(eq, 'equip_id', getattr(eq, 'id', None))
             is_active = current_occupancy.get(occ_key, False)
             wait_time = random.randint(5, 15) if is_active else 0
@@ -307,6 +316,21 @@ class RoutineAIEngine:
             if user_target == '복근' and b_part == 'CORE': return True
 
         return False
+
+    def _to_ai_equipment(self, db_eq):
+        """DB Equipment -> time_ai.Equipment 변환"""
+        try:
+            main_part = 0 if str(getattr(db_eq, 'body_part', 'UPPER')).upper() == 'UPPER' else 1
+            sub_part = getattr(db_eq, 'subcategory', None) or str(getattr(db_eq, 'name', 'GENERAL'))
+            return Equipment(
+                getattr(db_eq, 'id', getattr(db_eq, 'equip_id', 0)),
+                getattr(db_eq, 'name', 'Unknown'),
+                main_part,
+                sub_part,
+            )
+        except Exception:
+            # 실패 시 안전한 기본값 반환
+            return Equipment(0, "DUMMY", 0, "GENERAL")
 
     def _sort_routine_scientifically(self, routine_list, is_beginner):
         """
