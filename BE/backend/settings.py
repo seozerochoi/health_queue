@@ -147,6 +147,23 @@ DATABASES = {
     'default': env.db(),
 }
 
+# ⚡ DB 연결 풀 설정 (성능 최적화)
+# Django는 기본적으로 각 요청마다 새 DB 연결을 생성/삭제
+# 연결 풀을 사용하면 연결을 재사용하여 응답 속도 향상
+DATABASES['default']['CONN_MAX_AGE'] = 600  # 연결 유지 시간 (600초)
+DATABASES['default']['OPTIONS'] = {
+    'connect_timeout': 10,  # 연결 타임아웃 (초)
+}
+
+# PostgreSQL 사용 시 추가 최적화
+if DATABASES['default'].get('ENGINE', '').endswith('postgresql'):
+    DATABASES['default']['OPTIONS'].update({
+        'keepalives': 1,  # TCP keep-alive 활성화
+        'keepalives_idle': 30,
+        'keepalives_interval': 10,
+        'keepalives_count': 5,
+    })
+
 
 # Password validation
 # (기존 내용 그대로)
