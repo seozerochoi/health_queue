@@ -18,7 +18,43 @@ class BaseAIView(APIView):
     def get_ai_engines(self):
         # apps.py에서 초기화된 AI 엔진 가져오기
         app_config = apps.get_app_config('ai_model')
-        return app_config.time_ai_engine, app_config.routine_ai_engine
+        time_engine = getattr(app_config, 'time_ai_engine', None)
+        routine_engine = getattr(app_config, 'routine_ai_engine', None)
+
+        # 서버가 gunicorn 등으로 실행될 때 apps.ready()에서 초기화되지 않을 수 있으므로
+        # 런타임에 lazy하게 초기화를 시도합니다.
+        if time_engine is None or routine_engine is None:
+            try:
+                from .time_ai import AIEngine
+                from .routine_ai import RoutineAIEngine
+                from equipment.models import Equipment
+
+                if time_engine is None:
+                    time_engine = AIEngine()
+                    try:
+                        time_engine.load_checkpoint("time_ai_checkpoint.pth")
+                    except Exception:
+                        pass
+                    if not getattr(time_engine, 'is_trained', False):
+                        # 간단한 전처리/사전학습
+                        time_engine.pretrain_with_formula()
+                    app_config.time_ai_engine = time_engine
+
+                if routine_engine is None:
+                    db_equipments = list(Equipment.objects.all())
+                    routine_engine = RoutineAIEngine(db_equipments)
+                    try:
+                        routine_engine.load_checkpoint("routine_ai_checkpoint.pth")
+                    except Exception:
+                        pass
+                    app_config.routine_ai_engine = routine_engine
+
+            except Exception as e:
+                import logging
+                logging.exception(f"AI engine lazy init failed: {e}")
+                return None, None
+
+        return time_engine, routine_engine
 
     def convert_to_ai_user(self, db_user):
         """Django User DB 객체를 -> AI User 객체로 변환"""
@@ -80,6 +116,8 @@ class BaseAIView(APIView):
 class RoutineGenerateView(BaseAIView):
     def post(self, request):
         time_engine, routine_engine = self.get_ai_engines()
+        if time_engine is None or routine_engine is None:
+            return Response({"error": "AI engine is not available on server. Check logs."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
         # 1. 파라미터 받기
         target_parts = request.data.get('parts', [])
@@ -131,6 +169,8 @@ class RoutineGenerateView(BaseAIView):
 class TimePredictionView(BaseAIView):
     def post(self, request):
         time_engine, _ = self.get_ai_engines()
+        if time_engine is None:
+            return Response({"error": "Time AI engine is not available on server. Check logs."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
         equip_id = request.data.get('equipment_id')
         db_equip = get_object_or_404(Equipment, pk=equip_id)
@@ -164,6 +204,8 @@ class TimePredictionView(BaseAIView):
 class FeedbackView(BaseAIView):
     def post(self, request):
         time_engine, routine_engine = self.get_ai_engines()
+        if time_engine is None or routine_engine is None:
+            return Response({"error": "AI engines are not available on server. Check logs."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         ai_user = self.convert_to_ai_user(request.user)
         
         fb_type = request.data.get('type') # 'TIME' or 'ROUTINE'
