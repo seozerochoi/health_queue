@@ -231,16 +231,16 @@ CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default=CELERY_BROKER_URL)
 
 # Beat 스케줄: expire task를 주기적으로 실행하여 NOTIFIED 예약 만료 처리를 수행합니다.
-# 권장: 알림 타임아웃(예: 15초)과 맞추기 위해 15초 간격으로 실행하는 것을 권장합니다.
+# ⚡ 30초 → 60초로 변경: 2GB RAM 환경에서 CPU/DB 부하 감소
 CELERY_BEAT_SCHEDULE = {
-    'expire-reservations-every-30s': {
+    'expire-reservations-every-60s': {
         'task': 'workouts.tasks.expire_notified_reservations',
-        'schedule': 30.0,  # seconds (recommended)
+        'schedule': 60.0,  # 30초 → 60초 (CPU 부하 50% 감소)
         'args': (),
     },
-    'expire-stale-sessions-every-30s': {
+    'expire-stale-sessions-every-60s': {
         'task': 'workouts.tasks.expire_stale_sessions',
-        'schedule': 30.0,
+        'schedule': 60.0,  # 30초 → 60초
         'args': (),
     },
 }
@@ -248,12 +248,12 @@ CELERY_BEAT_SCHEDULE = {
 # SSE polling frequency used by the simple equipment_stream prototype. Lower
 # values make the UI more responsive but increase DB load. Tune for your
 # deployment; we recommend 2-5 seconds for small deployments, 10+ for larger.
-# INCREASED TO 30s TO REDUCE DB LOAD - Real-time updates handled by client polling instead
-EQUIPMENT_SSE_POLL_INTERVAL_SECONDS = 30
+# ⚡ 30초 → 60초로 변경: 2GB RAM 환경에서 DB 폴링 50% 감소
+EQUIPMENT_SSE_POLL_INTERVAL_SECONDS = 60
 
-# SSE Heartbeat 설정 (30초마다 ping 전송)
-# ⚡ 10초 → 30초로 증가하여 API 요청 부하 감소
-EQUIPMENT_SSE_HEARTBEAT_SECONDS = 30
+# SSE Heartbeat 설정 (60초마다 ping 전송)
+# ⚡ 30초 → 60초로 증가하여 API 요청 부하 감소
+EQUIPMENT_SSE_HEARTBEAT_SECONDS = 60
 
 
 LOGGING = {
