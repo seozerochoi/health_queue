@@ -25,25 +25,47 @@ class BaseAIView(APIView):
         # 예시: UserProfile 모델에 inbody 정보가 있다고 가정
         # 실제 모델 필드명에 맞춰 수정해주세요!
         try:
-            profile = db_user.profile 
+            # 안전하게 UserProfile을 가져오기 (related name: userprofile)
+            profile = getattr(db_user, 'userprofile', None)
+            if profile is None:
+                # no profile -> cannot build AI user
+                return None
+
+            # Map DB field names to AI InBodyData expected fields.
+            # Use fallback numeric 0.0 for missing numeric fields to avoid exceptions.
+            def n(v):
+                try:
+                    return float(v) if v is not None else 0.0
+                except Exception:
+                    return 0.0
+
             inbody = InBodyData(
-                score=profile.inbody_score,
-                weight=profile.weight,
-                muscle_mass=profile.skeletal_muscle_mass,
-                fat_mass=profile.body_fat_mass,
-                height=profile.height,
-                fat_rate=profile.body_fat_percent,
-                r_arm=profile.seg_muscle_ra,
-                l_arm=profile.seg_muscle_la,
-                trunk=profile.seg_muscle_trunk,
-                r_leg=profile.seg_muscle_rl,
-                l_leg=profile.seg_muscle_ll
+                score=n(getattr(profile, 'inbody_score', None)),
+                weight=n(getattr(profile, 'weight_kg', None)),
+                muscle_mass=n(getattr(profile, 'skeletal_muscle_mass_kg', None)),
+                fat_mass=n(getattr(profile, 'body_fat_mass_kg', None)),
+                height=n(getattr(profile, 'height_cm', None)),
+                fat_rate=n(getattr(profile, 'body_fat_percentage', None)),
+                r_arm=n(getattr(profile, 'segment_right_arm_kg', None)),
+                l_arm=n(getattr(profile, 'segment_left_arm_kg', None)),
+                trunk=n(getattr(profile, 'segment_trunk_kg', None)),
+                r_leg=n(getattr(profile, 'segment_right_leg_kg', None)),
+                l_leg=n(getattr(profile, 'segment_left_leg_kg', None))
             )
+
+            # gender: normalize a few common representations
+            gender_raw = (getattr(profile, 'gender', '') or '').strip()
+            gender_num = 0 if gender_raw.lower().startswith('m') or gender_raw in ['0', 0] else 1
+
+            # goal mapping: DIET -> 0, else MUSCLE_GAIN -> 1 (fallback to 1)
+            goal_raw = (getattr(profile, 'exercise_goal', '') or '').upper()
+            goal_num = 0 if goal_raw == 'DIET' else 1
+
             return AIUser(
                 user_id=db_user.id,
                 name=db_user.username,
-                gender=0 if profile.gender == 'Male' else 1,
-                goal=0 if profile.goal == 'DIET' else 1,
+                gender=gender_num,
+                goal=goal_num,
                 inbody_data=inbody
             )
         except Exception as e:

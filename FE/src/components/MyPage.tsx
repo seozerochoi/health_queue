@@ -210,7 +210,11 @@ export function MyPage({
       // raw_lines from backend may be array of objects: {text,type,confidence}
       const serverLinesRaw: any[] = data.raw_lines || [];
       const serverLines: string[] = serverLinesRaw.map((l: any) =>
-        typeof l === "string" ? l : l && typeof l.text === "string" ? l.text : ""
+        typeof l === "string"
+          ? l
+          : l && typeof l.text === "string"
+          ? l.text
+          : ""
       );
       const rec = data.record || null;
       if (serverParsed && Object.keys(serverParsed).length > 0) {
@@ -254,7 +258,11 @@ export function MyPage({
       const serverParsed = data.parsed || null;
       const serverLinesRaw: any[] = data.raw_lines || [];
       const serverLines: string[] = serverLinesRaw.map((l: any) =>
-        typeof l === "string" ? l : l && typeof l.text === "string" ? l.text : ""
+        typeof l === "string"
+          ? l
+          : l && typeof l.text === "string"
+          ? l.text
+          : ""
       );
       const rec = data.record || null;
       setParsedResult(
@@ -306,12 +314,33 @@ export function MyPage({
   const applyParsedToProfile = async () => {
     if (!parsedResult) return;
     const body: any = {};
+
+    // 기본 필드들
+    if (parsedResult.gender != null) body.gender = parsedResult.gender;
+    if (parsedResult.age != null) body.age = parsedResult.age;
+    if (parsedResult.height_cm != null) body.height_cm = parsedResult.height_cm;
     if (parsedResult.weight_kg != null) body.weight_kg = parsedResult.weight_kg;
-    if (parsedResult.body_fat_percentage != null)
-      body.body_fat_percentage = parsedResult.body_fat_percentage;
+    if (parsedResult.inbody_score != null)
+      body.inbody_score = parsedResult.inbody_score;
     if (parsedResult.skeletal_muscle_mass_kg != null)
       body.skeletal_muscle_mass_kg = parsedResult.skeletal_muscle_mass_kg;
+    if (parsedResult.body_fat_mass_kg != null)
+      body.body_fat_mass_kg = parsedResult.body_fat_mass_kg;
+    if (parsedResult.body_fat_percentage != null)
+      body.body_fat_percentage = parsedResult.body_fat_percentage;
     if (parsedResult.bmi != null) body.bmi = parsedResult.bmi;
+
+    // 세그멘탈 근육량 필드들
+    if (parsedResult.segment_right_arm_kg != null)
+      body.segment_right_arm_kg = parsedResult.segment_right_arm_kg;
+    if (parsedResult.segment_left_arm_kg != null)
+      body.segment_left_arm_kg = parsedResult.segment_left_arm_kg;
+    if (parsedResult.segment_trunk_kg != null)
+      body.segment_trunk_kg = parsedResult.segment_trunk_kg;
+    if (parsedResult.segment_right_leg_kg != null)
+      body.segment_right_leg_kg = parsedResult.segment_right_leg_kg;
+    if (parsedResult.segment_left_leg_kg != null)
+      body.segment_left_leg_kg = parsedResult.segment_left_leg_kg;
 
     try {
       setSaving(true);
@@ -376,12 +405,32 @@ export function MyPage({
   const applyParsedToProfileFrom = async (parsed: any) => {
     if (!parsed) return;
     const body: any = {};
+
+    // 기본 필드들
+    if (parsed.gender != null) body.gender = parsed.gender;
+    if (parsed.age != null) body.age = parsed.age;
+    if (parsed.height_cm != null) body.height_cm = parsed.height_cm;
     if (parsed.weight_kg != null) body.weight_kg = parsed.weight_kg;
-    if (parsed.body_fat_percentage != null)
-      body.body_fat_percentage = parsed.body_fat_percentage;
+    if (parsed.inbody_score != null) body.inbody_score = parsed.inbody_score;
     if (parsed.skeletal_muscle_mass_kg != null)
       body.skeletal_muscle_mass_kg = parsed.skeletal_muscle_mass_kg;
+    if (parsed.body_fat_mass_kg != null)
+      body.body_fat_mass_kg = parsed.body_fat_mass_kg;
+    if (parsed.body_fat_percentage != null)
+      body.body_fat_percentage = parsed.body_fat_percentage;
     if (parsed.bmi != null) body.bmi = parsed.bmi;
+
+    // 세그멘탈 근육량 필드들
+    if (parsed.segment_right_arm_kg != null)
+      body.segment_right_arm_kg = parsed.segment_right_arm_kg;
+    if (parsed.segment_left_arm_kg != null)
+      body.segment_left_arm_kg = parsed.segment_left_arm_kg;
+    if (parsed.segment_trunk_kg != null)
+      body.segment_trunk_kg = parsed.segment_trunk_kg;
+    if (parsed.segment_right_leg_kg != null)
+      body.segment_right_leg_kg = parsed.segment_right_leg_kg;
+    if (parsed.segment_left_leg_kg != null)
+      body.segment_left_leg_kg = parsed.segment_left_leg_kg;
 
     try {
       setSaving(true);
@@ -487,29 +536,71 @@ export function MyPage({
                   <div className="flex flex-col md:flex-row gap-4">
                     <img
                       src={latestRecord.image_url}
+                      crossOrigin="anonymous"
                       className="w-full md:w-1/3 max-h-64 object-contain rounded"
                     />
                     <div className="flex-1 grid grid-cols-2 gap-2 text-sm">
                       <div>
-                        체중(kg): {latestRecord.parsed?.weight_kg ?? "-"}
+                        성별:{" "}
+                        {latestRecord.parsed?.gender === "Male"
+                          ? "남성"
+                          : latestRecord.parsed?.gender === "Female"
+                          ? "여성"
+                          : "-"}
                       </div>
+                      <div>나이: {latestRecord.parsed?.age ?? "-"}세</div>
                       <div>
-                        체지방(%):{" "}
-                        {latestRecord.parsed?.body_fat_percentage ?? "-"}
+                        InBody 점수: {latestRecord.parsed?.inbody_score ?? "-"}
+                      </div>
+                      <div>키(cm): {latestRecord.parsed?.height_cm ?? "-"}</div>
+                      <div>
+                        체중(kg): {latestRecord.parsed?.weight_kg ?? "-"}
                       </div>
                       <div>
                         골격근량(kg):{" "}
                         {latestRecord.parsed?.skeletal_muscle_mass_kg ?? "-"}
                       </div>
-                      <div>BMI: {latestRecord.parsed?.bmi ?? "-"}</div>
-                      <div>키(cm): {latestRecord.parsed?.height_cm ?? "-"}</div>
                       <div>
                         체지방량(kg):{" "}
                         {latestRecord.parsed?.body_fat_mass_kg ?? "-"}
                       </div>
                       <div>
-                        근육량(kg): {latestRecord.parsed?.muscle_mass_kg ?? "-"}
+                        체지방(%):{" "}
+                        {latestRecord.parsed?.body_fat_percentage ?? "-"}
                       </div>
+                      <div>BMI: {latestRecord.parsed?.bmi ?? "-"}</div>
+                      {/* 세그멘탈 근육량 (있을 경우만 표시) */}
+                      {(latestRecord.parsed?.segment_right_arm_kg ||
+                        latestRecord.parsed?.segment_left_arm_kg ||
+                        latestRecord.parsed?.segment_trunk_kg ||
+                        latestRecord.parsed?.segment_right_leg_kg ||
+                        latestRecord.parsed?.segment_left_leg_kg) && (
+                        <>
+                          <div className="col-span-2 font-semibold mt-2">
+                            부위별 근육량
+                          </div>
+                          <div>
+                            우측 팔:{" "}
+                            {latestRecord.parsed?.segment_right_arm_kg ?? "-"}kg
+                          </div>
+                          <div>
+                            좌측 팔:{" "}
+                            {latestRecord.parsed?.segment_left_arm_kg ?? "-"}kg
+                          </div>
+                          <div>
+                            몸통: {latestRecord.parsed?.segment_trunk_kg ?? "-"}
+                            kg
+                          </div>
+                          <div>
+                            우측 다리:{" "}
+                            {latestRecord.parsed?.segment_right_leg_kg ?? "-"}kg
+                          </div>
+                          <div>
+                            좌측 다리:{" "}
+                            {latestRecord.parsed?.segment_left_leg_kg ?? "-"}kg
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="mt-2 flex justify-end">
@@ -633,6 +724,7 @@ export function MyPage({
                   <img
                     src={previewSrc}
                     alt="preview"
+                    crossOrigin="anonymous"
                     className="w-full max-h-64 object-contain rounded-lg"
                   />
                 </div>
@@ -651,22 +743,300 @@ export function MyPage({
                   </div>
                 )}
                 <div>
-                  <Label>추출된 값</Label>
-                  <div className="mt-2">
-                    <div>체중(kg): {parsedResult?.weight_kg ?? "-"} </div>
-                    <div>
-                      체지방(%): {parsedResult?.body_fat_percentage ?? "-"}{" "}
+                  <Label>추출된 값 (편집 가능)</Label>
+                  <div className="mt-2 space-y-3">
+                    {/* 성별 선택 */}
+                    <div className="flex items-center gap-3">
+                      <label className="text-sm text-foreground w-32">
+                        성별
+                      </label>
+                      <Select
+                        value={parsedResult?.gender || ""}
+                        onValueChange={(value) => {
+                          setParsedResult({
+                            ...parsedResult,
+                            gender: value || null,
+                          });
+                        }}
+                      >
+                        <SelectTrigger className="flex-1 border-gray-600 bg-input-background text-white">
+                          <SelectValue placeholder="성별 선택" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Male">남성</SelectItem>
+                          <SelectItem value="Female">여성</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <div>
-                      골격근량(kg):{" "}
-                      {parsedResult?.skeletal_muscle_mass_kg ?? "-"}{" "}
+
+                    {/* 나이 */}
+                    <div className="flex items-center gap-3">
+                      <label className="text-sm text-foreground w-32">
+                        나이(세)
+                      </label>
+                      <Input
+                        type="number"
+                        value={parsedResult?.age ?? ""}
+                        onChange={(e) => {
+                          setParsedResult({
+                            ...parsedResult,
+                            age: e.target.value ? Number(e.target.value) : null,
+                          });
+                        }}
+                        className="flex-1"
+                      />
                     </div>
-                    <div>BMI: {parsedResult?.bmi ?? "-"} </div>
-                    <div>키(cm): {parsedResult?.height_cm ?? "-"}</div>
-                    <div>
-                      체지방량(kg): {parsedResult?.body_fat_mass_kg ?? "-"}
+
+                    {/* InBody Score */}
+                    <div className="flex items-center gap-3">
+                      <label className="text-sm text-foreground w-32">
+                        InBody 점수
+                      </label>
+                      <Input
+                        type="number"
+                        value={parsedResult?.inbody_score ?? ""}
+                        onChange={(e) => {
+                          setParsedResult({
+                            ...parsedResult,
+                            inbody_score: e.target.value
+                              ? Number(e.target.value)
+                              : null,
+                          });
+                        }}
+                        className="flex-1"
+                      />
                     </div>
-                    <div>근육량(kg): {parsedResult?.muscle_mass_kg ?? "-"}</div>
+
+                    {/* 키 */}
+                    <div className="flex items-center gap-3">
+                      <label className="text-sm text-foreground w-32">
+                        키(cm)
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={parsedResult?.height_cm ?? ""}
+                        onChange={(e) => {
+                          setParsedResult({
+                            ...parsedResult,
+                            height_cm: e.target.value
+                              ? Number(e.target.value)
+                              : null,
+                          });
+                        }}
+                        className="flex-1"
+                      />
+                    </div>
+
+                    {/* 체중 */}
+                    <div className="flex items-center gap-3">
+                      <label className="text-sm text-foreground w-32">
+                        체중(kg)
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={parsedResult?.weight_kg ?? ""}
+                        onChange={(e) => {
+                          setParsedResult({
+                            ...parsedResult,
+                            weight_kg: e.target.value
+                              ? Number(e.target.value)
+                              : null,
+                          });
+                        }}
+                        className="flex-1"
+                      />
+                    </div>
+
+                    {/* 골격근량 */}
+                    <div className="flex items-center gap-3">
+                      <label className="text-sm text-foreground w-32">
+                        골격근량(kg)
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={parsedResult?.skeletal_muscle_mass_kg ?? ""}
+                        onChange={(e) => {
+                          setParsedResult({
+                            ...parsedResult,
+                            skeletal_muscle_mass_kg: e.target.value
+                              ? Number(e.target.value)
+                              : null,
+                          });
+                        }}
+                        className="flex-1"
+                      />
+                    </div>
+
+                    {/* 체지방량 */}
+                    <div className="flex items-center gap-3">
+                      <label className="text-sm text-foreground w-32">
+                        체지방량(kg)
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={parsedResult?.body_fat_mass_kg ?? ""}
+                        onChange={(e) => {
+                          setParsedResult({
+                            ...parsedResult,
+                            body_fat_mass_kg: e.target.value
+                              ? Number(e.target.value)
+                              : null,
+                          });
+                        }}
+                        className="flex-1"
+                      />
+                    </div>
+
+                    {/* 체지방률 */}
+                    <div className="flex items-center gap-3">
+                      <label className="text-sm text-foreground w-32">
+                        체지방률(%)
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={parsedResult?.body_fat_percentage ?? ""}
+                        onChange={(e) => {
+                          setParsedResult({
+                            ...parsedResult,
+                            body_fat_percentage: e.target.value
+                              ? Number(e.target.value)
+                              : null,
+                          });
+                        }}
+                        className="flex-1"
+                      />
+                    </div>
+
+                    {/* BMI */}
+                    <div className="flex items-center gap-3">
+                      <label className="text-sm text-foreground w-32">
+                        BMI
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={parsedResult?.bmi ?? ""}
+                        onChange={(e) => {
+                          setParsedResult({
+                            ...parsedResult,
+                            bmi: e.target.value ? Number(e.target.value) : null,
+                          });
+                        }}
+                        className="flex-1"
+                      />
+                    </div>
+
+                    {/* 세그멘탈 근육량 (InBody 770) */}
+                    <div className="mt-4 space-y-2">
+                      <Label className="text-sm text-muted-foreground">
+                        부위별 근육량 (InBody 770)
+                      </Label>
+
+                      <div className="flex items-center gap-3">
+                        <label className="text-sm text-foreground w-32">
+                          우측 팔(kg)
+                        </label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={parsedResult?.segment_right_arm_kg ?? ""}
+                          onChange={(e) => {
+                            setParsedResult({
+                              ...parsedResult,
+                              segment_right_arm_kg: e.target.value
+                                ? Number(e.target.value)
+                                : null,
+                            });
+                          }}
+                          className="flex-1"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <label className="text-sm text-foreground w-32">
+                          좌측 팔(kg)
+                        </label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={parsedResult?.segment_left_arm_kg ?? ""}
+                          onChange={(e) => {
+                            setParsedResult({
+                              ...parsedResult,
+                              segment_left_arm_kg: e.target.value
+                                ? Number(e.target.value)
+                                : null,
+                            });
+                          }}
+                          className="flex-1"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <label className="text-sm text-foreground w-32">
+                          몸통(kg)
+                        </label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={parsedResult?.segment_trunk_kg ?? ""}
+                          onChange={(e) => {
+                            setParsedResult({
+                              ...parsedResult,
+                              segment_trunk_kg: e.target.value
+                                ? Number(e.target.value)
+                                : null,
+                            });
+                          }}
+                          className="flex-1"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <label className="text-sm text-foreground w-32">
+                          우측 다리(kg)
+                        </label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={parsedResult?.segment_right_leg_kg ?? ""}
+                          onChange={(e) => {
+                            setParsedResult({
+                              ...parsedResult,
+                              segment_right_leg_kg: e.target.value
+                                ? Number(e.target.value)
+                                : null,
+                            });
+                          }}
+                          className="flex-1"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <label className="text-sm text-foreground w-32">
+                          좌측 다리(kg)
+                        </label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={parsedResult?.segment_left_leg_kg ?? ""}
+                          onChange={(e) => {
+                            setParsedResult({
+                              ...parsedResult,
+                              segment_left_leg_kg: e.target.value
+                                ? Number(e.target.value)
+                                : null,
+                            });
+                          }}
+                          className="flex-1"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
                 {serverImageUrl && (

@@ -62,6 +62,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware', # 수정 FE
+    'backend.middleware.MediaCorsMiddleware',  # Custom CORS for media files
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -112,6 +113,8 @@ CORS_ALLOW_HEADERS = [
 CORS_EXPOSE_HEADERS = [
     "Content-Type",
     "X-CSRFToken",
+    "Content-Disposition",
+    "Content-Length",
 ]
 # SSE를 위한 메서드 허용
 CORS_ALLOW_METHODS = [
@@ -121,6 +124,14 @@ CORS_ALLOW_METHODS = [
     'PATCH',
     'POST',
     'PUT',
+]
+
+# CSRF 설정 - 미디어 파일 접근 허용
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://43.201.88.27',
+    'https://43.201.88.27',
 ]
 
 WSGI_APPLICATION = 'backend.wsgi.application'
