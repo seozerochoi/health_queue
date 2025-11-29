@@ -17,18 +17,15 @@ bind = '127.0.0.1:8000'
 # ============================================================
 # AWS 2 CPU 환경에 최적화
 # 공식 권장: workers = (2 × CPU_cores) + 1 = (2 × 2) + 1 = 5
-# SSE 연결이 worker를 점유하므로 실제로는 2~3개가 적절
-workers = 2  # 2개 worker (안정적)
+workers = 4  # 4개 worker (성능 우선)
 
-# Worker 클래스: gthread + threads (동시성 확보)
-# gthread는 경량 스레드 기반으로 SSE 유지 + 일반 API 동시 처리에 유리
-worker_class = 'gthread'
+# Worker 클래스: sync (기본값, 가장 빠름)
+# SSE가 필요하면 gevent 고려, 일반 API는 sync가 최적
+# worker_class = 'sync'  # 기본값이므로 주석 처리
 
-# 각 worker의 스레드 수
-# - SSE 연결: 대부분 idle 상태 (connection 유지만 함)
-# - API 요청: 동시 처리 필요
-# 총 동시 처리 = workers × threads = 2 × 2 = 4개 (메모리 제한 환경)
-threads = 2
+# gthread는 SSE용으로 필요할 때만 활성화
+# worker_class = 'gthread'
+# threads = 2
 
 # ============================================================
 # 3. 타임아웃 설정
@@ -41,30 +38,34 @@ timeout = 300  # 5분 (SSE + 느린 쿼리 포용)
 # systemd에서 TimeoutStopSec과 맞춰서 설정
 graceful_timeout = 30
 
+# temp 파일/소켓을 메모리 파일시스템(/dev/shm)에 두어 I/O 대기 감소
+# worker_tmp_dir = '/dev/shm'
+
+# PID 파일 (빠른 reload를 위해)
+# pidfile = '/tmp/gunicorn.pid'
+
 # ============================================================
 # 4. 로그 설정
 # ============================================================
-# ⚡ systemd journal로 로그를 보냄 (권장)
-# stdout/stderr를 systemd가 수집 → journalctl로 확인 가능
-loglevel = 'debug'
+# ⚡ 성능 우선: 로그 최소화
+# 프로덕션에서는 info 레벨만 사용 (debug는 개발 시에만)
+loglevel = 'info'
 
-# Access log 형식: 모든 API 요청 기록
-# %(h)s: 클라이언트 IP
-# %(l)s: -
-# %(u)s: 사용자
-# %(t)s: 요청 시간
-# %(r)s: 요청 라인 (메서드, 경로, HTTP 버전)
+# Access log: 요청/응답 시각, 메서드, 경로, 상태 코드, 처리 시간
+# %(t)s: 요청 시각 (로컬 타임존 - 한국 시간)
+# %(m)s: 메서드 (GET, POST 등)
+# %(U)s: URL 경로
 # %(s)s: 상태 코드
-# %(b)s: 응답 바이트
-# %(D)s: 요청 처리 시간 (마이크로초)
-# %(L)s: 요청 처리 시간 (밀리초)
-access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s %(L)sms'
-accesslog = '-'   # stdout으로 출력 (systemd journal 수집)
+# %(L)s: 요청 처리 시간 (초)
+# 포맷: [요청시각] 메서드 경로 → 상태코드 (처리시간)
+access_log_format = '%(t)s %(m)s %(U)s → %(s)s (%(L)ss)'
+accesslog = '-'   # stdout으로 출력
+
+# Error log
 errorlog = '-'    # stderr로 출력 (systemd journal 수집)
 
-# 로그 캡처 설정
-capture_output = True
-enable_stdio_inheritance = True
+# 로그 캡처 설정: 성능을 위해 최소화
+capture_output = False
 
 # ============================================================
 # 5. 연결 설정
