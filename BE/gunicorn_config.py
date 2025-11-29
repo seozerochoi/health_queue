@@ -41,12 +41,6 @@ timeout = 300  # 5분 (SSE + 느린 쿼리 포용)
 # systemd에서 TimeoutStopSec과 맞춰서 설정
 graceful_timeout = 30
 
-# temp 파일/소켓을 메모리 파일시스템(/dev/shm)에 두어 I/O 대기 감소
-worker_tmp_dir = '/dev/shm'
-
-# PID 파일 (빠른 reload를 위해)
-pidfile = '/tmp/gunicorn.pid'
-
 # ============================================================
 # 4. 로그 설정
 # ============================================================
