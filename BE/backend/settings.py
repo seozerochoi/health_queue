@@ -150,7 +150,7 @@ DATABASES = {
 # ⚡ DB 연결 풀 설정 (성능 최적화)
 # Django는 기본적으로 각 요청마다 새 DB 연결을 생성/삭제
 # 연결 풀을 사용하면 연결을 재사용하여 응답 속도 향상
-DATABASES['default']['CONN_MAX_AGE'] = 600  # 연결 유지 시간 (600초)
+#DATABASES['default']['CONN_MAX_AGE'] = 10  # 연결 유지 시간 (10초)
 DATABASES['default']['OPTIONS'] = {
     'connect_timeout': 10,  # 연결 타임아웃 (초)
 }
