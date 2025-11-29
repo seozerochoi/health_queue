@@ -33,7 +33,8 @@ threads = 4
 # 3. 타임아웃 설정
 # ============================================================
 # SSE는 장시간 연결을 유지하므로 충분히 긴 시간 설정 필수
-timeout = 120  # 2분 (SSE heartbeat 포함)
+# ⚠️ nginx timeout과 일치해야 함 (기본값 300s)
+timeout = 300  # 5분 (SSE + 느린 쿼리 포용)
 
 # Graceful timeout: worker 종료 시 대기 시간
 # systemd에서 TimeoutStopSec과 맞춰서 설정
