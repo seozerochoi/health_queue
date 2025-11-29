@@ -33,7 +33,7 @@ threads = 4
 # 3. 타임아웃 설정
 # ============================================================
 # SSE는 장시간 연결을 유지하므로 충분히 긴 시간 설정 필수
-timeout = 300  # 5분 (SSE heartbeat 포함)
+timeout = 120  # 2분 (SSE heartbeat 포함)
 
 # Graceful timeout: worker 종료 시 대기 시간
 # systemd에서 TimeoutStopSec과 맞춰서 설정
@@ -48,6 +48,18 @@ pidfile = '/tmp/gunicorn.pid'
 # ⚡ systemd journal로 로그를 보냄 (권장)
 # stdout/stderr를 systemd가 수집 → journalctl로 확인 가능
 loglevel = 'debug'
+
+# Access log 형식: 모든 API 요청 기록
+# %(h)s: 클라이언트 IP
+# %(l)s: -
+# %(u)s: 사용자
+# %(t)s: 요청 시간
+# %(r)s: 요청 라인 (메서드, 경로, HTTP 버전)
+# %(s)s: 상태 코드
+# %(b)s: 응답 바이트
+# %(D)s: 요청 처리 시간 (마이크로초)
+# %(L)s: 요청 처리 시간 (밀리초)
+access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s %(L)sms'
 accesslog = '-'   # stdout으로 출력 (systemd journal 수집)
 errorlog = '-'    # stderr로 출력 (systemd journal 수집)
 

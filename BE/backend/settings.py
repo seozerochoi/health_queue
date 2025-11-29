@@ -247,6 +247,25 @@ SIMPLE_JWT = {
 CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default=CELERY_BROKER_URL)
 
+# ============================================================
+# Celery 동시성 설정 (Worker 프로세스 수)
+# ============================================================
+# 2GB RAM, 2 CPU 환경에 최적화
+# workers = (2 × CPU_cores) + 1 = 5 (이론값)
+# 하지만 메모리 고려: 2 ~ 4개 권장
+CELERYD_CONCURRENCY = 4  # 동시 worker 수 (기본값: CPU 코어 수)
+
+# Worker 풀 타입: prefork (프로세스 기반, 권장)
+CELERY_WORKER_POOL = 'prefork'
+
+# Worker 재시작 정책 (메모리 누수 방지)
+# 각 worker가 처리한 후 재시작할 태스크 수
+CELERYD_MAX_TASKS_PER_CHILD = 100  # 100개 작업 후 재시작
+
+# Task 타임아웃 (초 단위)
+CELERYD_TASK_TIME_LIMIT = 600  # Hard limit: 10분
+CELERY_TASK_SOFT_TIME_LIMIT = 300  # Soft limit: 5분
+
 # Beat 스케줄: expire task를 주기적으로 실행하여 NOTIFIED 예약 만료 처리를 수행합니다.
 # ⚡ 30초 → 60초로 변경: 2GB RAM 환경에서 CPU/DB 부하 감소
 CELERY_BEAT_SCHEDULE = {
@@ -357,8 +376,8 @@ LOGGING = {
             "propagate": False,
         },
         "gunicorn.access": {
-            "handlers": ["console"],
-            "level": "INFO",  # ✅ 모든 HTTP 요청 로깅
+            "handlers": ["detailed_console"],  # detailed_console로 변경
+            "level": "DEBUG",  # ✅ 모든 HTTP 요청 상세 로깅
             "propagate": False,
         },
         "equipment.views": {
