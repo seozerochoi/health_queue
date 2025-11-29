@@ -465,6 +465,7 @@ def equipment_stream(request):
     def event_stream():
         from workouts.models import Reservation  # lazy import
         from django.db.models import Count, Q
+        from django.db import connection
 
         equipments = Equipment.objects.all().annotate(
             waiting_count=Count(
@@ -487,11 +488,18 @@ def equipment_stream(request):
                 'waiting_count': eq.waiting_count,
             })
 
+        # ✅ 초기 스냅샷 전송 후 DB 연결 정리 (SSE는 이후 Redis만 사용)
+        connection.close()
+        
+        # ✅ 초기 스냅샷 전송 후 DB 연결 정리 (SSE는 이후 Redis만 사용)
+        connection.close()
+        
         yield f"event: initial\ndata: {json.dumps(serialized)}\n\n"
         # 최초 연결 직후 heartbeat도 바로 전송
         yield "event: heartbeat\ndata: {}\n\n"
 
-        last_state = {item['id']: item for item in serialized}
+        # ⚡ REMOVED: last_state는 메모리만 차지하고 실제로 사용되지 않음
+        # Redis가 모든 상태 변경을 전달하므로 로컬 캐시 불필요
         heartbeat = getattr(settings, 'EQUIPMENT_SSE_HEARTBEAT_SECONDS', 10)  # 10초로 단축
         iteration_count = 0
 
@@ -516,9 +524,7 @@ def equipment_stream(request):
                         if not msg:
                             break
                         payload = msg.get('payload', {})
-                        eq_id = payload.get('id')
-                        if eq_id:
-                            last_state[eq_id] = payload
+                        # ⚡ REMOVED: last_state 캐싱 불필요 (Redis가 모든 상태 관리)
                         evt_type = msg.get('type', 'update')
                         yield f"event: {evt_type}\ndata: {json.dumps(payload)}\n\n"
                         last_activity = time.time()
@@ -599,9 +605,14 @@ def operator_notification_stream(request):
         return HttpResponse("Operator profile required", status=403)
     
     def event_stream():
+        from django.db import connection
+        
         # 초기 연결 성공 메시지
         yield "event: connected\ndata: {\"message\": \"Operator notification stream connected\"}\n\n"
         yield "event: heartbeat\ndata: {}\n\n"
+        
+        # ✅ 초기 메시지 전송 후 DB 연결 정리 (이후 Redis만 사용)
+        connection.close()
         
         heartbeat = getattr(settings, 'OPERATOR_SSE_HEARTBEAT_SECONDS', 15)
         iteration_count = 0

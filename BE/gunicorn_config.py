@@ -20,14 +20,15 @@ bind = '127.0.0.1:8000'
 # SSE 연결이 worker를 점유하므로 실제로는 2~3개가 적절
 workers = 2  # 2개 worker (안정적)
 
-# Worker 클래스: sync + threads (동시성 확보)
-worker_class = 'sync'
+# Worker 클래스: gthread + threads (동시성 확보)
+# gthread는 경량 스레드 기반으로 SSE 유지 + 일반 API 동시 처리에 유리
+worker_class = 'gthread'
 
 # 각 worker의 스레드 수
 # - SSE 연결: 대부분 idle 상태 (connection 유지만 함)
 # - API 요청: 동시 처리 필요
-# 총 동시 처리 = workers × threads = 2 × 4 = 8개
-threads = 4
+# 총 동시 처리 = workers × threads = 2 × 2 = 4개 (메모리 제한 환경)
+threads = 2
 
 # ============================================================
 # 3. 타임아웃 설정
@@ -39,6 +40,9 @@ timeout = 300  # 5분 (SSE + 느린 쿼리 포용)
 # Graceful timeout: worker 종료 시 대기 시간
 # systemd에서 TimeoutStopSec과 맞춰서 설정
 graceful_timeout = 30
+
+# temp 파일/소켓을 메모리 파일시스템(/dev/shm)에 두어 I/O 대기 감소
+worker_tmp_dir = '/dev/shm'
 
 # PID 파일 (빠른 reload를 위해)
 pidfile = '/tmp/gunicorn.pid'
