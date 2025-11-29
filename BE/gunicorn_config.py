@@ -27,7 +27,7 @@ worker_class = 'sync'
 # - SSE 연결: 대부분 idle 상태 (connection 유지만 함)
 # - API 요청: 동시 처리 필요
 # 총 동시 처리 = workers × threads = 2 × 4 = 8개
-threads = 2
+threads = 4
 
 # ============================================================
 # 3. 타임아웃 설정
