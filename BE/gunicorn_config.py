@@ -25,7 +25,9 @@ workers = 5  # 4개 worker (성능 우선)
 
 # gthread는 SSE용으로 필요할 때만 활성화
 # worker_class = 'gthread'
-threads = 4
+# threads = 4
+
+worker_class = 'gevent'  # SSE 지원
 
 # ============================================================
 # 3. 타임아웃 설정

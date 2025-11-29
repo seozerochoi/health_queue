@@ -328,12 +328,14 @@ LOGGING = {
         },
         "django.request": {
             "handlers": ["detailed_console"],
-            "level": "DEBUG",  # 모든 API 요청 상세 로깅
+            # 프로덕션에서는 과도한 요청 상세 로깅을 줄여 성능 향상
+            "level": "DEBUG" if DEBUG else "INFO",
             "propagate": False,
         },
         "django.db.backends": {
             "handlers": ["detailed_console"],
-            "level": "DEBUG",  # ⚡ DB 쿼리 로깅 (성능 분석 용)
+            # 프로덕션에서는 DB 쿼리 상세 로깅을 줄입니다
+            "level": "DEBUG" if DEBUG else "WARNING",
             "propagate": False,
         },
         "users": {
