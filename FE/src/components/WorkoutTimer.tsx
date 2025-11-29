@@ -82,7 +82,7 @@ export function WorkoutTimer({
       });
 
       if (response.ok) {
-        console.log("✅ 운동 종료 성공 (뒤로가기)");  
+        console.log("✅ 운동 종료 성공 (뒤로가기)");
       } else {
         console.warn("운동 종료 실패 (뒤로가기):", response.status);
       }
@@ -132,8 +132,11 @@ export function WorkoutTimer({
     if (!token) return;
 
     // SSE 연결
+    // 서버는 쿼리 파라미터 이름으로 access_token을 기대하므로 정확히 맞춥니다.
     const eventSource = new EventSource(
-      `${getApiBase()}/api/equipment/stream/?token=${encodeURIComponent(token)}`
+      `${getApiBase()}/api/equipment/stream/?access_token=${encodeURIComponent(
+        token
+      )}`
     );
     sseRef.current = eventSource;
 
@@ -162,7 +165,7 @@ export function WorkoutTimer({
             workerRef.current = null;
           }
         }
-        
+
         // 현재 사용 중인 기구가 MAINTENANCE 로 변경된 경우
         if (
           data.equipment_id === equipment.id &&
@@ -484,8 +487,10 @@ export function WorkoutTimer({
                   기구 고장 안내
                 </h2>
                 <p className="text-gray-300 leading-relaxed">
-                  이 기구는 고장 접수가 되었습니다.<br />
-                  더 이상 기구를 사용할 수 없습니다.<br />
+                  이 기구는 고장 접수가 되었습니다.
+                  <br />
+                  더 이상 기구를 사용할 수 없습니다.
+                  <br />
                   이용에 불편을 드려 죄송합니다.
                 </p>
               </div>
@@ -513,8 +518,10 @@ export function WorkoutTimer({
                   기구 점검 안내
                 </h2>
                 <p className="text-gray-300 leading-relaxed">
-                  이 기구는 현재 점검 중입니다.<br />
-                  더 이상 기구를 사용할 수 없습니다.<br />
+                  이 기구는 현재 점검 중입니다.
+                  <br />
+                  더 이상 기구를 사용할 수 없습니다.
+                  <br />
                   이용에 불편을 드려 죄송합니다.
                 </p>
               </div>
