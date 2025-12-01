@@ -52,8 +52,8 @@ class EquipmentDailyStats(models.Model):
         unique_together = ('equipment', 'date')
         ordering = ['-date']
         indexes = [
-            models.Index(fields=['equipment', 'date']),
-            models.Index(fields=['date']),
+            models.Index(fields=['equipment', 'date'], name='reports_equipd_equipme_idx'),
+            models.Index(fields=['date'], name='reports_equipd_date_idx'),
         ]
 
     def __str__(self):
