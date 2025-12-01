@@ -35,8 +35,8 @@ class Migration(migrations.Migration):
                         'ordering': ['-date'],
                         'unique_together': {('equipment', 'date')},
                         'indexes': [
-                            models.Index(fields=['equipment', 'date']),
-                            models.Index(fields=['date']),
+                            models.Index(fields=['equipment', 'date'], name='reports_equipd_equipme_idx'),
+                            models.Index(fields=['date'], name='reports_equipd_date_idx'),
                         ],
                     },
                 ),
