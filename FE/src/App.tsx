@@ -42,6 +42,7 @@ interface Reservation {
   notified_at?: string | null;
   notification_expires_at?: string | null;
   notification_timeout_seconds?: number | null;
+  isAiRecommended?: boolean;
 }
 
 interface RegisteredUser {
@@ -103,6 +104,7 @@ export default function App() {
   const [userName, setUserName] = useState<string>("");
   const [userGym, setUserGym] = useState<string>("");
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [reservationTab, setReservationTab] = useState<"normal" | "ai">("normal");
   const [notifications, setNotifications] = useState<ReservationNotification[]>(
     []
   );
@@ -662,6 +664,10 @@ export default function App() {
   const handleReservationComplete = (newReservations: Reservation[]) => {
     // AI 루틴에서 생성된 예약을 추가하고 즉시 예약 현황 화면으로 이동
     setReservations((prev) => [...prev, ...newReservations]);
+    // AI 추천 예약인 경우 AI 탭으로 설정
+    if (newReservations.length > 0 && newReservations[0].isAiRecommended) {
+      setReservationTab("ai");
+    }
     setCurrentView("reservation-status");
   };
 
@@ -674,6 +680,19 @@ export default function App() {
       const token = localStorage.getItem("access_token");
       if (!token) {
         alert("로그인이 필요합니다.");
+        return;
+      }
+
+      // AI 추천 예약인지 확인 (로컬 전용)
+      const reservation = reservations.find((r) => r.id === reservationId);
+      const isAiRecommended = reservation?.isAiRecommended === true;
+
+      // AI 추천 예약은 서버 호출 없이 로컬에서만 삭제
+      if (isAiRecommended) {
+        setReservations((prev) =>
+          prev.filter((reservation) => reservation.id !== reservationId)
+        );
+        alert("AI 추천 예약이 취소되었습니다.");
         return;
       }
 
@@ -846,7 +865,15 @@ export default function App() {
           };
         });
 
-      setReservations(mapped);
+      // AI 추천 예약(로컬 전용)을 보존하면서 서버 데이터와 병합
+      setReservations((prev) => {
+        // 기존 AI 추천 예약만 필터링
+        const aiReservations = prev.filter((r) => r.isAiRecommended === true);
+        // 서버에서 가져온 예약과 AI 추천 예약 병합
+        const merged = [...mapped, ...aiReservations];
+        console.log("📋 [fetchReservations] 서버 예약:", mapped.length, "AI 예약:", aiReservations.length, "병합:", merged.length);
+        return merged;
+      });
       return mapped;
     } catch (e) {
       console.error("Error fetching reservations:", e);
@@ -1536,6 +1563,7 @@ export default function App() {
         setCurrentView("equipment-list");
         break;
       case "reservation-status":
+        setReservationTab("normal"); // 뒤로 가기 시 기본 탭으로 리셋
         setCurrentView("equipment-list");
         break;
       case "my-page":
@@ -1570,6 +1598,10 @@ export default function App() {
   };
 
   const handleBottomNavigation = (view: string) => {
+    // 예약 현황으로 이동할 때는 normal 탭으로 리셋
+    if (view === "reservation-status") {
+      setReservationTab("normal");
+    }
     setCurrentView(view as AppView);
   };
 
@@ -1699,6 +1731,7 @@ export default function App() {
             gymName={selectedGym?.gym_name || ""}
             reservations={reservations}
             onCancelReservation={handleCancelReservation}
+            defaultTab={reservationTab}
           />
         );
 

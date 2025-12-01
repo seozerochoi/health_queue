@@ -39,11 +39,14 @@ interface Reservation {
   id: string;
   equipmentId: string;
   equipmentName: string;
+  equipmentImage?: string;
+  equipment_image?: string;
   reservationTime: string;
   duration: number;
   status: "confirmed" | "waiting";
   waitingPosition?: number;
   createdAt: Date;
+  isAiRecommended?: boolean;
 }
 
 interface AIRoutineRecommendationProps {
@@ -170,11 +173,14 @@ export function AIRoutineRecommendation({
           id: `${Date.now()}-${index}`,
           equipmentId: `equipment-${step.id}`,
           equipmentName: step.name,
+          equipmentImage: step.img,
+          equipment_image: step.img,
           reservationTime: timeString,
           duration: step.time,
           status: step.wait_time > 0 ? "waiting" : "confirmed",
           waitingPosition: step.wait_time > 0 ? 1 : undefined,
           createdAt: new Date(),
+          isAiRecommended: true,
         };
       }
     );
