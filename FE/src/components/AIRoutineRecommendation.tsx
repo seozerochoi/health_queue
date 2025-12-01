@@ -37,7 +37,7 @@ interface RoutineStep {
 
 interface Reservation {
   id: string;
-  equipmentId: string;
+  equipmentId: string | number;
   equipmentName: string;
   equipmentImage?: string;
   equipment_image?: string;
@@ -52,11 +52,13 @@ interface Reservation {
 interface AIRoutineRecommendationProps {
   onBack: () => void;
   onReservationComplete: (reservations: Reservation[]) => void;
+  onJoinQueue?: (equipmentId: number, equipmentName: string) => void;
 }
 
 export function AIRoutineRecommendation({
   onBack,
   onReservationComplete,
+  onJoinQueue,
 }: AIRoutineRecommendationProps) {
   const [step, setStep] = useState<"form" | "recommendation">("form");
   const [selectedBodyParts, setSelectedBodyParts] = useState<BodyPart[]>([]);
@@ -68,6 +70,9 @@ export function AIRoutineRecommendation({
   );
   const [equipmentRatings, setEquipmentRatings] = useState<{
     [key: number]: number;
+  }>({});
+  const [equipmentStatuses, setEquipmentStatuses] = useState<{
+    [key: number]: { status: string; waitingCount: number };
   }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [totalTime, setTotalTime] = useState(0);
@@ -133,6 +138,10 @@ export function AIRoutineRecommendation({
       setRecommendedRoutine(data.routine || []);
       setTotalTime(data.summary?.total_time || 0);
       setRoutineCount(data.summary?.count || 0);
+      
+      // 각 기구의 실시간 상태 조회
+      await fetchEquipmentStatuses(data.routine || []);
+      
       setStep("recommendation");
     } catch (err) {
       console.error("AI 루틴 생성 오류:", err);
@@ -141,6 +150,76 @@ export function AIRoutineRecommendation({
       );
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchEquipmentStatuses = async (routine: RoutineStep[]) => {
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE_URL}/api/equipment/`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) return;
+
+      const equipmentList = await response.json();
+      const statusMap: { [key: number]: { status: string; waitingCount: number } } = {};
+
+      routine.forEach((step) => {
+        const equipment = equipmentList.find((eq: any) => eq.id === step.id);
+        if (equipment) {
+          statusMap[step.id] = {
+            status: equipment.equipment_status || "AVAILABLE",
+            waitingCount: equipment.waiting_count || 0,
+          };
+        }
+      });
+
+      setEquipmentStatuses(statusMap);
+    } catch (err) {
+      console.error("기구 상태 조회 오류:", err);
+    }
+  };
+
+  const handleJoinQueue = async (equipmentId: number, equipmentName: string) => {
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        alert("로그인이 필요합니다.");
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/workouts/join-queue/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ equipment_id: equipmentId }),
+      });
+
+      if (!response.ok) {
+        throw new Error("줄서기 실패");
+      }
+
+      const data = await response.json();
+      
+      // onJoinQueue 콜백 호출 (App.tsx에서 일반 예약 추가)
+      if (onJoinQueue) {
+        onJoinQueue(equipmentId, equipmentName);
+      }
+
+      alert(`${equipmentName}에 줄서기가 완료되었습니다. (${data.position || 1}번째)`);
+      
+      // 기구 상태 업데이트
+      await fetchEquipmentStatuses(recommendedRoutine);
+    } catch (err) {
+      console.error("줄서기 오류:", err);
+      alert("줄서기에 실패했습니다.");
     }
   };
 
@@ -171,7 +250,8 @@ export function AIRoutineRecommendation({
 
         return {
           id: `${Date.now()}-${index}`,
-          equipmentId: `equipment-${step.id}`,
+          equipmentId: step.id,
+          equipment_id: step.id,
           equipmentName: step.name,
           equipmentImage: step.img,
           equipment_image: step.img,
@@ -279,7 +359,14 @@ export function AIRoutineRecommendation({
                   </div>
                 </div>
 
-                {recommendedRoutine.map((step, index) => (
+                {recommendedRoutine.map((step, index) => {
+                  const equipmentStatus = equipmentStatuses[step.id];
+                  const status = equipmentStatus?.status || "AVAILABLE";
+                  const waitingCount = equipmentStatus?.waitingCount || 0;
+                  const isAvailable = status === "AVAILABLE";
+                  const isInUse = status === "IN_USE" || status === "IN-USE";
+
+                  return (
                   <div
                     key={index}
                     className="p-3 bg-gray-800 rounded-lg border border-gray-700"
@@ -296,11 +383,6 @@ export function AIRoutineRecommendation({
                           <div className="flex items-center space-x-2 text-sm text-gray-300">
                             <Clock className="h-3 w-3" />
                             <span>{step.time}분</span>
-                            {step.wait_time > 0 && (
-                              <span className="text-yellow-400">
-                                • {step.wait_time}분 대기
-                              </span>
-                            )}
                           </div>
                         </div>
                       </div>
@@ -330,35 +412,43 @@ export function AIRoutineRecommendation({
                         </div>
 
                         <div className="flex flex-col items-end gap-2">
-                          {step.wait_time === 0 ? (
-                            <Badge className="bg-green-100 text-green-700 w-20 text-center">
-                              바로 사용 가능
+                          {/* 기구 상태 표시 */}
+                          {isAvailable ? (
+                            <Badge className="bg-green-100 text-green-700 w-24 text-center">
+                              바로 이용가능
                             </Badge>
-                          ) : (
+                          ) : isInUse ? (
                             <>
-                              <Badge className="bg-yellow-100 text-yellow-700 w-20 text-center">
-                                대기필요
+                              <Badge className="bg-red-100 text-red-700 w-24 text-center">
+                                사용중
                               </Badge>
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="border-blue-500 text-blue-400 hover:bg-blue-500/10 h-6 text-xs px-2 w-20 justify-center"
+                                className="border-blue-500 text-blue-400 hover:bg-blue-500/10 h-6 text-xs px-2 w-24 justify-center"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  // 줄서기 로직 (필요시 추가)
-                                  console.log(`줄서기: ${step.name}`);
+                                  handleJoinQueue(step.id, step.name);
                                 }}
                               >
                                 <Users className="h-3 w-3 mr-1" />
                                 줄서기
+                                {waitingCount > 0 && (
+                                  <span className="ml-1">({waitingCount})</span>
+                                )}
                               </Button>
                             </>
+                          ) : (
+                            <Badge className="bg-yellow-100 text-yellow-700 w-24 text-center">
+                              대기중
+                            </Badge>
                           )}
                         </div>
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="flex space-x-4">

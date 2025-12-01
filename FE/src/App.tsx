@@ -671,6 +671,14 @@ export default function App() {
     setCurrentView("reservation-status");
   };
 
+  const handleAiQueueJoin = (equipmentId: number, equipmentName: string) => {
+    // AI 추천 기구에서 줄서기 시 일반 예약으로 추가
+    const equipment = equipmentList.find((eq) => Number(eq.id) === equipmentId);
+    if (equipment) {
+      handleSingleReservation(equipment, "waiting");
+    }
+  };
+
   const handleCancelReservation = async (
     reservationId: string,
     equipmentId: string | number,
@@ -1682,6 +1690,7 @@ export default function App() {
           <AIRoutineRecommendation
             onBack={navigateBack}
             onReservationComplete={handleReservationComplete}
+            onJoinQueue={handleAiQueueJoin}
           />
         );
 
@@ -1731,7 +1740,9 @@ export default function App() {
             gymName={selectedGym?.gym_name || ""}
             reservations={reservations}
             onCancelReservation={handleCancelReservation}
+            onJoinQueue={handleAiQueueJoin}
             defaultTab={reservationTab}
+            equipmentList={equipmentList}
           />
         );
 

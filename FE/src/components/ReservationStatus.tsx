@@ -1,8 +1,18 @@
-import { ArrowLeft, Clock, MapPin } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { ArrowLeft, Clock, MapPin, Users } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+
+interface Equipment {
+  id: number | string;
+  name: string;
+  equipment_status?: string;
+  status?: string;
+  waiting_count?: number;
+  waitingCount?: number;
+}
 
 interface Reservation {
   id: string;
@@ -31,7 +41,9 @@ interface ReservationStatusProps {
   gymName: string;
   reservations: Reservation[];
   onCancelReservation?: (reservationId: string, equipmentId: string | number, waitingCount: number) => void;
+  onJoinQueue?: (equipmentId: number, equipmentName: string) => void;
   defaultTab?: "normal" | "ai";
+  equipmentList?: Equipment[];
 }
 
 export function ReservationStatus({
@@ -39,20 +51,50 @@ export function ReservationStatus({
   gymName,
   reservations,
   onCancelReservation,
+  onJoinQueue,
   defaultTab = "normal",
+  equipmentList = [],
 }: ReservationStatusProps) {
   // AI 추천 예약과 일반 예약 분리
   const aiReservations = reservations.filter((r) => r.isAiRecommended === true);
   const normalReservations = reservations.filter((r) => !r.isAiRecommended);
-
-  // 디버깅용 로그
-  console.log("=== ReservationStatus Debug ===");
-  console.log("Total reservations:", reservations.length);
-  console.log("AI reservations:", aiReservations.length);
-  console.log("Normal reservations:", normalReservations.length);
-  console.log("Default tab:", defaultTab);
-  console.log("All reservations:", reservations);
-  console.log("AI reservations detail:", aiReservations);
+  
+  // SSE로 받은 equipmentList로부터 상태 계산
+  // AI 예약의 equipmentId들을 추출하여 상태 맵 생성
+  const equipmentStatuses = useMemo(() => {
+    const statusMap: { [key: string]: { status: string; waitingCount: number } } = {};
+    
+    // AI 예약에 해당하는 기구 ID 추출
+    const aiEquipmentIds = aiReservations
+      .map((r) => String(r.equipment_id ?? r.equipmentId))
+      .filter(Boolean);
+    
+    console.log("🔄 [ReservationStatus] 상태 맵 생성:", {
+      aiReservationsCount: aiReservations.length,
+      aiEquipmentIds,
+      equipmentListLength: equipmentList.length,
+    });
+    
+    // equipmentList에서 AI 예약 기구들의 상태만 추출
+    aiEquipmentIds.forEach((eqId) => {
+      const equipment = equipmentList.find((eq) => String(eq.id) === eqId);
+      if (equipment) {
+        // equipment_status, status 둘 다 확인하고 대문자로 정규화
+        const rawStatus = equipment.equipment_status || equipment.status || "AVAILABLE";
+        const normalizedStatus = rawStatus.toUpperCase();
+        
+        statusMap[eqId] = {
+          status: normalizedStatus,
+          waitingCount: equipment.waiting_count || equipment.waitingCount || 0,
+        };
+        console.log(`  ✓ 기구 ${eqId} (${equipment.name}): ${normalizedStatus} (원본: ${rawStatus})`);
+      } else {
+        console.log(`  ✗ 기구 ${eqId}: equipmentList에 없음`);
+      }
+    });
+    
+    return statusMap;
+  }, [aiReservations, equipmentList]);
 
   const getStatusBadge = (status: string, position?: number | null) => {
     switch (status) {
@@ -237,6 +279,22 @@ export function ReservationStatus({
                 const waitingCount =
                   reservation.waitingCount ?? reservation.waiting_count ?? 0;
 
+                // 실시간 기구 상태 가져오기
+                const equipmentStatus = eqId ? equipmentStatuses[String(eqId)] : null;
+                const status = equipmentStatus?.status || "AVAILABLE";
+                const currentWaitingCount = equipmentStatus?.waitingCount || 0;
+                // 대문자로 정규화하여 비교
+                const isAvailable = status === "AVAILABLE";
+                const isInUse = status === "IN_USE" || status === "IN-USE";
+
+                // 디버깅 로그
+                console.log(`🎯 [UI 렌더링] ${name} (ID: ${eqId}):`, {
+                  equipmentStatus,
+                  status,
+                  isAvailable,
+                  isInUse,
+                });
+
                 return (
                   <Card key={reservation.id} className="bg-card border-border">
                     <CardHeader className="pb-4">
@@ -273,7 +331,36 @@ export function ReservationStatus({
                           </div>
                         </div>
 
-                        {getStatusBadge(String(reservation.status), position)}
+                        {/* 실시간 상태 표시 */}
+                        <div className="flex flex-col items-end gap-2">
+                          {isAvailable ? (
+                            <Badge className="bg-green-100 text-green-700">
+                              바로 이용가능
+                            </Badge>
+                          ) : isInUse ? (
+                            <>
+                              <Badge className="bg-red-100 text-red-700">
+                                사용중
+                              </Badge>
+                              {onJoinQueue && eqId && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="border-blue-500 text-blue-400 hover:bg-blue-900/20 text-xs"
+                                  onClick={() => {
+                                    onJoinQueue(Number(eqId), name);
+                                  }}
+                                >
+                                  줄서기
+                                </Button>
+                              )}
+                            </>
+                          ) : (
+                            <Badge className="bg-yellow-100 text-yellow-700">
+                              대기중
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent className="pt-0">
