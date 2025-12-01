@@ -213,7 +213,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # (기존 내용 그대로)
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
+# 서버 시스템 시간이 UTC여도, Django의 기본 타임존을 KST로 설정하여
+# 날짜/시간 연산과 직렬화 기본값이 아시아/서울을 기준으로 동작하도록 합니다.
+TIME_ZONE = 'Asia/Seoul'
 USE_I18N = True
 USE_TZ = True
 
@@ -236,7 +238,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-    )
+    ),
+    # 기본 직렬화 시 로컬타임(Asia/Seoul) 기준의 명확한 포맷 제공
+    # (ISO8601 기본값을 사용하고 싶다면 이 옵션을 제거하세요)
+    'DATETIME_FORMAT': '%Y-%m-%d %H:%M:%S',
 }
 
 WORKOUT_HEARTBEAT_TIMEOUT_SECONDS = 60

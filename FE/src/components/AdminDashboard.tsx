@@ -598,14 +598,23 @@ export function AdminDashboard({
     }
   };
 
+  // KST(Asia/Seoul) 기준 YYYY-MM-DD 포맷 헬퍼
+  const todayKST = () =>
+    new Intl.DateTimeFormat("sv-SE", {
+      timeZone: "Asia/Seoul",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+
   // 이용 통계 가져오기
   const fetchUsageStats = async () => {
     setIsLoadingStats(true);
     try {
       const token = localStorage.getItem("access_token");
-      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+      const today = todayKST(); // YYYY-MM-DD (Asia/Seoul)
       const response = await fetch(
-        `http://43.201.88.27/api/reports/daily-stats/?date=${today}`,
+        `http://43.201.88.27/api/daily-stats/?date=${today}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -642,7 +651,7 @@ export function AdminDashboard({
     try {
       const token = localStorage.getItem("access_token");
       const response = await fetch(
-        "http://43.201.88.27/api/reports/utilization/current/",
+        "http://43.201.88.27/api/utilization/current/",
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -670,9 +679,9 @@ export function AdminDashboard({
   const fetchHourlyUtilization = async () => {
     try {
       const token = localStorage.getItem("access_token");
-      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+      const today = todayKST(); // YYYY-MM-DD (Asia/Seoul)
       const response = await fetch(
-        `http://43.201.88.27/api/reports/utilization/hourly/?date=${today}`,
+        `http://43.201.88.27/api/utilization/hourly/?date=${today}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
