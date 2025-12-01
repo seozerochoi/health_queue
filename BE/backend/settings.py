@@ -166,6 +166,32 @@ if DATABASES['default'].get('ENGINE', '').endswith('postgresql'):
     })
 
 
+# ==========================================================
+# Cache (Redis 우선, 미설정 시 LocMem)
+# ==========================================================
+REDIS_CACHE_URL = env('REDIS_CACHE_URL', default=env('CELERY_BROKER_URL', default='redis://localhost:6379/0'))
+try:
+    # Django 5.2+ 내장 RedisCache 사용
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_CACHE_URL,
+            'OPTIONS': {
+                'ssl_cert_reqs': None if REDIS_CACHE_URL.startswith('rediss://') else None,
+            },
+            'TIMEOUT': None,  # 키별 TTL 지정에 따름
+        }
+    }
+except Exception:
+    # Redis 설정 실패시 프로세스 메모리 캐시로 대체
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'health-queue-locmem',
+        }
+    }
+
+
 # Password validation
 # (기존 내용 그대로)
 AUTH_PASSWORD_VALIDATORS = [

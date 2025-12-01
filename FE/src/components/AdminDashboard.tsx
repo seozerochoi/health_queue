@@ -95,6 +95,15 @@ export function AdminDashboard({
   const [usageStats, setUsageStats] = useState<Usage[]>([]);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
 
+  // 현재 이용률 상태 (폴링용)
+  const [currentUtilization, setCurrentUtilization] = useState({
+    active_sessions: 0,
+    utilization_percent: 0,
+  });
+  const [hourlyUsageData, setHourlyUsageData] = useState<
+    { hour: string; rate: number }[]
+  >([]);
+
   // 신고 목록 가져오기
   const fetchReports = async (silent = false) => {
     if (!silent) {
@@ -381,6 +390,17 @@ export function AdminDashboard({
     fetchReports();
     fetchEquipment();
     fetchUsageStats();
+    fetchCurrentUtilization();
+    fetchHourlyUtilization();
+  }, []);
+
+  // 현재 이용률 10초마다 폴링
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchCurrentUtilization();
+    }, 10000); // 10초
+
+    return () => clearInterval(interval);
   }, []);
 
   // 운영자 알림 SSE 구독
@@ -583,27 +603,32 @@ export function AdminDashboard({
     setIsLoadingStats(true);
     try {
       const token = localStorage.getItem("access_token");
-      const response = await fetch("http://43.201.88.27/api/equipment/daily-stats/", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+      const response = await fetch(
+        `http://43.201.88.27/api/reports/daily-stats/?date=${today}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
       if (!response.ok) {
         throw new Error("이용 통계 조회 실패");
       }
 
       const data = await response.json();
-      console.log("이용 통계 API 응답:", data);
-      
-      // API 응답을 Usage 형식으로 변환
-      const transformedStats: Usage[] = data.map((stat: any) => ({
+      console.log("일일 통계 API 응답:", data);
+
+      // API 응답에서 records 배열 추출
+      const records = data.records || [];
+      const transformedStats: Usage[] = records.map((stat: any) => ({
         equipment: stat.equipment_name,
         totalUsage: stat.usage_count,
-        averageTime: stat.average_time_minutes,
+        averageTime: Math.round(stat.average_time_minutes),
         satisfaction: 0, // 만족도는 현재 미사용
       }));
-      
+
       setUsageStats(transformedStats);
     } catch (error) {
       console.error("이용 통계 조회 에러:", error);
@@ -612,19 +637,74 @@ export function AdminDashboard({
     }
   };
 
+  // 현재 이용률 가져오기 (폴링용)
+  const fetchCurrentUtilization = async () => {
+    try {
+      const token = localStorage.getItem("access_token");
+      const response = await fetch(
+        "http://43.201.88.27/api/reports/utilization/current/",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("현재 이용률 조회 실패");
+      }
+
+      const data = await response.json();
+      console.log("현재 이용률 API 응답:", data);
+
+      setCurrentUtilization({
+        active_sessions: data.active_sessions,
+        utilization_percent: data.utilization_percent,
+      });
+    } catch (error) {
+      console.error("현재 이용률 조회 에러:", error);
+    }
+  };
+
+  // 시간대별 이용률 가져오기
+  const fetchHourlyUtilization = async () => {
+    try {
+      const token = localStorage.getItem("access_token");
+      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+      const response = await fetch(
+        `http://43.201.88.27/api/reports/utilization/hourly/?date=${today}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("시간대별 이용률 조회 실패");
+      }
+
+      const data = await response.json();
+      console.log("시간대별 이용률 API 응답:", data);
+
+      // API 응답의 hours 배열을 차트 데이터로 변환
+      const chartData = data.hours
+        .map((rate: number | null, index: number) => ({
+          hour: `${String(index).padStart(2, "0")}:00`,
+          rate: rate === null ? null : Math.round(rate),
+        }))
+        .filter((item: any) => item.rate !== null); // null 값 제거
+
+      setHourlyUsageData(chartData);
+    } catch (error) {
+      console.error("시간대별 이용률 조회 에러:", error);
+    }
+  };
+
   const pendingReports = reports.filter((r) => r.status === "pending");
 
   // Show usage charts panel when clicking the usage metric card
   const [showUsagePanel, setShowUsagePanel] = useState(false);
-
-  // 06시부터 23시까지 1시간 간격 데이터 (예시 생성)
-  const hourRange = Array.from({ length: 18 }, (_, i) => 6 + i); // 6..23
-  const hourlyUsageData = hourRange.map((h, idx) => {
-    // 예시: 낮시간대 피크가 되도록 부드러운 곡선 형태의 가짜 데이터 생성
-    const base = 50 + 40 * Math.sin(((idx - 6) / hourRange.length) * Math.PI);
-    const usedPct = Math.max(0, Math.min(100, Math.round(base)));
-    return { hour: `${String(h).padStart(2, "0")}:00`, rate: usedPct };
-  });
 
   return (
     <div className="min-h-screen bg-background p-4">
@@ -662,7 +742,9 @@ export function AdminDashboard({
               <div className="flex items-center space-x-2">
                 <Users className="h-8 w-8 text-blue-400" />
                 <div>
-                  <p className="text-2xl font-bold text-white">67</p>
+                  <p className="text-2xl font-bold text-white">
+                    {currentUtilization.active_sessions}
+                  </p>
                   <p className="text-sm text-gray-300">현재 이용자</p>
                 </div>
               </div>
@@ -677,7 +759,9 @@ export function AdminDashboard({
               <div className="flex items-center space-x-2">
                 <Clock className="h-8 w-8 text-green-400" />
                 <div>
-                  <p className="text-2xl font-bold text-white">85%</p>
+                  <p className="text-2xl font-bold text-white">
+                    {currentUtilization.utilization_percent}%
+                  </p>
                   <p className="text-sm text-gray-300">이용률</p>
                 </div>
               </div>
@@ -704,28 +788,7 @@ export function AdminDashboard({
             </CardHeader>
             <CardContent>
               <div style={{ width: "100%", height: "450px" }}>
-                <HourlyUsageChart
-                  data={[
-                    { hour: "6", rate: 53 },
-                    { hour: "7", rate: 42 },
-                    { hour: "8", rate: 12 },
-                    { hour: "9", rate: 37 },
-                    { hour: "10", rate: 50 },
-                    { hour: "11", rate: 66 },
-                    { hour: "12", rate: 20 },
-                    { hour: "13", rate: 55 },
-                    { hour: "14", rate: 68 },
-                    { hour: "15", rate: 72 },
-                    { hour: "16", rate: 78 },
-                    { hour: "17", rate: 85 },
-                    { hour: "18", rate: 92 },
-                    { hour: "19", rate: 88 },
-                    { hour: "20", rate: 75 },
-                    { hour: "21", rate: 62 },
-                    { hour: "22", rate: 45 },
-                    { hour: "23", rate: 28 },
-                  ]}
-                />
+                <HourlyUsageChart data={hourlyUsageData} />
               </div>
             </CardContent>
           </Card>
