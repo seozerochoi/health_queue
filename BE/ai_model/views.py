@@ -6,8 +6,7 @@ from django.shortcuts import get_object_or_404
 
 # Django DB 모델들 (경로가 맞는지 확인 필요)
 from equipment.models import Equipment
-from users.models import UserProfile # 혹은 사용하는 유저 모델
-
+from users.models import User
 # AI 데이터 포맷용 클래스
 from .time_ai import User as AIUser, InBodyData, Equipment as AIEquipment
 
