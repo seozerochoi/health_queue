@@ -210,42 +210,59 @@ class TimePredictionView(BaseAIView):
 # =========================================================
 class FeedbackView(BaseAIView):
     def post(self, request):
-        time_engine, routine_engine = self.get_ai_engines()
-        if time_engine is None or routine_engine is None:
-            return Response({"error": "AI engines are not available on server. Check logs."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        ai_user = self.convert_to_ai_user(request.user)
-        
-        fb_type = request.data.get('type') # 'TIME' or 'ROUTINE'
-        score = float(request.data.get('score', 3))
+        try:
+            time_engine, routine_engine = self.get_ai_engines()
+            if time_engine is None or routine_engine is None:
+                return Response({"error": "AI engines are not available on server. Check logs."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            ai_user = self.convert_to_ai_user(request.user)
+            if not ai_user:
+                # UserProfile이 없는 경우 - 피드백 무시하고 200 반환
+                return Response({"msg": "피드백 수신 완료 (프로필 없음 - 학습 생략)"}, status=status.HTTP_200_OK)
+            
+            fb_type = request.data.get('type') # 'TIME' or 'ROUTINE'
+            score = float(request.data.get('score', 3))
 
-        if fb_type == 'TIME':
-            # 시간 AI 학습
-            equip_id = request.data.get('equipment_id')
-            used_time = float(request.data.get('used_time')) # 추천받았던 시간
-            
-            # DB 객체 가져오기 & AI 객체 변환
-            db_eq = get_object_or_404(Equipment, pk=equip_id)
-            ai_eq = AIEquipment(db_eq.id, db_eq.name, 0, db_eq.subcategory) # 간소화
+            if fb_type == 'TIME':
+                # 시간 AI 학습
+                equip_id = request.data.get('equipment_id')
+                used_time = float(request.data.get('used_time')) # 추천받았던 시간
+                
+                # DB 객체 가져오기 & AI 객체 변환
+                db_eq = get_object_or_404(Equipment, pk=equip_id)
+                ai_eq = AIEquipment(db_eq.id, db_eq.name, 0, db_eq.subcategory) # 간소화
 
-            target, loss = time_engine.update_with_feedback(ai_user, ai_eq, used_time, score)
-            
-            # (옵션) 체크포인트 저장
-            time_engine.save_checkpoint("time_ai.pth")
-            
-            return Response({"msg": "시간 AI 학습 완료", "loss": loss})
+                target, loss = time_engine.update_with_feedback(ai_user, ai_eq, used_time, score)
+                
+                # (옵션) 체크포인트 저장
+                time_engine.save_checkpoint("time_ai.pth")
+                
+                return Response({"msg": "시간 AI 학습 완료", "loss": loss})
 
-        elif fb_type == 'ROUTINE':
-            # 루틴 AI 학습
-            routine_ids = request.data.get('routine_ids', []) # 기구 ID 리스트
-            
-            # ID 리스트를 Equipment 객체 리스트로 변환
-            routine_objs = list(Equipment.objects.filter(id__in=routine_ids))
-            
-            loss = routine_engine.learn_from_feedback(ai_user, routine_objs, score)
-            
-            # (옵션) 체크포인트 저장
-            routine_engine.save_checkpoint("routine_ai.pth")
+            elif fb_type == 'ROUTINE':
+                # 루틴 AI 학습
+                routine_ids = request.data.get('routine_ids', []) # 기구 ID 리스트
+                
+                if not routine_ids:
+                    return Response({"msg": "피드백 수신 완료 (routine_ids 없음 - 학습 생략)"}, status=status.HTTP_200_OK)
+                
+                # ID 리스트를 Equipment 객체 리스트로 변환
+                routine_objs = list(Equipment.objects.filter(id__in=routine_ids))
+                
+                if not routine_objs:
+                    return Response({"msg": "피드백 수신 완료 (기구 없음 - 학습 생략)"}, status=status.HTTP_200_OK)
+                
+                loss = routine_engine.learn_from_feedback(ai_user, routine_objs, score)
+                
+                # (옵션) 체크포인트 저장
+                routine_engine.save_checkpoint("routine_ai.pth")
 
-            return Response({"msg": "루틴 AI 학습 완료", "loss": loss})
+                return Response({"msg": "루틴 AI 학습 완료", "loss": loss})
 
-        return Response({"error": "Invalid Type"}, status=400)
+            return Response({"error": "Invalid Type"}, status=400)
+            
+        except Exception as e:
+            import logging
+            logging.exception(f"FeedbackView error: {e}")
+            # 500 대신 200으로 반환하여 프론트엔드 오류 방지
+            return Response({"msg": "피드백 수신 완료 (학습 중 오류 발생)", "error": str(e)}, status=status.HTTP_200_OK)

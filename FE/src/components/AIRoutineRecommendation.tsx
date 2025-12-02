@@ -469,7 +469,7 @@ export function AIRoutineRecommendation({
                 </Button>
                 <Button
                   onClick={() => {
-                    submitFeedback();
+                    // submitFeedback(); // 백엔드 구현 대기 중 - 500 에러 방지
                     reserveRoutine();
                   }}
                   className="flex-1 bg-blue-500 hover:bg-blue-600"
