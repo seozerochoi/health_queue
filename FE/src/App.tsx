@@ -671,11 +671,88 @@ export default function App() {
     setCurrentView("reservation-status");
   };
 
-  const handleAiQueueJoin = (equipmentId: number, equipmentName: string) => {
-    // AI 추천 기구에서 줄서기 시 일반 예약으로 추가
+  const handleAiQueueJoin = async (
+    equipmentId: number,
+    equipmentName: string
+  ) => {
     const equipment = equipmentList.find((eq) => Number(eq.id) === equipmentId);
-    if (equipment) {
-      handleSingleReservation(equipment, "waiting");
+    if (!equipment) return;
+
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        alert("로그인이 필요합니다.");
+        return;
+      }
+
+      const apiBase = (() => {
+        try {
+          const vite = (import.meta as any)?.env?.VITE_API_BASE;
+          if (vite) return vite;
+        } catch (e) {
+          /* ignore */
+        }
+        try {
+          if (
+            typeof process !== "undefined" &&
+            process?.env?.REACT_APP_API_BASE
+          )
+            return process.env.REACT_APP_API_BASE;
+        } catch (e) {
+          /* ignore */
+        }
+        return "http://43.201.88.27";
+      })();
+
+      const response = await fetch(`${apiBase}/api/workouts/join-queue/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ equipment_id: parseInt(String(equipment.id)) }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("[AI] 줄서기 실패:", response.status, errorText);
+        alert("줄서기에 실패했습니다.");
+        return;
+      }
+
+      const data = await response.json();
+      // 서버에서 생성된 예약 정보를 사용해 로컬 상태에 추가 (이미지 포함)
+      const now = new Date();
+      const reservationTime = now.toLocaleTimeString("ko-KR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const endTime = new Date(
+        now.getTime() + equipment.allocatedTime * 60000
+      ).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+
+      const serverReservation: Reservation = {
+        id: String(data.id ?? Date.now()),
+        equipment_id: equipment.id,
+        equipmentId: equipment.id,
+        equipmentName: equipment.name,
+        equipment_image: (equipment as any).image ?? undefined,
+        reservationTime: `${reservationTime} - ${endTime}`,
+        duration: equipment.allocatedTime,
+        status: "waiting",
+        waitingPosition: data.position ?? data.waiting_position ?? undefined,
+        waiting_position: data.waiting_position ?? data.position ?? undefined,
+        waitingCount: data.waiting_count ?? undefined,
+        createdAt: now,
+      };
+
+      setReservations((prev) => [...prev, serverReservation]);
+      setCurrentView("reservation-status");
+      // 서버와 동기화하여 취소/상태가 정확하도록 새로 고침
+      fetchReservations();
+    } catch (error) {
+      console.error("[AI] 줄서기 중 오류:", error);
+      alert("줄서기 중 오류가 발생했습니다.");
     }
   };
 
