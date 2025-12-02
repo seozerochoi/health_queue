@@ -632,7 +632,7 @@ export function AdminDashboard({
       console.log("일일 통계 API 응답:", data);
 
       // API 응답에서 records 배열 추출 (호환성: 배열 혹은 객체.records)
-      const records = Array.isArray(data) ? data : (data.records || []);
+      const records = Array.isArray(data) ? data : data.records || [];
       const transformedStats: Usage[] = records.map((stat: any) => ({
         equipment: stat.equipment_name,
         totalUsage: stat.usage_count,
