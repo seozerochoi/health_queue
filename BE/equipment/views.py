@@ -375,6 +375,7 @@ class EquipmentViewSet(viewsets.ModelViewSet):
         }
         """
         from django.utils import timezone
+        from datetime import datetime, date, time as dt_time
         from workouts.models import UsageSession
         
         user = request.user
@@ -393,15 +394,22 @@ class EquipmentViewSet(viewsets.ModelViewSet):
             return Response({"detail": "운영자 소유 gym이 없습니다."}, status=status.HTTP_400_BAD_REQUEST)
         
         gym = owner_gyms.first()
-        now = timezone.now()
-        # 당일 00:00 ~ 23:59:59.999999 (KST 기준)
         tz = timezone.get_current_timezone()
-        day_start = timezone.make_aware(
-            now.replace(hour=0, minute=0, second=0, microsecond=0), tz
-        )
-        day_end = timezone.make_aware(
-            now.replace(hour=23, minute=59, second=59, microsecond=999999), tz
-        )
+
+        # 지원: ?date=YYYY-MM-DD (로컬 타임존 기준)
+        date_str = request.query_params.get('date')
+        try:
+            if date_str:
+                target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            else:
+                # 로컬 타임존의 오늘 날짜
+                target_date = timezone.localdate()
+        except Exception:
+            return Response({"detail": "잘못된 날짜 형식입니다. 예: ?date=2025-12-02"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 하루의 시작/끝 경계 (타임존 aware)
+        day_start = timezone.make_aware(datetime.combine(target_date, dt_time.min), tz)
+        day_end = timezone.make_aware(datetime.combine(target_date, dt_time.max), tz)
 
         # 해당 gym의 모든 기구 가져오기
         equipments = Equipment.objects.filter(gym=gym).order_by('name')
@@ -420,6 +428,7 @@ class EquipmentViewSet(viewsets.ModelViewSet):
         # equipment_id -> [durations]
         from collections import defaultdict
         durations_by_equip = defaultdict(list)
+        now = timezone.now()
         for s in sessions:
             end_dt = s.end_time or now
             if end_dt < s.start_time:
