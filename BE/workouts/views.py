@@ -225,17 +225,12 @@ class StartSessionView(APIView):
         session_type = ''
 
         if reservation:
-            # ✅ 사용 권한 검증 통과: NOTIFIED 사용자. 예약은 queue에서 제거(dequeue) 처리.
+            # ✅ 사용 권한 검증 통과: NOTIFIED 사용자. 예약은 queue에서 완전 제거.
             allocated_time = equipment.base_session_time_minutes
             session_type = 'BASE'
-            try:
-                res_id = reservation.id
-                reservation.delete()  # COMPLETED 대신 삭제로 큐 정리 명확화
-                logger.info(f"[StartSession] NOTIFIED 예약 dequeue 및 삭제 완료 reservation_id={res_id}")
-            except Exception:
-                logger.warning("[StartSession] 예약 삭제 실패 - fallback COMPLETED 표시", exc_info=True)
-                reservation.status = 'COMPLETED'
-                reservation.save(update_fields=['status'])
+            res_id = reservation.id
+            reservation.delete()
+            logger.info(f"[StartSession] NOTIFIED 예약 삭제 완료 reservation_id={res_id}")
         else:
             try:
                 from ai_model.prediction_utils import get_ai_recommendation

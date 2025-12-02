@@ -230,21 +230,7 @@ export function AdminDashboard({
       const currentEquipment = equipmentList.find((e) => e.id === equipmentId);
       const oldStatus = currentEquipment?.operational_state;
 
-      // gym_id 가져오기 (현재 운영자의 gym)
-      const userResponse = await fetch(
-        "http://43.201.88.27/api/users/profile/",
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
       let gymId = 1; // 기본값
-      if (userResponse.ok) {
-        const userData = await userResponse.json();
-        gymId = userData.gym_id || 1;
-      }
 
       // 운영 상태 변경 (백엔드 표준 경로 사용)
       const response = await fetch(

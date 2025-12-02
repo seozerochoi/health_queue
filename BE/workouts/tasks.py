@@ -20,16 +20,37 @@ from .utils import get_notification_timeout_minutes
 def expire_notified_reservations(self, timeout_minutes: float = None, batch_size: int = 50):
     """
     Expire NOTIFIED reservations older than timeout_minutes and notify next waiting users.
+    Also expire stale WAITING reservations (older than 24 hours).
     This task is intended to be run periodically (or scheduled per-reservation).
     """
     # Use the shared helper when caller doesn't pass a specific timeout
     if timeout_minutes is None:
         timeout_minutes = get_notification_timeout_minutes()
     cutoff = timezone.now() - timedelta(minutes=timeout_minutes)
+    
+    # Stale WAITING cleanup: expire WAITING older than 24 hours
+    stale_waiting_cutoff = timezone.now() - timedelta(hours=24)
+    
     expired_total = 0
     notified_total = 0
+    stale_waiting_expired = 0
 
-    # Batch processing with select_for_update(skip_locked=True) for safety
+    # First: Clean up stale WAITING reservations (older than 24 hours)
+    with transaction.atomic():
+        stale_waiting = Reservation.objects.filter(
+            status='WAITING',
+            created_at__lt=stale_waiting_cutoff
+        )
+        stale_count = stale_waiting.count()
+        if stale_count > 0:
+            stale_waiting.update(status='EXPIRED')
+            stale_waiting_expired = stale_count
+            # Log for monitoring
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"🧹 [Cleanup] {stale_waiting_expired}개의 오래된 WAITING 예약 만료 처리")
+
+    # Second: Expire NOTIFIED reservations (existing logic)
     while True:
         with transaction.atomic():
             qs = (
@@ -83,7 +104,11 @@ def expire_notified_reservations(self, timeout_minutes: float = None, batch_size
 
                 transaction.on_commit(lambda ids=list(touched_eq_ids): _emit(ids))
 
-    return {'expired': expired_total, 'notified': notified_total}
+    return {
+        'expired_notified': expired_total,
+        'notified_next': notified_total,
+        'stale_waiting_expired': stale_waiting_expired
+    }
 
 
 @shared_task(bind=True)

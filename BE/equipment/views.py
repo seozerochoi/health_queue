@@ -164,15 +164,23 @@ class EquipmentViewSet(viewsets.ModelViewSet):
                             equipment.status = 'AVAILABLE'
                             equipment.save(update_fields=['status'])
 
-                            # 대기열에 예약 추가 (waiting_position 필드 없음 → created_at 기준)
-                            # UniqueConstraint로 동일 유저/기구 중복 방지
-                            Reservation.objects.get_or_create(
+                            # 대기열에 예약 추가 (중복 방지)
+                            # ⚠️ DEFENSIVE: 중복 데이터가 있을 수 있으므로 filter().first() 사용
+                            existing_reservation = Reservation.objects.filter(
                                 user=active_session.user,
                                 equipment=equipment,
-                                defaults={
-                                    'status': 'WAITING',
-                                }
-                            )
+                                status__in=['WAITING', 'NOTIFIED']
+                            ).first()
+                            
+                            if not existing_reservation:
+                                Reservation.objects.create(
+                                    user=active_session.user,
+                                    equipment=equipment,
+                                    status='WAITING',
+                                )
+                                logger.info(f"✅ [Maintenance] 예약 생성: user={active_session.user.username}")
+                            else:
+                                logger.info(f"ℹ️ [Maintenance] 이미 예약 존재: user={active_session.user.username}, id={existing_reservation.id}")
 
                     # CASE 2: MAINTENANCE → NORMAL
                     elif old_state == 'MAINTENANCE' and new_state == 'NORMAL':
