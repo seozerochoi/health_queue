@@ -94,11 +94,15 @@ try:
     
     print(f"7. 날짜별 슬롯 맵 생성: {len(slot_map_per_day)}일")
     
-    # 세션 반복
+    # 시간대별 사용 기구 집합
+    hour_equipment_sets = [set() for _ in range(24)]
+    
+    # 세션 반복: 해당 시간대에 기구를 사용했으면 카운트
     processed = 0
-    for s in sessions.only('start_time', 'end_time'):
+    for s in sessions.only('start_time', 'end_time', 'equipment_id'):
         s_start = s.start_time
         s_end = s.end_time or tz_now
+        equip_id = s.equipment_id
         
         # 범위 벗어나면 클램프
         if s_end < day_start_dt or s_start > day_end_dt:
@@ -116,18 +120,21 @@ try:
                 cur += timedelta(days=1)
                 continue
             for idx, h_start, h_end in slots:
-                minutes = _overlap_minutes(s_start, s_end, h_start, h_end)
-                if minutes > 0:
-                    totals[idx] += minutes
+                # 1초라도 겹치면 해당 시간대에 사용한 것으로 간주
+                if _overlap_minutes(s_start, s_end, h_start, h_end) > 0:
+                    hour_equipment_sets[idx].add(equip_id)
             cur += timedelta(days=1)
         processed += 1
     
     print(f"8. 세션 처리 완료: {processed}개")
     
-    # 퍼센트 계산
-    denom = capacity_equip * 60.0 * (days if mode == 'range' else 1)
-    percentages = [round((m / denom) * 100.0, 1) for m in totals]
-    print(f"9. 분모: {denom} (기구={capacity_equip}, 분=60, 일수={days})")
+    # 퍼센트 계산: (사용된 기구 수 / 전체 기구 수) * 100
+    divisor = days if mode == 'range' else 1
+    percentages = [
+        round((len(equip_set) / divisor / capacity_equip) * 100.0, 1)
+        for equip_set in hour_equipment_sets
+    ]
+    print(f"9. 계산 방식: (사용 기구 수 / {divisor} / {capacity_equip}) * 100")
     
     # 미래 시간 null 처리
     if mode == 'single':

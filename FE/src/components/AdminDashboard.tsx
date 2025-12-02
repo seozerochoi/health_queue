@@ -462,9 +462,11 @@ export function AdminDashboard({
       // heartbeat는 조용히 처리
     });
 
-    eventSource.onerror = (error) => {
+    eventSource.onerror = (error: Event) => {
       console.error("❌ [AdminDashboard] 운영자 알림 SSE 오류:", error);
-      eventSource.close();
+      if (eventSource.readyState === EventSource.CLOSED) {
+        console.log("🔌 [AdminDashboard] SSE 연결 종료됨");
+      }
     };
 
     return () => {
@@ -697,12 +699,12 @@ export function AdminDashboard({
       console.log("시간대별 이용률 API 응답:", data);
 
       // API 응답의 hours 배열을 차트 데이터로 변환
-      const chartData = data.hours
-        .map((rate: number | null, index: number) => ({
-          hour: `${String(index).padStart(2, "0")}:00`,
-          rate: rate === null ? null : Math.round(rate),
-        }))
-        .filter((item: any) => item.rate !== null); // null 값 제거
+      const chartData = data.hours.map(
+        (rate: number | null, index: number) => ({
+          hour: String(index), // 숫자 문자열로 ("0", "1", "2", ...)
+          rate: rate === null ? 0 : Math.round(rate), // null을 0으로
+        })
+      );
 
       setHourlyUsageData(chartData);
     } catch (error) {
@@ -1270,7 +1272,7 @@ function HourlyUsageChart({ data }: { data: HourlyDatum[] }) {
     <ChartContainer config={config} className="w-full h-full">
       <LineChart
         data={data}
-        margin={{ top: 20, right: 30, left: 10, bottom: 30 }}
+        margin={{ top: 20, right: 40, left: 60, bottom: 50 }}
       >
         <CartesianGrid
           strokeDasharray="3 3"
@@ -1279,10 +1281,12 @@ function HourlyUsageChart({ data }: { data: HourlyDatum[] }) {
         />
         <XAxis
           dataKey="hour"
+          type="number"
+          domain={[0, 23]}
           tick={{ fill: "#9ca3af", fontSize: 14 }}
           stroke="#6b7280"
-          ticks={["6", "9", "12", "15", "18", "21", "23"]}
-          padding={{ left: 20, right: 20 }}
+          ticks={[0, 3, 6, 9, 12, 15, 18, 21, 23]}
+          tickMargin={10}
           label={{
             value: "시간",
             position: "insideBottom",
@@ -1296,11 +1300,22 @@ function HourlyUsageChart({ data }: { data: HourlyDatum[] }) {
           tickFormatter={(v) => `${v}%`}
           tick={{ fill: "#9ca3af", fontSize: 14 }}
           stroke="#6b7280"
-          width={50}
+          tickMargin={5}
+          label={{
+            value: "이용률",
+            angle: -90,
+            position: "insideLeft",
+            offset: 0,
+            fill: "#9ca3af",
+          }}
         />
         <ChartTooltip
-          content={<ChartTooltipContent />}
-          labelFormatter={(label) => `${label}시`}
+          content={
+            <ChartTooltipContent
+              labelFormatter={(label) => `${label}시`}
+              formatter={(value) => [`이용률 : ${value}%`]}
+            />
+          }
         />
         <Line
           type="monotone"

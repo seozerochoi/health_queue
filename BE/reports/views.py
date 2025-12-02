@@ -202,8 +202,8 @@ class HourlyUtilizationView(APIView):
         except Exception:
             pass
 
-        # 시간대별 분 누적
-        totals = [0.0] * 24
+        # 시간대별 사용 기구 집합 (세트로 중복 제거)
+        hour_equipment_sets = [set() for _ in range(24)]
 
         # 범위 내 각 날짜에 대한 슬록 구성
         cur_date = start_date
@@ -214,10 +214,12 @@ class HourlyUtilizationView(APIView):
             slot_map_per_day[cur_date] = self._hour_slots(midnight)
             cur_date += timedelta(days=1)
 
-        # 세션 반복
-        for s in sessions.only('start_time', 'end_time'):
+        # 세션 반복: 해당 시간대에 기구를 사용했으면 카운트
+        for s in sessions.only('start_time', 'end_time', 'equipment_id'):
             s_start = s.start_time
             s_end = s.end_time or tz_now
+            equip_id = s.equipment_id
+            
             # 세션이 범위를 벗어나면 클램프
             if s_end < day_start_dt or s_start > day_end_dt:
                 continue
@@ -226,7 +228,7 @@ class HourlyUtilizationView(APIView):
             if s_end > day_end_dt:
                 s_end = day_end_dt
 
-            # 날짜 별 시간대에 겹친 분을 합산
+            # 날짜별 시간대에 겹치면 해당 기구 ID를 집합에 추가
             cur = s_start.date()
             while cur <= s_end.date():
                 slots = slot_map_per_day.get(cur)
@@ -234,14 +236,18 @@ class HourlyUtilizationView(APIView):
                     cur += timedelta(days=1)
                     continue
                 for idx, h_start, h_end in slots:
-                    minutes = self._overlap_minutes(s_start, s_end, h_start, h_end)
-                    if minutes > 0:
-                        totals[idx] += minutes
+                    # 1초라도 겹치면 해당 시간대에 사용한 것으로 간주
+                    if self._overlap_minutes(s_start, s_end, h_start, h_end) > 0:
+                        hour_equipment_sets[idx].add(equip_id)
                 cur += timedelta(days=1)
 
-        # 퍼센트 계산
-        denom = capacity_equip * 60.0 * (days if mode == 'range' else 1)
-        percentages = [round((m / denom) * 100.0, 1) for m in totals]
+        # 퍼센트 계산: (사용된 기구 수 / 전체 기구 수) * 100
+        # range 모드에서는 일수로 나눔 (평균)
+        divisor = days if mode == 'range' else 1
+        percentages = [
+            round((len(equip_set) / divisor / capacity_equip) * 100.0, 1) 
+            for equip_set in hour_equipment_sets
+        ]
 
         # 기본 모드에서 미래 시간은 null 처리
         if mode == 'single':
@@ -263,8 +269,9 @@ class HourlyUtilizationView(APIView):
             }
         }
 
-        # breakdowns (optional)
-        if 'gender' in breakdown_set:
+        # breakdowns (optional) - 현재 분 누적 방식에서 기구 카운트 방식으로 변경되어 breakdown 로직 수정 필요
+        # 임시로 비활성화
+        if False and 'gender' in breakdown_set:
             by_gender = {}
             for g in ['Male', 'Female']:
                 sub_qs = sessions.filter(user__userprofile__gender=g)
@@ -296,7 +303,7 @@ class HourlyUtilizationView(APIView):
                         by_gender[g][h] = None
             result['by_gender'] = by_gender
 
-        if 'age' in breakdown_set:
+        if False and 'age' in breakdown_set:
             # 기본 나이 구간
             buckets = [(0,19),(20,29),(30,39),(40,49),(50,59),(60,200)]
             by_age = {}
@@ -332,7 +339,7 @@ class HourlyUtilizationView(APIView):
             result['by_age'] = by_age
 
         # subcategory 개별 breakdown
-        if 'subcategory' in breakdown_set:
+        if False and 'subcategory' in breakdown_set:
             by_subcat = {}
             target_subcats = requested_subcats or list(VALID_SUBCATS)
             for sc in target_subcats:
@@ -359,7 +366,7 @@ class HourlyUtilizationView(APIView):
             result['by_subcategory']=by_subcat
 
         # muscle_group breakdown
-        if 'muscle_group' in breakdown_set:
+        if False and 'muscle_group' in breakdown_set:
             GROUP_MAP = {
                 'CHEST': {'CHEST_PRESS_MAIN','CHEST_PRESS_UPPER','CHEST_FLY'},
                 'BACK': {'BACK_PULL_VERTICAL','BACK_ROW_HORIZONTAL'},
