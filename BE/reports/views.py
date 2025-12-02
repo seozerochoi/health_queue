@@ -178,7 +178,8 @@ class HourlyUtilizationView(APIView):
         day_end_dt = timezone.make_aware(datetime.combine(end_date, datetime.max.time()), timezone.get_current_timezone())
 
         # end_time NULL(진행 중) 세션은 now로 간주
-        sessions = UsageSession.objects.select_related('user','equipment').filter(
+        # select_related와 only()를 함께 사용하면 FieldError 발생하므로 제거
+        sessions = UsageSession.objects.filter(
             start_time__lt=day_end_dt,
         ).filter(
             models.Q(end_time__gte=day_start_dt) | models.Q(end_time__isnull=True)

@@ -1,31 +1,38 @@
 # HourlyUtilizationView 500 Error 디버깅 가이드
 
 ## 현재 문제
+
 - `/api/utilization/hourly/?date=2025-12-02` 호출 시 500 Internal Server Error 발생
 
 ## 주요 의심 원인
 
 ### 1. 타임존 문제
+
 ```python
 timezone.make_aware(datetime.combine(start_date, datetime.min.time()), timezone.get_current_timezone())
 ```
+
 - `timezone.get_current_timezone()` 실패 가능
 - `settings.TIME_ZONE = 'Asia/Seoul'` 확인 필요
 
 ### 2. UserProfile 조인 실패
+
 ```python
 sessions.filter(user__userprofile__gender=gender_q)
 ```
+
 - UserProfile이 없는 User가 세션에 있으면 예외 발생 가능
 - LEFT JOIN으로 변경 필요 또는 조건 완화
 
 ### 3. 세션 없을 때 처리
+
 - 세션이 전혀 없으면 빈 응답 반환해야 함
 - 현재는 빈 리스트 순회 시 안정성 검증 필요
 
 ## 즉시 확인 방법
 
 ### 서버 로그 확인
+
 ```bash
 # Gunicorn 로그 최근 500줄
 sudo journalctl -u gunicorn -n 500 --no-pager | grep -i "error\|exception\|traceback" -A 10
@@ -38,6 +45,7 @@ sudo journalctl -u gunicorn -n 1000 --no-pager | grep -i "hourly" -B 5 -A 20
 ```
 
 ### 직접 테스트 (Django shell)
+
 ```python
 python manage.py shell
 
@@ -79,6 +87,7 @@ print(f"UserProfile 없는 유저의 세션: {bad_sessions}개")
 ## 권장 수정 사항
 
 ### 1. 전체 try-except 추가
+
 ```python
 def get(self, request):
     try:
@@ -88,12 +97,13 @@ def get(self, request):
     except Exception as e:
         logger.exception('[reports.hourly] 예외 발생')
         return Response(
-            {'detail': f'시간대별 이용률 조회 실패: {str(e)}'}, 
+            {'detail': f'시간대별 이용률 조회 실패: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 ```
 
 ### 2. UserProfile 안전 처리
+
 ```python
 # 기존
 if gender_q:
@@ -108,6 +118,7 @@ if gender_q:
 ```
 
 ### 3. 디버그 로그 추가
+
 ```python
 logger.info(f'[hourly] 요청: date={date_str}, start={start_str}, end={end_str}')
 logger.info(f'[hourly] 세션 수: {sessions.count()}, 기구 수: {capacity_equip}')

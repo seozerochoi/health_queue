@@ -54,7 +54,7 @@ try:
     print(f"4. 쿼리 범위: {day_start_dt} ~ {day_end_dt}")
     
     # 세션 쿼리
-    sessions = UsageSession.objects.select_related('user', 'equipment').filter(
+    sessions = UsageSession.objects.filter(
         start_time__lt=day_end_dt,
     ).filter(
         Q(end_time__gte=day_start_dt) | Q(end_time__isnull=True)
