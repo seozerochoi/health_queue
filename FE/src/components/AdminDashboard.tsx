@@ -616,7 +616,7 @@ export function AdminDashboard({
       const token = localStorage.getItem("access_token");
       const today = todayKST(); // YYYY-MM-DD (Asia/Seoul)
       const response = await fetch(
-        `http://43.201.88.27/api/daily-stats/?date=${today}`,
+        `http://43.201.88.27/api/equipment/daily-stats/?date=${today}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -631,8 +631,8 @@ export function AdminDashboard({
       const data = await response.json();
       console.log("일일 통계 API 응답:", data);
 
-      // API 응답에서 records 배열 추출
-      const records = data.records || [];
+      // API 응답에서 records 배열 추출 (호환성: 배열 혹은 객체.records)
+      const records = Array.isArray(data) ? data : (data.records || []);
       const transformedStats: Usage[] = records.map((stat: any) => ({
         equipment: stat.equipment_name,
         totalUsage: stat.usage_count,

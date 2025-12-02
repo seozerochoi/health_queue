@@ -361,19 +361,21 @@ class EquipmentViewSet(viewsets.ModelViewSet):
         """
         운영자 전용: 오늘 날짜의 기구별 이용 통계 조회
         
-        Response:
-        [
-            {
-                "equipment_id": 1,
-                "equipment_name": "벤치프레스",
-                "usage_count": 32,
-                "average_time_minutes": 22.5
-            },
-            ...
-        ]
+        Response(JSON object):
+        {
+            "records": [
+                {
+                    "equipment_id": 1,
+                    "equipment_name": "벤치프레스",
+                    "usage_count": 32,
+                    "average_time_minutes": 22.5
+                },
+                ...
+            ]
+        }
         """
         from django.utils import timezone
-        from .daily_stats_models import EquipmentDailyStats
+        from workouts.models import UsageSession
         
         user = request.user
         try:
@@ -391,30 +393,54 @@ class EquipmentViewSet(viewsets.ModelViewSet):
             return Response({"detail": "운영자 소유 gym이 없습니다."}, status=status.HTTP_400_BAD_REQUEST)
         
         gym = owner_gyms.first()
-        today = timezone.now().date()
-        
+        now = timezone.now()
+        # 당일 00:00 ~ 23:59:59.999999 (KST 기준)
+        tz = timezone.get_current_timezone()
+        day_start = timezone.make_aware(
+            now.replace(hour=0, minute=0, second=0, microsecond=0), tz
+        )
+        day_end = timezone.make_aware(
+            now.replace(hour=23, minute=59, second=59, microsecond=999999), tz
+        )
+
         # 해당 gym의 모든 기구 가져오기
         equipments = Equipment.objects.filter(gym=gym).order_by('name')
-        
-        result = []
-        for equipment in equipments:
-            # 오늘 통계 가져오기 (없으면 0으로 초기화)
-            try:
-                stats = EquipmentDailyStats.objects.get(equipment=equipment, date=today)
-                usage_count = stats.usage_count
-                average_time = round(stats.average_time_minutes, 1)
-            except EquipmentDailyStats.DoesNotExist:
-                usage_count = 0
-                average_time = 0.0
-            
-            result.append({
-                'equipment_id': equipment.id,
-                'equipment_name': equipment.name,
+
+        # 오늘 시작된 세션 기준으로 집계
+        sessions = (
+            UsageSession.objects.filter(
+                equipment__in=equipments,
+                start_time__gte=day_start,
+                start_time__lte=day_end,
+            )
+            .select_related('equipment')
+            .only('equipment_id', 'start_time', 'end_time')
+        )
+
+        # equipment_id -> [durations]
+        from collections import defaultdict
+        durations_by_equip = defaultdict(list)
+        for s in sessions:
+            end_dt = s.end_time or now
+            if end_dt < s.start_time:
+                # 방어적 처리: 잘못된 데이터
+                continue
+            minutes = (end_dt - s.start_time).total_seconds() / 60.0
+            durations_by_equip[s.equipment_id].append(minutes)
+
+        records = []
+        for eq in equipments:
+            durs = durations_by_equip.get(eq.id, [])
+            usage_count = len(durs)
+            avg_minutes = round(sum(durs) / usage_count, 1) if usage_count else 0.0
+            records.append({
+                'equipment_id': eq.id,
+                'equipment_name': eq.name,
                 'usage_count': usage_count,
-                'average_time_minutes': average_time,
+                'average_time_minutes': avg_minutes,
             })
-        
-        return Response(result, status=status.HTTP_200_OK)
+
+        return Response({'records': records}, status=status.HTTP_200_OK)
 
 def equipment_stream(request):
     """
