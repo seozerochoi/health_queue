@@ -70,6 +70,7 @@ type ReservationNotification = {
   equipmentName: string;
   expiresAt: string | null;
   secondsLeft: number;
+  type?: "queue-success"; // 줄서기 성공 알림용
 };
 
 type AppView =
@@ -658,8 +659,15 @@ export default function App() {
     }
 
     // 운동 종료 시, 해당 장비의 AI 추천 예약을 자동으로 '사용 완료' 처리하여 카드가 어두워지도록 함
+    let wasAiRecommended = false;
     if (selectedEquipment) {
       const usedEqId = String(selectedEquipment.id);
+      // 먼저 AI 추천 여부 확인
+      wasAiRecommended = reservations.some((r) => {
+        const rid = String(r.equipment_id ?? r.equipmentId ?? "");
+        return r.isAiRecommended && rid === usedEqId;
+      });
+      // 해당 AI 예약을 사용 완료 처리
       setReservations((prev) =>
         prev.map((r) => {
           const rid = String(r.equipment_id ?? r.equipmentId ?? "");
@@ -671,7 +679,13 @@ export default function App() {
       );
     }
 
-    setCurrentView("equipment-list");
+    // AI 추천 기구로 운동했으면 예약 현황의 AI 탭으로, 아니면 기구 목록으로
+    if (wasAiRecommended) {
+      setReservationTab("ai");
+      setCurrentView("reservation-status");
+    } else {
+      setCurrentView("equipment-list");
+    }
     setSelectedEquipment(null);
     setWorkoutStartTime(null);
     setDirectWorkout(false);
@@ -757,14 +771,25 @@ export default function App() {
         duration: equipment.allocatedTime,
         status: "waiting",
         waitingPosition: data.position ?? data.waiting_position ?? undefined,
-        waiting_position: data.waiting_position ?? data.position ?? undefined,
+        waiting_position: data.position ?? data.waiting_position ?? undefined,
         waitingCount: data.waiting_count ?? undefined,
         createdAt: now,
-        isAiRecommended: true,
+        // AI 탭에서 줄서기한 예약은 일반 예약으로 처리 (isAiRecommended 플래그 제거)
       };
 
       setReservations((prev) => [...prev, serverReservation]);
+      setReservationTab("normal"); // 일반 탭으로 전환
       setCurrentView("reservation-status");
+      
+      // 줄서기 성공 알림 표시
+      addNotification({
+        reservationId: `queue-success-${Date.now()}`,
+        equipmentName: equipment.name,
+        expiresAt: null,
+        secondsLeft: 3,
+        type: "queue-success",
+      });
+      
       // 서버와 동기화하여 취소/상태가 정확하도록 새로 고침
       fetchReservations();
     } catch (error) {
@@ -1937,7 +1962,29 @@ export default function App() {
       )}
       {/* Notification toasts for NOTIFIED reservations */}
       <div className="fixed top-4 right-4 z-50 space-y-3">
-        {notifications.map((n) => (
+        {notifications.map((n) => {
+          // 줄서기 성공 알림일 경우 다른 UI 표시
+          if (n.type === "queue-success") {
+            return (
+              <div
+                key={n.reservationId}
+                className="bg-green-600/95 text-white rounded-lg p-4 shadow-lg w-80 animate-fade-in"
+              >
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">🎉</span>
+                  <div className="flex-1">
+                    <div className="font-semibold text-base">기구 예약이 완료되었습니다!</div>
+                    <div className="text-sm text-gray-100 mt-1">
+                      예약 내역은 기구 줄서기 조회 창을 이용해주세요
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          
+          // 기존 NOTIFIED 예약 알림
+          return (
           <div
             key={n.reservationId}
             className="bg-blue-900/90 text-white rounded-lg p-3 shadow-lg w-80"
@@ -2098,7 +2145,8 @@ export default function App() {
               </button>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
