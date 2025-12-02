@@ -169,16 +169,17 @@ if DATABASES['default'].get('ENGINE', '').endswith('postgresql'):
 # ==========================================================
 # Cache (Redis 우선, 미설정 시 LocMem)
 # ==========================================================
-REDIS_CACHE_URL = env('REDIS_CACHE_URL', default=env('CELERY_BROKER_URL', default='redis://localhost:6379/0'))
+REDIS_CACHE_URL = env('REDIS_CACHE_URL', default=env('CELERY_BROKER_URL', default='redis://localhost:6379/1'))
 try:
     # Django 5.2+ 내장 RedisCache 사용
+    # redis://(평문)에는 SSL 옵션을 넘기지 말아야 합니다. (넘기면 TypeError 발생)
+    cache_options = {'ssl_cert_reqs': None} if REDIS_CACHE_URL.startswith('rediss://') else {}
     CACHES = {
         'default': {
             'BACKEND': 'django.core.cache.backends.redis.RedisCache',
             'LOCATION': REDIS_CACHE_URL,
-            'OPTIONS': {
-                'ssl_cert_reqs': None if REDIS_CACHE_URL.startswith('rediss://') else None,
-            },
+            # TLS(rediss://)일 때만 SSL 옵션 사용
+            'OPTIONS': cache_options,
             'TIMEOUT': None,  # 키별 TTL 지정에 따름
         }
     }
@@ -276,8 +277,8 @@ SIMPLE_JWT = {
 # Celery 설정
 # ==========================================================
 # 브로커 URL은 .env 또는 환경변수로 설정하세요. 기본은 로컬 Redis입니다.
-CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default=CELERY_BROKER_URL)
+CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://localhost:6379/1')
+CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default='redis://localhost:6379/2')
 
 # ============================================================
 # Celery 동시성 설정 (Worker 프로세스 수)

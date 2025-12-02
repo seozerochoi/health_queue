@@ -408,9 +408,17 @@ class CurrentUtilizationView(APIView):
             from django.utils import timezone
 
             include_users = (request.query_params.get('include_users') or '').lower() in ('1','true','yes')
+
+            # 캐시 조회/저장은 네트워크 이슈(예: Redis 다운) 시 예외가 날 수 있으므로 보호합니다.
             cache_key = 'current_utilization_v1'
-            cached = cache.get(cache_key)
+            cached = None
+            try:
+                cached = cache.get(cache_key)
+            except Exception:
+                logger.exception('[reports.current] cache.get 실패 - 캐시 미사용 경로로 진행')
+
             if not cached:
+                # 실데이터 계산 (fallback 포함)
                 active_sessions_qs = UsageSession.objects.filter(end_time__isnull=True)
                 active_sessions = active_sessions_qs.count()
                 capacity_equip = Equipment.objects.filter(operational_state='NORMAL').count() or 1
@@ -423,16 +431,24 @@ class CurrentUtilizationView(APIView):
                     'utilization_percent': utilization,
                     'generated_at': timezone.now().isoformat(),
                 }
-                # 5초 TTL 캐시
-                cache.set(cache_key, cached, timeout=5)
+                # 5초 TTL 캐시 (best-effort)
+                try:
+                    cache.set(cache_key, cached, timeout=5)
+                except Exception:
+                    logger.exception('[reports.current] cache.set 실패 - 계산 결과만 반환')
 
             resp = dict(cached)
-            resp['cached'] = True
+            # true/false로 캐시 사용 여부 표시
+            resp['cached'] = bool(cached is not None)
             resp['timestamp'] = timezone.now().isoformat()
 
             if include_users:
                 users_cache_key = 'current_active_users_v1'
-                users_cached = cache.get(users_cache_key)
+                users_cached = None
+                try:
+                    users_cached = cache.get(users_cache_key)
+                except Exception:
+                    logger.exception('[reports.current-users] cache.get 실패 - DB 조회로 대체')
                 if not users_cached:
                     active_sessions_qs = UsageSession.objects.select_related('user','equipment').filter(end_time__isnull=True)
                     users_cached = [
@@ -447,7 +463,10 @@ class CurrentUtilizationView(APIView):
                         }
                         for s in active_sessions_qs
                     ]
-                    cache.set(users_cache_key, users_cached, timeout=5)
+                    try:
+                        cache.set(users_cache_key, users_cached, timeout=5)
+                    except Exception:
+                        logger.exception('[reports.current-users] cache.set 실패 - 캐시 없이 반환')
                 resp['active_users'] = users_cached
 
             return Response(resp)
@@ -463,7 +482,11 @@ class ActiveUtilizationUsersView(APIView):
 
     def get(self, request):
         users_cache_key = 'current_active_users_v1'
-        users_cached = cache.get(users_cache_key)
+        users_cached = None
+        try:
+            users_cached = cache.get(users_cache_key)
+        except Exception:
+            logger.exception('[reports.active-users] cache.get 실패 - DB 조회로 대체')
         if not users_cached:
             active_sessions_qs = UsageSession.objects.select_related('user','equipment').filter(end_time__isnull=True)
             users_cached = [
@@ -478,10 +501,13 @@ class ActiveUtilizationUsersView(APIView):
                 }
                 for s in active_sessions_qs
             ]
-            cache.set(users_cache_key, users_cached, timeout=5)
+            try:
+                cache.set(users_cache_key, users_cached, timeout=5)
+            except Exception:
+                logger.exception('[reports.active-users] cache.set 실패 - 캐시 없이 반환')
         return Response({
             'active_users': users_cached,
-            'cached': True,
+            'cached': users_cached is not None,
         })
 
 
