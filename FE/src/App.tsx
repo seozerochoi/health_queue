@@ -43,6 +43,8 @@ interface Reservation {
   notification_expires_at?: string | null;
   notification_timeout_seconds?: number | null;
   isAiRecommended?: boolean;
+  aiCanceled?: boolean;
+  aiUsed?: boolean;
 }
 
 interface RegisteredUser {
@@ -655,6 +657,20 @@ export default function App() {
       }
     }
 
+    // 운동 종료 시, 해당 장비의 AI 추천 예약을 자동으로 '사용 완료' 처리하여 카드가 어두워지도록 함
+    if (selectedEquipment) {
+      const usedEqId = String(selectedEquipment.id);
+      setReservations((prev) =>
+        prev.map((r) => {
+          const rid = String(r.equipment_id ?? r.equipmentId ?? "");
+          if (r.isAiRecommended && rid === usedEqId) {
+            return { ...r, aiUsed: true };
+          }
+          return r;
+        })
+      );
+    }
+
     setCurrentView("equipment-list");
     setSelectedEquipment(null);
     setWorkoutStartTime(null);
@@ -744,6 +760,7 @@ export default function App() {
         waiting_position: data.waiting_position ?? data.position ?? undefined,
         waitingCount: data.waiting_count ?? undefined,
         createdAt: now,
+        isAiRecommended: true,
       };
 
       setReservations((prev) => [...prev, serverReservation]);
@@ -753,6 +770,52 @@ export default function App() {
     } catch (error) {
       console.error("[AI] 줄서기 중 오류:", error);
       alert("줄서기 중 오류가 발생했습니다.");
+    }
+  };
+
+  // AI 추천 예약 항목 사용 완료 표시
+  const handleAiMarkUsed = (reservationId: string) => {
+    setReservations((prev) =>
+      prev.map((r) => (r.id === reservationId ? { ...r, aiUsed: true } : r))
+    );
+  };
+
+  // AI 탭에서 '바로 이용가능' 기구 즉시 시작
+  const handleAiStartImmediate = async (equipmentId: number) => {
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        alert("로그인이 필요합니다.");
+        return;
+      }
+      const apiBase = getApiBase();
+      const res = await fetch(`${apiBase}/api/workouts/start/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ equipment_id: equipmentId }),
+      });
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => "");
+        console.error("즉시 시작 실패:", res.status, errorText);
+        alert("운동 시작에 실패했습니다.");
+        return;
+      }
+      // 선택된 기구 설정 및 운동 타이머 화면으로 이동
+      const eq = equipmentList.find((e) => Number(e.id) === equipmentId);
+      if (eq) {
+        // @ts-ignore: equipment type in App may be loosely typed
+        setSelectedEquipment(eq as any);
+      }
+      setWorkoutStartTime(new Date());
+      setCurrentView("workout-timer");
+      // 장비 상태 동기화
+      fetchEquipment();
+    } catch (e) {
+      console.error("즉시 시작 중 오류:", e);
+      alert("운동 시작 중 오류가 발생했습니다.");
     }
   };
 
@@ -772,12 +835,14 @@ export default function App() {
       const reservation = reservations.find((r) => r.id === reservationId);
       const isAiRecommended = reservation?.isAiRecommended === true;
 
-      // AI 추천 예약은 서버 호출 없이 로컬에서만 삭제
+      // AI 추천 예약은 서버 호출 없이 로컬에서 취소 상태로만 표시(카드 어둡게)
       if (isAiRecommended) {
         setReservations((prev) =>
-          prev.filter((reservation) => reservation.id !== reservationId)
+          prev.map((r) =>
+            r.id === reservationId ? { ...r, aiCanceled: true } : r
+          )
         );
-        alert("AI 추천 예약이 취소되었습니다.");
+        alert("AI 추천 예약이 취소 처리되었습니다.");
         return;
       }
 
@@ -819,6 +884,17 @@ export default function App() {
       // 2. 예약 현황에서 삭제
       setReservations((prev) =>
         prev.filter((reservation) => reservation.id !== reservationId)
+      );
+
+      // 2-1. 같은 장비를 추천한 AI 항목이 있다면 '미사용'으로 표시하여 AI 탭에서 어둡게 보이도록 함
+      setReservations((prev) =>
+        prev.map((r) => {
+          const rid = String(r.equipment_id ?? r.equipmentId ?? "");
+          if (r.isAiRecommended && rid === String(equipmentId)) {
+            return { ...r, aiCanceled: true };
+          }
+          return r;
+        })
       );
 
       // 3. 줄서기 인원이 1명 이하면 기구 상태를 AVAILABLE로 변경
@@ -1820,6 +1896,8 @@ export default function App() {
             onJoinQueue={handleAiQueueJoin}
             defaultTab={reservationTab}
             equipmentList={equipmentList}
+            onMarkAiUsed={handleAiMarkUsed}
+            onStartImmediate={handleAiStartImmediate}
           />
         );
 
