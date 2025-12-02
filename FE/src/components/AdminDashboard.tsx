@@ -232,7 +232,7 @@ export function AdminDashboard({
 
       // gym_id 가져오기 (현재 운영자의 gym)
       const userResponse = await fetch(
-        "http://43.201.88.27/api/user/profile/",
+        "http://43.201.88.27/api/users/profile/",
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -246,11 +246,11 @@ export function AdminDashboard({
         gymId = userData.gym_id || 1;
       }
 
-      // set_operational_state 액션 사용
+      // 운영 상태 변경 (백엔드 표준 경로 사용)
       const response = await fetch(
-        `http://43.201.88.27/api/equipment/${equipmentId}/set_operational_state/`,
+        `http://43.201.88.27/api/equipment/${equipmentId}/operational-state/`,
         {
-          method: "POST",
+          method: "PATCH",
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
