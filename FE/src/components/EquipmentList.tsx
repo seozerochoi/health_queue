@@ -31,6 +31,7 @@ interface Equipment {
   waitingCount?: number;
   currentUser?: string;
   timeRemaining?: number;
+  estimatedWaitTime?: number; // 🆕 예상 대기 시간 (분)
   image: string;
   allocatedTime: number;
   operational_state?: "NORMAL" | "MAINTENANCE" | "BROKEN";
@@ -58,7 +59,7 @@ const EquipmentItemInner = ({ eq, onSelect, flashing }: EquipmentItemProps) => {
   const isBroken = eq.operational_state === "BROKEN";
   const isMaintenance = eq.operational_state === "MAINTENANCE";
   const isUnavailable = isBroken || isMaintenance;
-  
+
   const getStatusBadgeLocal = (eq: Equipment) => {
     // 고장 상태
     if (eq.operational_state === "BROKEN") {
@@ -68,7 +69,7 @@ const EquipmentItemInner = ({ eq, onSelect, flashing }: EquipmentItemProps) => {
         </Badge>
       );
     }
-    
+
     // 점검중 상태
     if (eq.operational_state === "MAINTENANCE") {
       return (
@@ -77,7 +78,7 @@ const EquipmentItemInner = ({ eq, onSelect, flashing }: EquipmentItemProps) => {
         </Badge>
       );
     }
-    
+
     switch (eq.status) {
       case "available":
         return (
@@ -90,11 +91,11 @@ const EquipmentItemInner = ({ eq, onSelect, flashing }: EquipmentItemProps) => {
           </Badge>
         );
       case "waiting":
-        return (
-          <Badge className="bg-red-100 text-red-700">
-            현재 {eq.waitingCount}명 대기중
-          </Badge>
-        );
+        // 🆕 예상 대기 시간 표시
+        const waitText = eq.estimatedWaitTime
+          ? `약 ${eq.estimatedWaitTime}분 대기`
+          : `${eq.waitingCount}명 대기중`;
+        return <Badge className="bg-red-100 text-red-700">{waitText}</Badge>;
       default:
         return null;
     }
@@ -104,8 +105,8 @@ const EquipmentItemInner = ({ eq, onSelect, flashing }: EquipmentItemProps) => {
     <Card
       className={`transition-shadow border-gray-600 bg-card ${
         isUnavailable
-          ? 'opacity-60 cursor-not-allowed' 
-          : 'hover:shadow-lg cursor-pointer'
+          ? "opacity-60 cursor-not-allowed"
+          : "hover:shadow-lg cursor-pointer"
       }`}
       onClick={() => !isUnavailable && onSelect(eq)}
     >
@@ -137,40 +138,45 @@ const EquipmentItemInner = ({ eq, onSelect, flashing }: EquipmentItemProps) => {
               <span>기본 할당시간: {eq.allocatedTime}분</span>
             </div>
 
-            {!isUnavailable && (eq.status === "in-use" || eq.status === "waiting") && (
-              <div>
-                <Button
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSelect(eq);
-                  }}
-                  className="mt-1 bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1 px-3 py-1"
-                >
-                  <Users className="h-4 w-4" />
-                  줄서기
-                  {typeof eq.waitingCount === "number" &&
-                    eq.waitingCount > 0 && (
-                      <span className="text-xs ml-1">
-                        ({eq.waitingCount}명)
-                      </span>
-                    )}
-                </Button>
-              </div>
-            )}
-            
+            {!isUnavailable &&
+              (eq.status === "in-use" || eq.status === "waiting") && (
+                <div>
+                  <Button
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelect(eq);
+                    }}
+                    className="mt-1 bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1 px-3 py-1"
+                  >
+                    <Users className="h-4 w-4" />
+                    줄서기
+                    {typeof eq.waitingCount === "number" &&
+                      eq.waitingCount > 0 && (
+                        <span className="text-xs ml-1">
+                          ({eq.waitingCount}명)
+                        </span>
+                      )}
+                  </Button>
+                </div>
+              )}
+
             {isBroken && (
               <div className="mt-2 p-2.5 bg-red-900/30 border border-red-600 rounded-lg">
                 <p className="text-red-400 text-xs font-semibold leading-tight">
-                  ⚠️ 이 기구는 현재 고장으로<br />사용할 수 없습니다.
+                  ⚠️ 이 기구는 현재 고장으로
+                  <br />
+                  사용할 수 없습니다.
                 </p>
               </div>
             )}
-            
+
             {isMaintenance && (
               <div className="mt-2 p-2.5 bg-yellow-900/30 border border-yellow-600 rounded-lg">
                 <p className="text-yellow-400 text-xs font-semibold leading-tight">
-                  🛠️ 이 기구는 현재 점검 중으로<br />사용할 수 없습니다.
+                  🛠️ 이 기구는 현재 점검 중으로
+                  <br />
+                  사용할 수 없습니다.
                 </p>
               </div>
             )}
@@ -367,6 +373,8 @@ export function EquipmentList({
           eq.waiting_count ?? eq.waitingCount ?? eq.queue_length ?? undefined,
         currentUser: eq.current_user ?? eq.currentUser ?? undefined,
         timeRemaining: eq.time_remaining ?? eq.timeRemaining ?? undefined,
+        estimatedWaitTime:
+          eq.estimated_wait_time ?? eq.estimatedWaitTime ?? undefined, // 🆕 추가
         operational_state: eq.operational_state || "NORMAL",
       };
     };
@@ -399,7 +407,8 @@ export function EquipmentList({
             prevItem.status !== item.status ||
             (prevItem.waitingCount ?? 0) !== (item.waitingCount ?? 0) ||
             prevItem.currentUser !== item.currentUser ||
-            prevItem.timeRemaining !== item.timeRemaining;
+            prevItem.timeRemaining !== item.timeRemaining ||
+            prevItem.estimatedWaitTime !== item.estimatedWaitTime; // 🆕 추가
           if (hasChange) {
             changedIds.push(item.id);
             didChange = true;
@@ -422,6 +431,14 @@ export function EquipmentList({
                 `👥 ${item.name}: 대기자 ${prevItem.waitingCount ?? 0}명 → ${
                   item.waitingCount ?? 0
                 }명`
+              );
+            }
+            // 🆕 예상 대기 시간 로그
+            if (prevItem.estimatedWaitTime !== item.estimatedWaitTime) {
+              console.log(
+                `⏱️ ${item.name}: 예상 대기 ${
+                  prevItem.estimatedWaitTime ?? 0
+                }분 → ${item.estimatedWaitTime ?? 0}분`
               );
             }
 
@@ -936,10 +953,7 @@ export function EquipmentList({
 
         {/* NFC Reader - 기구 목록 상단에 표시 */}
         {nfcEnabled && onNFCTagDetected && (
-          <NFCReader
-            onTagDetected={onNFCTagDetected}
-            isEnabled={nfcEnabled}
-          />
+          <NFCReader onTagDetected={onNFCTagDetected} isEnabled={nfcEnabled} />
         )}
 
         {loading && (

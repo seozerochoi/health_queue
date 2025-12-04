@@ -104,6 +104,20 @@ export function AdminDashboard({
     { hour: string; rate: number }[]
   >([]);
 
+  // 현재 이용자 목록 상태
+  interface ActiveUser {
+    session_id: number;
+    user_id: number;
+    username: string;
+    equipment_id: number;
+    equipment_name: string;
+    subcategory: string;
+    start_time: string;
+  }
+  const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
+  const [showActiveUsersPanel, setShowActiveUsersPanel] = useState(false);
+  const [isLoadingActiveUsers, setIsLoadingActiveUsers] = useState(false);
+
   // 신고 목록 가져오기
   const fetchReports = async (silent = false) => {
     if (!silent) {
@@ -698,6 +712,35 @@ export function AdminDashboard({
     }
   };
 
+  // 현재 활성 사용자 목록 가져오기
+  const fetchActiveUsers = async () => {
+    setIsLoadingActiveUsers(true);
+    try {
+      const token = localStorage.getItem("access_token");
+      const response = await fetch(
+        "https://43.201.88.27/api/utilization/active-users/",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("현재 이용자 목록 조회 실패");
+      }
+
+      const data = await response.json();
+      console.log("현재 이용자 목록 API 응답:", data);
+
+      setActiveUsers(data.active_users || []);
+    } catch (error) {
+      console.error("현재 이용자 목록 조회 에러:", error);
+    } finally {
+      setIsLoadingActiveUsers(false);
+    }
+  };
+
   const pendingReports = reports.filter((r) => r.status === "pending");
 
   // Show usage charts panel when clicking the usage metric card
@@ -734,7 +777,15 @@ export function AdminDashboard({
         </div>
 
         <div className="grid grid-cols-2 gap-4 mb-6">
-          <Card className="border-gray-600 bg-card">
+          <Card
+            className="border-gray-600 bg-card cursor-pointer hover:bg-gray-800/60 transition-colors"
+            onClick={() => {
+              setShowActiveUsersPanel((v) => !v);
+              if (!showActiveUsersPanel) {
+                fetchActiveUsers();
+              }
+            }}
+          >
             <CardContent className="p-4">
               <div className="flex items-center space-x-2">
                 <Users className="h-8 w-8 text-blue-400" />
@@ -765,6 +816,76 @@ export function AdminDashboard({
             </CardContent>
           </Card>
         </div>
+
+        {showActiveUsersPanel && (
+          <Card className="border-gray-600 bg-card mb-6">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  현재 이용 중인 사용자 목록
+                </CardTitle>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-gray-600 text-gray-300 hover:bg-gray-700"
+                  onClick={() => setShowActiveUsersPanel(false)}
+                >
+                  닫기
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isLoadingActiveUsers ? (
+                <div className="text-center text-gray-400 py-8">
+                  이용자 목록을 불러오는 중...
+                </div>
+              ) : activeUsers.length === 0 ? (
+                <div className="text-center text-gray-400 py-8">
+                  현재 이용 중인 사용자가 없습니다.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {activeUsers.map((user) => (
+                    <div
+                      key={user.session_id}
+                      className="p-4 border border-blue-900/40 bg-blue-950/50 rounded-lg flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="bg-blue-900/60 rounded-full w-10 h-10 flex items-center justify-center">
+                          <Users className="h-5 w-5 text-blue-300" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-white">
+                            {user.username}
+                          </p>
+                          <p className="text-sm text-gray-300">
+                            {user.equipment_name}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <Badge className="bg-green-900/50 text-green-300 border-green-700">
+                          이용중
+                        </Badge>
+                        <p className="text-xs text-gray-400 mt-1">
+                          {new Date(user.start_time).toLocaleTimeString(
+                            "ko-KR",
+                            {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }
+                          )}
+                          부터
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {showUsagePanel && (
           <Card className="border-gray-600 bg-card mb-6">

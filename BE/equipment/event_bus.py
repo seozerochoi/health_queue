@@ -100,51 +100,32 @@ equipment_event_bus = _LegacyEquipmentEventBus()
 
 
 def _serialize_equipment(equipment) -> Dict[str, Any]:
-    """Serialize minimal equipment fields for SSE consumers."""
-    image = getattr(equipment, "image_url", None) or getattr(equipment, "image", "")
-    return {
-        "id": str(equipment.id),
-        "equipment_id": equipment.id,  # 추가: 숫자 형식의 equipment_id도 포함
-        "name": equipment.name,
-        "type": getattr(equipment, "type", None),
-        "status": getattr(equipment, "status", None),
-        "operational_state": getattr(equipment, "operational_state", None),
-        "image_url": image,
-        "base_session_time_minutes": getattr(
-            equipment, "base_session_time_minutes", None
-        ),
-    }
+    """Serialize equipment fields for SSE consumers with time_remaining and estimated_wait_time."""
+    from .serializers import EquipmentSerializer
+    
+    # Use serializer to get all calculated fields including time_remaining
+    serializer = EquipmentSerializer(equipment)
+    return serializer.data
 
 
 def publish_equipment_update(equipment, waiting_count: Optional[int] = None, extra: Optional[Dict[str, Any]] = None):
-    """Publish to Redis (cross-worker).
+    """Publish to Redis (cross-worker) with time_remaining and estimated_wait_time.
     
     Args:
         equipment: Equipment instance
-        waiting_count: Pre-calculated waiting count. If None, will query DB (slower)
+        waiting_count: Pre-calculated waiting count. If None, will be calculated by serializer
         extra: Additional fields to include in payload (e.g., reservation positions)
     """
     import time
     start_time = time.time()
     
+    # Use serializer which includes time_remaining, estimated_wait_time, etc.
     payload = _serialize_equipment(equipment)
     serialize_time = time.time()
-    
-    # ⚡ Use pre-calculated waiting_count if provided, otherwise query DB
-    if waiting_count is None:
-        from workouts.models import Reservation  # lazy import
-        waiting_count = Reservation.objects.filter(
-            equipment=equipment,
-            status__in=["WAITING", "NOTIFIED"],
-        ).count()
-        logger.warning(f"⚠️ [EventBus] waiting_count not provided, querying DB (slow!)")
-    
-    payload["waiting_count"] = waiting_count
     
     # 🔔 추가: 대기열의 모든 예약 position 정보를 함께 전송하여 클라이언트가 자기 순번을 재계산 가능하도록 함
     try:
         from workouts.models import Reservation
-        from workouts.utils import get_waiting_position
         queue = Reservation.objects.filter(
             equipment=equipment,
             status__in=["WAITING", "NOTIFIED"],
@@ -184,7 +165,9 @@ def publish_equipment_update(equipment, waiting_count: Optional[int] = None, ext
             f"prepare: {(prepare_time - serialize_time)*1000:.1f}ms, "
             f"redis: {(redis_time - prepare_time)*1000:.1f}ms, "
             f"total: {total_time*1000:.1f}ms | "
-            f"equipment {equipment.id} waiting={waiting_count}"
+            f"equipment {equipment.id} waiting={payload.get('waiting_count', 0)}, "
+            f"time_remaining={payload.get('time_remaining')}, "
+            f"estimated_wait={payload.get('estimated_wait_time')}"
         )
     except redis.exceptions.ConnectionError as e:
         logger.error(f"❌ [EventBus] Redis 연결 실패 (equipment {equipment.id}): {e}")
