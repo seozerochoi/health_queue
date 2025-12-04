@@ -193,10 +193,20 @@ class TimePredictionView(BaseAIView):
             name=db_equip.name,
             main_part=0 if db_equip.body_part == 'UPPER' else 1, # 예시 로직
             sub_part=db_equip.subcategory,
-            base_time=db_equip.base_session_time_minutes # DB에 설정된 기본 시간 전달
+            base_time=db_equip.base_session_time_minutes, # DB에 설정된 기본 시간 전달 (참고용)
+            equip_type=db_equip.type # 기구 유형 전달 (CARDIO, MACHINE 등)
         )
 
-        recommended_time = time_engine.predict_time(ai_user, ai_equip)
+        if ai_user:
+            try:
+                recommended_time = time_engine.predict_time(ai_user, ai_equip)
+                print(f"🤖 [TimeAI] User={request.user.username}, Equip={db_equip.name}, Type={db_equip.type}, Rec={recommended_time}")
+            except Exception as e:
+                print(f"⚠️ [TimeAI] Prediction failed: {e}")
+                recommended_time = float(db_equip.base_session_time_minutes)
+        else:
+            print(f"⚠️ [TimeAI] No AI User (Profile missing?), using base time.")
+            recommended_time = float(db_equip.base_session_time_minutes)
 
         return Response({
             "equipment": db_equip.name,

@@ -49,13 +49,14 @@ class Equipment:
     """
     운동 기구 정보를 관리하는 클래스입니다.
     """
-    def __init__(self, equip_id, name, main_part, sub_part, base_time=15):
+    def __init__(self, equip_id, name, main_part, sub_part, base_time=15, equip_type='MACHINE'):
         self.equip_id = equip_id
         self.name = name
         self.main_part = main_part # 0: Upper(상체), 1: Lower(하체)
         # 세부 타겟 부위 (예: "Chest", "Back", "Legs" 등)
         self.sub_part = sub_part
-        self.base_time = base_time # 기구별 기본 세팅 시간 (분)    
+        self.base_time = base_time # 기구별 기본 세팅 시간 (분) - 참고용
+        self.equip_type = equip_type # 'CARDIO', 'MACHINE', 'FREE_WEIGHT' 등
 
 # ==============================================================================
 # 2. 규칙 기반 엔진 (Rule-Based Formula Engine) - [The Teacher]
@@ -78,9 +79,29 @@ class FormulaEngine:
         ib = user.inbody
         
         # --- [Step 1] 기본 운동 시간 (Base Time) 설정 ---
-        # 기구별 설정된 기본 시간(분)을 초 단위로 변환하여 기준점으로 사용
-        # 예: 15분 -> 900초
-        base_seconds = equipment.base_time * 60
+        # 기구 DB의 base_time에 의존하지 않고, 기구 유형과 부위에 따라 동적으로 할당
+        
+        if equipment.equip_type == 'CARDIO':
+            # 유산소: 기본 30분
+            base_minutes = 30.0
+        elif equipment.main_part == 1: # Lower (하체)
+            # 하체 근력: 대근육이므로 기본 20분
+            base_minutes = 20.0
+        else: # Upper (상체)
+            # 상체 근력: 기본 15분
+            base_minutes = 15.0
+            
+        # 사용자 숙련도(인바디 점수)에 따른 기본 시간 보정
+        # 점수가 높을수록(숙련자) 세트 수 증가 -> 시간 증가
+        # 70점 미만: 초보자 (0.8배)
+        # 70~85점: 중급자 (1.0배)
+        # 85점 이상: 상급자 (1.2배)
+        if ib.score < 70:
+            base_minutes *= 0.8
+        elif ib.score >= 85:
+            base_minutes *= 1.2
+            
+        base_seconds = base_minutes * 60
         
         # --- [Step 2] 숙련도 지수 (Proficiency Factor: x1) ---
         # 인바디 점수가 80점 이상일수록 숙련자로 간주하여 시간을 늘림 (시그모이드 적용)
@@ -96,13 +117,24 @@ class FormulaEngine:
         
         # 3-3. 운동 목적 계수 적용
         if user.goal == 0: # Diet
-            # 비만도가 높을수록 유산소성/반복 운동 시간 증가 (+ 가중치)
-            purpose_coeff = 0.5 * max(0, rel_obesity - 1.0)
+            # 다이어트 목적일 때
+            if equipment.equip_type == 'CARDIO':
+                # 유산소 기구는 비만도가 높을수록 시간 대폭 증가
+                purpose_coeff = 0.8 * max(0, rel_obesity - 0.8)
+            else:
+                # 근력 운동은 반복 횟수 증가를 위해 소폭 증가
+                purpose_coeff = 0.3 * max(0, rel_obesity - 1.0)
         else: # Bulk-up
-            # 비만도가 높으면 관절 부하 등을 고려해 시간 소폭 감소, 단 근육량이 많으면 상쇄
-            purpose_coeff = -0.5 * max(0, rel_obesity - 1.0) * (1 - min(1, muscle_fat_ratio))
+            # 근비대 목적일 때
+            if equipment.equip_type == 'CARDIO':
+                # 유산소는 최소화 (근손실 방지) -> 시간 감소
+                purpose_coeff = -0.3
+            else:
+                # 근력 운동은 고중량 저반복 위주이므로 시간은 비슷하거나 소폭 증가(휴식시간)
+                # 근육량이 많을수록 휴식시간 필요 -> 시간 증가
+                purpose_coeff = 0.2 * min(1, muscle_fat_ratio - 1.0)
             
-        situation_coeff = (1 + 0.67 * x1) * (1 + purpose_coeff)
+        situation_coeff = (1 + 0.3 * x1) * (1 + purpose_coeff)
         
         # --- [Step 4] 조정 계수 (Adjustment Coefficient) ---
         # 4-1. 근감소증 위험도 (SMI 지수) 반영
@@ -111,7 +143,7 @@ class FormulaEngine:
         
         # SMI 기준(7.0) 미달 시 부상 방지를 위해 시간 감소
         x4 = max(0, (7.0 - smi) / 7.0)
-        sarcopenia_coeff = 1.0 - (x4 * 0.75)
+        sarcopenia_coeff = 1.0 - (x4 * 0.5) # 감소폭 완화
         
         # 4-2. 상하체 불균형 지수 반영
         mus = ib.segmental_muscle
@@ -121,11 +153,23 @@ class FormulaEngine:
         
         # 신체 밸런스를 맞추기 위해 약점 부위 운동 시간을 조정
         if equipment.main_part == 0: # 상체 기구 이용 시
-            # 상체가 이미 강함(>1) -> 시간 감소 / 상체가 약함(<1) -> 시간 증가
-            y = -0.3 * (imbalance - 1.0) 
+            # 상체가 이미 강함(>1) -> 유지 또는 소폭 감소
+            # 상체가 약함(<1) -> 강화 필요 -> 시간 증가
+            if imbalance < 0.9: # 상체 약함
+                y = 0.2
+            elif imbalance > 1.1: # 상체 강함
+                y = -0.1
+            else:
+                y = 0
         else: # 하체 기구 이용 시
-            # 하체가 이미 강함(<1) -> 시간 감소 / 하체가 약함(>1) -> 시간 증가
-            y = 0.3 * (imbalance - 1.0)
+            # 하체가 이미 강함(<1) -> 유지 또는 소폭 감소
+            # 하체가 약함(>1) -> 강화 필요 -> 시간 증가
+            if imbalance > 1.1: # 하체 약함
+                y = 0.2
+            elif imbalance < 0.9: # 하체 강함
+                y = -0.1
+            else:
+                y = 0
             
         balance_coeff = 1.0 + y
 
@@ -133,8 +177,8 @@ class FormulaEngine:
         final_seconds = base_seconds * situation_coeff * sarcopenia_coeff * balance_coeff
         final_minutes = final_seconds / 60.0
         
-        # 안전 범위 클램핑 (최소 5분 ~ 최대 90분)
-        return max(5.0, min(90.0, final_minutes))
+        # 안전 범위 클램핑 (최소 5분 ~ 최대 60분) - 너무 긴 시간은 헬스장 회전율 저해
+        return max(5.0, min(60.0, final_minutes))
 
 # ==============================================================================
 # 3. AI 신경망 모델 (Adaptive AI Model) - [The Student]
