@@ -62,17 +62,21 @@ export function NFCReader({ onTagDetected, isEnabled }: NFCReaderProps) {
                 equipmentId = record.data;
                 console.log("  ✓ record.data는 이미 문자열");
               } else if (record.data instanceof DataView) {
-                // DataView인 경우 버퍼 추출 후 파싱
-                console.log("  ✓ record.data는 DataView, 파싱 시작");
-                const statusByte = record.data.getUint8(0);
-                const languageCodeLength = statusByte & 0x3f;
-
-                const buffer = record.data.buffer.slice(
-                  record.data.byteOffset + 1 + languageCodeLength,
-                  record.data.byteOffset + record.data.byteLength
+                // DataView인 경우: Web NFC API가 이미 파싱한 텍스트 데이터
+                console.log(
+                  "  ✓ record.data는 DataView, 전체를 텍스트로 디코딩"
                 );
+
+                // DataView 전체를 UTF-8로 디코딩 (NDEF 구조 없음)
+                const textBytes = new Uint8Array(record.data.byteLength);
+                for (let i = 0; i < record.data.byteLength; i++) {
+                  textBytes[i] = record.data.getUint8(i);
+                }
+
                 const textDecoder = new TextDecoder("utf-8");
-                equipmentId = textDecoder.decode(buffer);
+                equipmentId = textDecoder.decode(textBytes);
+
+                console.log(`  ✓ 디코딩 결과: "${equipmentId}"`);
               } else if (record.data instanceof ArrayBuffer) {
                 // ArrayBuffer인 경우 직접 파싱
                 console.log("  ✓ record.data는 ArrayBuffer, 파싱 시작");
