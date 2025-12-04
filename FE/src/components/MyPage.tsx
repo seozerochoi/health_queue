@@ -229,13 +229,6 @@ export function MyPage({
         setServerImageUrl(rec.image_url || null);
         if (rec.id != null && rec.created_at)
           setRecordMeta({ id: rec.id, created_at: rec.created_at });
-
-        // Update latestRecord immediately
-        setLatestRecord({
-          image_url: rec.image_url,
-          parsed: serverParsed || (serverLines.length ? parseFromLines(serverLines) : {}),
-          created_at: rec.created_at,
-        });
       }
     } catch (e) {
       console.error(e);
@@ -280,14 +273,6 @@ export function MyPage({
         setServerImageUrl(rec.image_url || null);
         if (rec.id != null && rec.created_at)
           setRecordMeta({ id: rec.id, created_at: rec.created_at });
-
-        // Update latestRecord immediately
-        setLatestRecord({
-          image_url: rec.image_url,
-          parsed:
-            serverParsed || (serverLines.length ? parseFromLines(serverLines) : {}),
-          created_at: rec.created_at,
-        });
       }
     } catch (e) {
       console.error(e);
@@ -346,16 +331,16 @@ export function MyPage({
     if (parsedResult.bmi != null) body.bmi = parsedResult.bmi;
 
     // 세그멘탈 근육량 필드들
-    if (parsedResult.segment_right_arm_percent != null)
-      body.segment_right_arm_percent = parsedResult.segment_right_arm_percent;
-    if (parsedResult.segment_left_arm_percent != null)
-      body.segment_left_arm_percent = parsedResult.segment_left_arm_percent;
-    if (parsedResult.segment_trunk_percent != null)
-      body.segment_trunk_percent = parsedResult.segment_trunk_percent;
-    if (parsedResult.segment_right_leg_percent != null)
-      body.segment_right_leg_percent = parsedResult.segment_right_leg_percent;
-    if (parsedResult.segment_left_leg_percent != null)
-      body.segment_left_leg_percent = parsedResult.segment_left_leg_percent;
+    if (parsedResult.segment_right_arm_kg != null)
+      body.segment_right_arm_kg = parsedResult.segment_right_arm_kg;
+    if (parsedResult.segment_left_arm_kg != null)
+      body.segment_left_arm_kg = parsedResult.segment_left_arm_kg;
+    if (parsedResult.segment_trunk_kg != null)
+      body.segment_trunk_kg = parsedResult.segment_trunk_kg;
+    if (parsedResult.segment_right_leg_kg != null)
+      body.segment_right_leg_kg = parsedResult.segment_right_leg_kg;
+    if (parsedResult.segment_left_leg_kg != null)
+      body.segment_left_leg_kg = parsedResult.segment_left_leg_kg;
 
     try {
       setSaving(true);
@@ -372,14 +357,6 @@ export function MyPage({
         return;
       }
       alert("분석 결과가 프로필에 저장되었습니다.");
-
-      // Update latestRecord display with the applied values
-      if (latestRecord) {
-        setLatestRecord({
-          ...latestRecord,
-          parsed: { ...latestRecord.parsed, ...parsedResult },
-        });
-      }
     } finally {
       setSaving(false);
     }
@@ -593,34 +570,34 @@ export function MyPage({
                       </div>
                       <div>BMI: {latestRecord.parsed?.bmi ?? "-"}</div>
                       {/* 세그멘탈 근육량 (있을 경우만 표시) */}
-                      {(latestRecord.parsed?.segment_right_arm_percent ||
-                        latestRecord.parsed?.segment_left_arm_percent ||
-                        latestRecord.parsed?.segment_trunk_percent ||
-                        latestRecord.parsed?.segment_right_leg_percent ||
-                        latestRecord.parsed?.segment_left_leg_percent) && (
+                      {(latestRecord.parsed?.segment_right_arm_kg ||
+                        latestRecord.parsed?.segment_left_arm_kg ||
+                        latestRecord.parsed?.segment_trunk_kg ||
+                        latestRecord.parsed?.segment_right_leg_kg ||
+                        latestRecord.parsed?.segment_left_leg_kg) && (
                         <>
                           <div className="col-span-2 font-semibold mt-2">
-                            부위별 근육량 (표준대비 %)
+                            부위별 근육량
                           </div>
                           <div>
                             우측 팔:{" "}
-                            {latestRecord.parsed?.segment_right_arm_percent ?? "-"}%
+                            {latestRecord.parsed?.segment_right_arm_kg ?? "-"}kg
                           </div>
                           <div>
                             좌측 팔:{" "}
-                            {latestRecord.parsed?.segment_left_arm_percent ?? "-"}%
+                            {latestRecord.parsed?.segment_left_arm_kg ?? "-"}kg
                           </div>
                           <div>
-                            몸통: {latestRecord.parsed?.segment_trunk_percent ?? "-"}
-                            %
+                            몸통: {latestRecord.parsed?.segment_trunk_kg ?? "-"}
+                            kg
                           </div>
                           <div>
                             우측 다리:{" "}
-                            {latestRecord.parsed?.segment_right_leg_percent ?? "-"}%
+                            {latestRecord.parsed?.segment_right_leg_kg ?? "-"}kg
                           </div>
                           <div>
                             좌측 다리:{" "}
-                            {latestRecord.parsed?.segment_left_leg_percent ?? "-"}%
+                            {latestRecord.parsed?.segment_left_leg_kg ?? "-"}kg
                           </div>
                         </>
                       )}
