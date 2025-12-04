@@ -211,7 +211,11 @@ class InbodyAnalyzeView(APIView):
                         "   - 첫 번째 항목: 체중 (Weight)\n"
                         "   - 두 번째 항목: 골격근량 (Skeletal Muscle Mass)\n"
                         "   - 세 번째 항목: 체지방량 (Body Fat Mass)\n"
-                        "4. 세그멘탈 표 또는 표기(있으면): 우측/하단에 부위별 근육분석의 표준대비 %값 (Right/Left Arm, Trunk, Right/Left Leg)\n"
+                        "4. 세그멘탈 근육분석 섹션 ('부위별 근육분석' 또는 'Segmental Lean Analysis')\n"
+                        "   - 표 형식으로 각 부위별 표준체중 대비 % 값이 명시됨\n"
+                        "   - 부위: 우측팔, 좌측팔, 몸통, 우측다리, 좌측다리\n"
+                        "   - 키워드: '우측 팔', '좌측 팔', '우측 다리', '좌측 다리', '몸통' 또는 'Right Arm', 'Left Arm', 'Trunk', 'Right Leg', 'Left Leg'\n"
+                        "   - ⭐ CRITICAL: 각 부위 옆에 있는 % 값을 찾으세요! (예: 우측 팔 102.4%)\n"
                         "5. 우측 하단: '비만평가' 또는 'Obesity Evaluation' 섹션\n"
                         "   - 체지방률 (Body Fat Percentage) - '%' 기호 포함\n"
                         "   - BMI (Body Mass Index) - 'BMI' 레이블 근처\n\n"
@@ -228,11 +232,16 @@ class InbodyAnalyzeView(APIView):
                     
                         "규칙 3: '적정체중', '목표체중', '표준체중'은 추출하지 마세요 (체중과 혼동 방지)\n\n"
                     
-                        "규칙 4: 체지방률(%)과 BMI는 '비만평가' 섹션에서만 추출하세요\n"
+                        "규칙 4: 세그멘탈 근육량은 반드시 '표준체중 대비 %' 값을 찾으세요!\n"
+                        "   - 표 또는 목록에서 각 부위(우측팔, 좌측팔, 몸통, 우측다리, 좌측다리) 옆의 % 값\n"
+                        "   - 범위: 60-170% (표준 범위가 80-120%이므로 그보다 크거나 작을 수 있음)\n"
+                        "   - ⚠️ 주의: 부위별 근육량(kg)은 무시하고, 표준대비 %(percentage) 값만 추출!\n\n"
+                    
+                        "규칙 5: 체지방률(%)과 BMI는 '비만평가' 섹션에서만 추출하세요\n"
                         "   - 체지방률: '%' 기호가 있는 숫자 (5-65% 범위)\n"
                         "   - BMI: 'BMI' 레이블 근처의 숫자 (10-50 범위)\n\n"
                     
-                        "규칙 5: 각 값의 유효 범위를 확인하세요\n"
+                        "규칙 6: 각 값의 유효 범위를 확인하세요\n"
                         "   - gender: 'Male' 또는 'Female' 문자열\n"
                         "   - age: 5-120 (년)\n"
                         "   - height_cm: 100-230\n"
@@ -242,7 +251,7 @@ class InbodyAnalyzeView(APIView):
                         "   - body_fat_mass_kg: 3-80\n"
                         "   - body_fat_percentage: 5-65\n"
                         "   - bmi: 10-50\n"
-                        "   - segment_*_%: 0-200% (각 부위별 표준대비 %값)\n\n"
+                        "   - segment_*_percent: 60-170% (각 부위별 표준체중 대비 %값)\n\n"
                     
                         "=== 출력 형식 ===\n"
                         "순수한 JSON 객체만 반환하세요. 설명이나 마크다운 없이 JSON만 출력하세요.\n"
@@ -274,11 +283,11 @@ class InbodyAnalyzeView(APIView):
                         "   → height_cm에 저장\n\n"
                     
                         "4단계: '체성분분석' 섹션 찾기 (중앙 좌측)\n"
-                        "   - 중앙 좌측 영역, '체성분분석' 또는 'Body Composition' 헤더\n"
+                        "   - 중앙 좌측 영역, '체성분분석' 또는 'Body Composition Analysis' 헤더\n"
                         "   - 3개의 측정값이 순서대로 나열됨\n\n"
                     
                         "5단계: 체성분분석의 첫 번째 값 = 체중\n"
-                        "   - 가장 위에 있는 값 (보통 가장 큰 숫자)\n"
+                        "   - 가장 위에 있는 값 (보통 가장 큰 숫자, 50-100kg 대)\n"
                         "   - 키워드: '체중', 'Weight', 'Wt'\n"
                         "   - 괄호 밖의 숫자만 추출! 예: '59.1 (45.0-60.8)' → 59.1\n"
                         "   - 30-200kg 범위\n"
@@ -310,29 +319,32 @@ class InbodyAnalyzeView(APIView):
                         "   - 예: 'BMI 27.3' → 27.3\n"
                         "   → bmi에 저장\n\n"
                     
-                        "10단계: 세그멘탈(부위별) 근육량(%) 찾기 (가능하면)\n"
-                        "   - 표기 예: 'Right Arm', 'Left Arm', 'Trunk', 'Right Leg', 'Left Leg'\n"
-                        "   - 또는 한국어: '우측 팔', '좌측 팔', '몸통', '우측 다리', '좌측 다리'\n"
-                        "   - InBody 결과지에서 '표준체중 대비 (%)' 또는 'Percentage of standard value' 값을 찾으세요.\n"
-                        "   - 각 부위: 보통 60-170% 범위입니다.\n"
+                        "10단계: ⭐ CRITICAL 세그멘탈 부위별 근육량 % 추출\n"
+                        "   - 찾는 곳: 결과지 중단~하단의 '부위별 근육분석' 또는 'Segmental Lean Analysis' 섹션\n"
+                        "   - 표 또는 목록 형식으로 각 부위와 % 값이 함께 표시됨\n"
+                        "   - 부위명: 우측 팔 (Right Arm / RA), 좌측 팔 (Left Arm / LA), 몸통 (Trunk), 우측 다리 (Right Leg / RL), 좌측 다리 (Left Leg / LL)\n"
+                        "   - 값: 각 부위 옆에 있는 %(percentage) 숫자 (예: 우측 팔 104.2%)\n"
+                        "   - 범위: 60-170% (표준 범위는 보통 80-120%)\n"
+                        "   - ⚠️ 주의: 부위별 근육량(kg) 값은 무시하고, 오직 %값만 추출!\n"
                         "   → segment_right_arm_percent, segment_left_arm_percent, segment_trunk_percent,\n"
-                        "      segment_right_leg_percent, segment_left_leg_percent에 저장\n\n"
+                        "      segment_right_leg_percent, segment_left_leg_percent에 저장 (단위는 %만, 숫자만 추출)\n\n"
                     
-                        "⚠️ 주의사항:\n"
-                        "- 괄호 안의 범위 값(정상 범위)은 절대 추출하지 마세요\n"
-                        "- '적정체중', '목표체중'은 무시하세요\n"
-                        "- 각 섹션을 명확히 구분하여 값을 찾으세요\n"
-                        "- 순서가 중요합니다: 체중→골격근량→체지방량 순서를 지키세요\n"
-                        "- 가능한 한 모든 항목을 채워주세요. 불확실하면 null로 표기하세요.\n\n"
+                        "⚠️ 최종 검증 체크리스트:\n"
+                        "□ 괄호 안의 범위 값(정상 범위)은 절대 추출하지 않음\n"
+                        "□ '적정체중', '목표체중'은 무시\n"
+                        "□ 체중→골격근량→체지방량 순서 확인\n"
+                        "□ 세그멘탈 % 값을 모두 찾았거나 없음을 확인\n"
+                        "□ 모든 숫자가 유효 범위 내인지 확인\n"
+                        "□ JSON 형식이 정확한지 확인\n\n"
                     
-                        "출력 예시:\n"
-                        '{"gender": "Male", "age": 35, "height_cm": 156.0, "weight_kg": 59.1, '
-                        '"inbody_score": 85, "skeletal_muscle_mass_kg": 25.8, "body_fat_mass_kg": 18.2, '
-                        '"body_fat_percentage": 36.2, "bmi": 27.3, '
+                        "출력 예시 (스크린샷 데이터 기반):\n"
+                        '{"gender": "Female", "age": 23, "height_cm": 156.0, "weight_kg": 58.8, '
+                        '"inbody_score": 101, "skeletal_muscle_mass_kg": 25.8, "body_fat_mass_kg": 18.2, '
+                        '"body_fat_percentage": 30.9, "bmi": 24.2, '
                         '"segment_right_arm_percent": 105.2, "segment_left_arm_percent": 103.5, '
                         '"segment_trunk_percent": 100.1, "segment_right_leg_percent": 98.5, "segment_left_leg_percent": 99.0}\n\n'
                     
-                        "이제 이미지를 분석하여 JSON만 반환해주세요:"
+                        "이제 이미지를 분석하여 JSON만 반환해주세요. 마크다운이나 설명은 절대 포함하지 마세요:"
                 )
 
                 # Use Chat Completions with multimodal content (gpt-4o-mini)
