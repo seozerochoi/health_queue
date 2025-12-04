@@ -61,6 +61,18 @@ export function NFCReader({ onTagDetected, isEnabled }: NFCReaderProps) {
               if (typeof record.data === "string") {
                 equipmentId = record.data;
                 console.log("  ✓ record.data는 이미 문자열");
+              } else if (record.data instanceof DataView) {
+                // DataView인 경우 버퍼 추출 후 파싱
+                console.log("  ✓ record.data는 DataView, 파싱 시작");
+                const statusByte = record.data.getUint8(0);
+                const languageCodeLength = statusByte & 0x3f;
+
+                const buffer = record.data.buffer.slice(
+                  record.data.byteOffset + 1 + languageCodeLength,
+                  record.data.byteOffset + record.data.byteLength
+                );
+                const textDecoder = new TextDecoder("utf-8");
+                equipmentId = textDecoder.decode(buffer);
               } else if (record.data instanceof ArrayBuffer) {
                 // ArrayBuffer인 경우 직접 파싱
                 console.log("  ✓ record.data는 ArrayBuffer, 파싱 시작");
