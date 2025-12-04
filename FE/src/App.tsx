@@ -1130,9 +1130,28 @@ export default function App() {
       }
       // 선택된 기구 설정 및 운동 타이머 화면으로 이동
       const eq = equipmentList.find((e) => Number(e.id) === equipmentId);
-      if (eq) {
-        // @ts-ignore: equipment type in App may be loosely typed
-        setSelectedEquipment(eq as any);
+      let finalEquipment = eq ? { ...eq } : undefined;
+      // AI 시간 추천 적용
+      if (finalEquipment) {
+        try {
+          const aiRes = await fetch(`${apiBase}/api/ai/time/`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ equipment_id: equipmentId }),
+          });
+          if (aiRes.ok) {
+            const aiData = await aiRes.json();
+            finalEquipment.allocatedTime = aiData.recommended_time;
+          } else {
+            console.warn("AI 시간 추천 응답 실패:", aiRes.status);
+          }
+        } catch (aiError) {
+          console.warn("AI 시간 추천 요청 실패 (기본값 사용):", aiError);
+        }
+        setSelectedEquipment(finalEquipment);
       }
       setWorkoutStartTime(new Date());
       setCurrentView("workout-timer");
