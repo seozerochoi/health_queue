@@ -60,23 +60,50 @@ export function NFCReader({ onTagDetected, isEnabled }: NFCReaderProps) {
               // Web NFC API의 텍스트 레코드는 이미 파싱된 문자열일 수 있음
               if (typeof record.data === "string") {
                 equipmentId = record.data;
-                console.log("  ✓ record.data는 이미 문자열");
+                console.log("  ✓ record.data는 이미 문자열:", equipmentId);
               } else if (record.data instanceof DataView) {
-                // DataView인 경우: Web NFC API가 이미 파싱한 텍스트 데이터
-                console.log(
-                  "  ✓ record.data는 DataView, 전체를 텍스트로 디코딩"
-                );
-
-                // DataView 전체를 UTF-8로 디코딩 (NDEF 구조 없음)
-                const textBytes = new Uint8Array(record.data.byteLength);
-                for (let i = 0; i < record.data.byteLength; i++) {
-                  textBytes[i] = record.data.getUint8(i);
+                // DataView인 경우: NDEF 텍스트 레코드 파싱
+                console.log("  ✓ record.data는 DataView, NDEF 텍스트 파싱");
+                
+                try {
+                  // NDEF Text Record 구조:
+                  // [0] = Status Byte (bit 7: UTF-8/UTF-16, bit 0-5: 언어 코드 길이)
+                  // [1..1+lang_len] = 언어 코드 (예: "en")
+                  // [1+lang_len..end] = 실제 텍스트 데이터
+                  
+                  const statusByte = record.data.getUint8(0);
+                  const languageCodeLength = statusByte & 0x3f; // 하위 6비트
+                  const isUtf16 = (statusByte & 0x80) !== 0; // 최상위 비트
+                  
+                  console.log(`  - Status Byte: 0x${statusByte.toString(16)}`);
+                  console.log(`  - Language Code Length: ${languageCodeLength}`);
+                  console.log(`  - UTF-16: ${isUtf16}`);
+                  
+                  // 언어 코드 건너뛰고 텍스트 데이터만 추출
+                  const textStartIndex = 1 + languageCodeLength;
+                  const textLength = record.data.byteLength - textStartIndex;
+                  const textBytes = new Uint8Array(textLength);
+                  
+                  for (let i = 0; i < textLength; i++) {
+                    textBytes[i] = record.data.getUint8(textStartIndex + i);
+                  }
+                  
+                  const encoding = isUtf16 ? "utf-16" : "utf-8";
+                  const textDecoder = new TextDecoder(encoding);
+                  equipmentId = textDecoder.decode(textBytes);
+                  
+                  console.log(`  ✓ NDEF 파싱 결과: "${equipmentId}"`);
+                } catch (parseError) {
+                  console.error("  ✗ NDEF 파싱 실패:", parseError);
+                  // 파싱 실패 시 전체를 UTF-8로 디코딩 시도
+                  const textBytes = new Uint8Array(record.data.byteLength);
+                  for (let i = 0; i < record.data.byteLength; i++) {
+                    textBytes[i] = record.data.getUint8(i);
+                  }
+                  const textDecoder = new TextDecoder("utf-8");
+                  equipmentId = textDecoder.decode(textBytes);
+                  console.log(`  ⚠ Fallback 디코딩 결과: "${equipmentId}"`);
                 }
-
-                const textDecoder = new TextDecoder("utf-8");
-                equipmentId = textDecoder.decode(textBytes);
-
-                console.log(`  ✓ 디코딩 결과: "${equipmentId}"`);
               } else if (record.data instanceof ArrayBuffer) {
                 // ArrayBuffer인 경우 직접 파싱
                 console.log("  ✓ record.data는 ArrayBuffer, 파싱 시작");
