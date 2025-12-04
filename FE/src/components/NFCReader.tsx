@@ -124,7 +124,12 @@ export function NFCReader({ onTagDetected, isEnabled }: NFCReaderProps) {
               if (!/^NFC\d{3}$/i.test(trimmedId)) {
                 console.error(`  ❌ 잘못된 NFC 형식: "${trimmedId}"`);
                 alert(
-                  `잘못된 NFC 태그 형식입니다: ${trimmedId}\n\n올바른 형식: NFC001 ~ NFC999`
+                  `잘못된 NFC 태그 형식입니다: [${trimmedId}]\n\n` +
+                    `길이: ${trimmedId.length}\n` +
+                    `Char codes: ${[...trimmedId]
+                      .map((c) => c.charCodeAt(0))
+                      .join(", ")}\n\n` +
+                    `올바른 형식: NFC001 ~ NFC999`
                 );
                 return;
               }
