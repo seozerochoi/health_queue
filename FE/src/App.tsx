@@ -128,6 +128,8 @@ export default function App() {
   const [nfcEnabled, setNfcEnabled] = useState(false);
   // NFC 태그 읽은 값 표시용
   const [nfcTagValue, setNfcTagValue] = useState<string>("");
+  // NFC 중복 호출 방지용 (마지막 태그 ID + 타임스탬프)
+  const lastNFCTagRef = useRef<{ tagId: string; timestamp: number } | null>(null);
 
   const getApiBase = () => {
     try {
@@ -613,9 +615,22 @@ export default function App() {
   // NFC 태그 감지 시 운동 시작
   const handleNFCTagDetected = async (equipmentId: string | number) => {
     const nfcTagId = String(equipmentId);
+    const now = Date.now();
+
+    // 🔍 [NFC 중복 방지] 같은 태그를 2초 이내에 다시 읽으면 무시
+    if (lastNFCTagRef.current) {
+      const timeDiff = now - lastNFCTagRef.current.timestamp;
+      if (lastNFCTagRef.current.tagId === nfcTagId && timeDiff < 2000) {
+        console.log(`⏭️ NFC 중복 호출 무시 (${timeDiff}ms 이내)`);
+        return;
+      }
+    }
+
+    // 현재 태그 정보 저장
+    lastNFCTagRef.current = { tagId: nfcTagId, timestamp: now };
 
     // 🔍 [NFC 디버깅] 수신한 데이터 상세 로깅
-    console.log("🏷️ NFC 태그로 운동 시작");
+    console.log("🏷️ NFC 태그 감지");
     console.log(`  - 원본 값: "${equipmentId}"`);
     console.log(`  - String 변환: "${nfcTagId}"`);
     console.log(`  - 길이: ${nfcTagId.length}`);
@@ -635,6 +650,64 @@ export default function App() {
 
       const apiBase = getApiBase();
 
+      // 1️⃣ 먼저 현재 운동 세션이 있는지 확인
+      console.log("🔍 현재 운동 세션 확인 중...");
+      const currentSessionResponse = await fetch(`${apiBase}/api/workouts/current/`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (currentSessionResponse.ok) {
+        const currentSession = await currentSessionResponse.json();
+        
+        // 현재 운동 중인 기구와 NFC 태깅한 기구가 같은지 확인
+        if (currentSession && currentSession.equipment) {
+          const currentEquipmentNFC = currentSession.equipment.nfc_tag_id;
+          
+          console.log(`✅ 현재 운동 세션 발견`);
+          console.log(`  - 운동 중인 기구 NFC: ${currentEquipmentNFC}`);
+          console.log(`  - 태깅한 기구 NFC: ${nfcTagId}`);
+          
+          if (currentEquipmentNFC === nfcTagId) {
+            // 같은 기구 → 운동 종료
+            console.log("🛑 같은 기구 태깅 감지 → 운동 종료 처리");
+            
+            const endResponse = await fetch(`${apiBase}/api/workouts/end/`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({}),
+            });
+
+            if (endResponse.ok) {
+              alert(`✅ 운동을 종료했습니다.\n기구: ${nfcTagId}`);
+              setCurrentView("equipment-list");
+              setSelectedEquipment(null);
+              setWorkoutStartTime(null);
+              await fetchEquipment();
+              return;
+            } else {
+              const errorText = await endResponse.text();
+              console.error("운동 종료 실패:", errorText);
+              alert("운동 종료에 실패했습니다.");
+              return;
+            }
+          } else {
+            // 다른 기구 → 현재 운동 먼저 종료 필요
+            alert(`⚠️ 현재 "${currentEquipmentNFC}" 기구로 운동 중입니다.\n먼저 해당 기구를 태깅하여 운동을 종료해주세요.`);
+            return;
+          }
+        }
+      }
+
+      // 2️⃣ 운동 세션이 없으면 → 운동 시작
+      console.log("🎬 새로운 운동 시작");
+      
       // 🔍 [NFC 디버깅] API 호출 전 상세 정보 로깅
       const requestPayload = { nfc_tag_id: nfcTagId };
       console.log(`📡 API 호출: POST ${apiBase}/api/workouts/start/`);
