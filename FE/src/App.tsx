@@ -567,9 +567,8 @@ export default function App() {
   const handleNFCTagDetected = async (equipmentId: string | number) => {
     console.log("🏷️ NFC 태그로 운동 시작:", equipmentId);
 
-    const numEquipmentId = typeof equipmentId === "string"
-      ? parseInt(equipmentId)
-      : equipmentId;
+    // NFC 태그 ID는 문자열로 전송 (예: "NFC001")
+    const nfcTagId = String(equipmentId);
 
     try {
       const token = localStorage.getItem("access_token");
@@ -586,7 +585,7 @@ export default function App() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          equipment_id: numEquipmentId,
+          nfc_tag_id: nfcTagId,  // equipment_id 대신 nfc_tag_id 사용
         }),
       });
 
@@ -600,16 +599,16 @@ export default function App() {
       const data = await response.json();
       console.log("✅ NFC 운동 시작 성공:", data);
 
-      // 선택된 장비 설정
+      // 선택된 장비 설정 - NFC 태그 ID로 기구 찾기
       const equipment = equipmentList.find(
-        (e) => Number(e.id) === numEquipmentId
+        (e) => e.nfc_tag_id === nfcTagId || String(e.id) === nfcTagId
       );
       if (equipment) {
         setSelectedEquipment(equipment);
       } else {
-        console.warn("기구를 찾을 수 없음, ID:", numEquipmentId);
+        console.warn("기구를 찾을 수 없음, NFC ID:", nfcTagId);
         setSelectedEquipment({
-          id: String(numEquipmentId),
+          id: String(nfcTagId),
           name: "운동 기구",
           state: "IN-USE",
           type: "",
@@ -623,8 +622,10 @@ export default function App() {
       setCurrentView("workout-timer");
       setDirectWorkout(true);
 
-      // 즉시 heartbeat 전송
-      await sendImmediateHeartbeat(numEquipmentId);
+      // 즉시 heartbeat 전송 - equipment.id 사용
+      if (equipment) {
+        await sendImmediateHeartbeat(equipment.id);
+      }
 
       // 장비 상태 갱신
       await fetchEquipment();
@@ -1192,6 +1193,7 @@ export default function App() {
       currentUser: eq.current_user ?? undefined,
       timeRemaining: eq.time_remaining ?? undefined,
       operational_state: eq.operational_state || "NORMAL",
+      nfc_tag_id: eq.nfc_tag_id ?? undefined,  // NFC 태그 ID 추가
     };
   };
 

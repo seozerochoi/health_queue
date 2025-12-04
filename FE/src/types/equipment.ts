@@ -10,4 +10,5 @@ export interface Equipment {
   allocatedTime: number;
   estimatedEndTime?: Date;
   operational_state?: "NORMAL" | "MAINTENANCE" | "BROKEN";
+  nfc_tag_id?: string;  // NFC 태그 ID (예: "NFC001")
 }
