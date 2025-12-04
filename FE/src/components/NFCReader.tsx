@@ -62,36 +62,21 @@ export function NFCReader({ onTagDetected, isEnabled }: NFCReaderProps) {
                 equipmentId = record.data;
                 console.log("  ✓ record.data는 이미 문자열");
               } else if (record.data instanceof DataView) {
-                // DataView인 경우 버퍼 추출 후 파싱
-                console.log("  ✓ record.data는 DataView, 파싱 시작");
-                const statusByte = record.data.getUint8(0);
-                const isUtf16 = (statusByte & 0x80) !== 0;
-                const languageCodeLength = statusByte & 0x3f;
-
-                // 디버깅 정보를 alert로 표시
-                alert(
-                  `[DataView 디버깅]\n` +
-                    `Status Byte: 0x${statusByte.toString(16)}\n` +
-                    `UTF-16: ${isUtf16}\n` +
-                    `Lang Length: ${languageCodeLength}\n` +
-                    `byteOffset: ${record.data.byteOffset}\n` +
-                    `byteLength: ${record.data.byteLength}\n` +
-                    `Skip: ${1 + languageCodeLength}`
+                // DataView인 경우: Web NFC API가 이미 파싱한 텍스트 데이터
+                console.log(
+                  "  ✓ record.data는 DataView, 전체를 텍스트로 디코딩"
                 );
 
-                const textStartOffset = 1 + languageCodeLength;
-                const textByteLength = record.data.byteLength - textStartOffset;
-
-                // DataView에서 직접 바이트 배열 추출
-                const textBytes = new Uint8Array(textByteLength);
-                for (let i = 0; i < textByteLength; i++) {
-                  textBytes[i] = record.data.getUint8(textStartOffset + i);
+                // DataView 전체를 UTF-8로 디코딩 (NDEF 구조 없음)
+                const textBytes = new Uint8Array(record.data.byteLength);
+                for (let i = 0; i < record.data.byteLength; i++) {
+                  textBytes[i] = record.data.getUint8(i);
                 }
 
-                const textDecoder = new TextDecoder(
-                  isUtf16 ? "utf-16" : "utf-8"
-                );
+                const textDecoder = new TextDecoder("utf-8");
                 equipmentId = textDecoder.decode(textBytes);
+
+                console.log(`  ✓ 디코딩 결과: "${equipmentId}"`);
               } else if (record.data instanceof ArrayBuffer) {
                 // ArrayBuffer인 경우 직접 파싱
                 console.log("  ✓ record.data는 ArrayBuffer, 파싱 시작");
