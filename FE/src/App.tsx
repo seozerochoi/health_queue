@@ -170,24 +170,65 @@ export default function App() {
     setCurrentView(view);
   };
 
-  const handleSignUpStep1Complete = (userId: string, password: string) => {
+  const handleSignUpStep1Complete = async (userId: string, password: string) => {
     setTempUserId(userId);
     setTempPassword(password);
+
+    // [Auto-Login] InBody 분석 API 사용을 위해 미리 토큰 발급
+    try {
+      const loginResponse = await fetch("https://43.201.88.27/api/login/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: userId, password: password }),
+      });
+      if (loginResponse.ok) {
+        const loginData = await loginResponse.json();
+        localStorage.setItem("access_token", loginData.access);
+        localStorage.setItem("refresh_token", loginData.refresh);
+        console.log("✅ 회원가입 직후 자동 로그인 성공 (토큰 발급)");
+      } else {
+        console.warn("⚠️ 회원가입 직후 자동 로그인 실패");
+      }
+    } catch (e) {
+      console.error("Auto-login failed during signup", e);
+    }
+
     setCurrentView("signup-user-info");
   };
 
   const handleSignUpStep2Complete = async (
     name: string,
-    role: "user" | "admin"
+    role: "user" | "admin",
+    inbodyData?: any
   ) => {
     setUserRole(role);
-    // nickname field removed; use name as display nickname to keep downstream components stable
     setUserNickname(name);
     setUserName(name);
 
-    // NOTE: signup components are responsible for calling the backend.
-    // App should NOT keep a local registeredUsers list. We keep the local
-    // name/role state for routing after signup completes.
+    // [Profile Update] 회원가입 시 입력받은 인바디 정보가 있다면 저장
+    if (inbodyData) {
+      try {
+        const token = localStorage.getItem("access_token");
+        if (token) {
+          console.log("💾 [SignUp] 인바디 정보 저장 시도:", inbodyData);
+          const res = await fetch("https://43.201.88.27/api/users/profile/", {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(inbodyData),
+          });
+          if (res.ok) {
+            console.log("✅ [SignUp] 인바디 정보 저장 성공");
+          } else {
+            console.warn("⚠️ [SignUp] 인바디 정보 저장 실패:", res.status);
+          }
+        }
+      } catch (e) {
+        console.error("Error saving inbody data during signup:", e);
+      }
+    }
 
     // 헬스장 선택 건너뛰고 자동으로 스마트짐(id=1)에 연결
     await handleSignUpStep3Complete(["1"]);
