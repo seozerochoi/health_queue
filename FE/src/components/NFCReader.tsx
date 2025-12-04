@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Wifi, AlertCircle } from "lucide-react";
-import { Card, CardContent } from "./ui/card";
 
 interface NFCReaderProps {
   onTagDetected: (equipmentId: string | number) => void;
@@ -102,65 +101,19 @@ export function NFCReader({ onTagDetected, isEnabled }: NFCReaderProps) {
 
   if (!nfcSupported) {
     return (
-      <Card className="mb-4 border-red-200 bg-red-50">
-        <CardContent className="pt-6">
-          <div className="text-center space-y-3">
-            <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
-            <p className="text-red-600 font-semibold">
-              ⚠️ 이 기기는 NFC를 지원하지 않습니다
-            </p>
-            <p className="text-gray-600 text-sm">
-              Android Chrome 13+ 기기에서 사용 가능합니다
-            </p>
-            <p className="text-gray-500 text-xs mt-2">
-              NFC 없이 운동을 시작하려면 기구를 직접 선택하세요
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-center gap-2 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded-lg mb-4">
+        <AlertCircle className="w-5 h-5 text-yellow-500 flex-shrink-0" />
+        <p className="text-yellow-400 text-sm font-medium">NFC 미지원</p>
+      </div>
     );
   }
 
   return (
-    <Card className="mb-4 border-blue-200 bg-blue-50">
-      <CardContent className="pt-6">
-        {isScanning ? (
-          <div className="text-center space-y-4">
-            <div className="relative">
-              <Wifi className="w-16 h-16 text-blue-600 mx-auto animate-pulse" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-20 h-20 border-4 border-blue-300 border-t-transparent rounded-full animate-spin"></div>
-              </div>
-            </div>
-            <p className="text-blue-700 font-semibold text-lg">
-              NFC 태그를 인식 중입니다
-            </p>
-            <p className="text-gray-600 text-sm">
-              운동 기구의 NFC 스티커에<br />휴대폰을 가까이 대주세요
-            </p>
-          </div>
-        ) : (
-          <div className="text-center space-y-3">
-            <Wifi className="w-12 h-12 text-blue-500 mx-auto" />
-            <p className="text-blue-600 font-semibold">NFC 스캔 준비 완료</p>
-          </div>
-        )}
-        
-        {/* 마지막으로 스캔한 태그 표시 */}
-        {lastScannedTag && (
-          <div className="mt-4 p-3 bg-green-100 border border-green-300 rounded-lg">
-            <p className="text-green-800 text-sm text-center font-mono">
-              ✅ 마지막 스캔: <strong>{lastScannedTag}</strong>
-            </p>
-          </div>
-        )}
-        
-        {error && (
-          <div className="mt-4 p-3 bg-red-100 border border-red-300 rounded-lg">
-            <p className="text-red-700 text-sm text-center">{error}</p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <div className="flex items-center justify-center gap-2 p-3 bg-blue-500/20 border border-blue-500/50 rounded-lg mb-4">
+      <Wifi className={`w-5 h-5 text-blue-400 flex-shrink-0 ${isScanning ? "animate-pulse" : ""}`} />
+      <p className="text-blue-400 text-sm font-medium">
+        {isScanning ? "NFC 스캔 중..." : "NFC 연결"}
+      </p>
+    </div>
   );
 }

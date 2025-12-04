@@ -21,6 +21,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
+import { NFCReader } from "./NFCReader";
 
 interface Equipment {
   id: string;
@@ -42,6 +43,8 @@ interface EquipmentListProps {
   equipment?: Equipment[]; // App에서 전달받은 기구 목록 (옵셔널, 없으면 자체 로딩)
   loading?: boolean; // App에서 전달받은 로딩 상태
   error?: string | null; // App에서 전달받은 에러 상태
+  nfcEnabled?: boolean;
+  onNFCTagDetected?: (equipmentId: string | number) => void;
 }
 
 // Memoized equipment item to avoid unnecessary re-renders.
@@ -199,6 +202,8 @@ export function EquipmentList({
   equipment: equipmentFromApp,
   loading: loadingFromApp,
   error: errorFromApp,
+  nfcEnabled = false,
+  onNFCTagDetected,
 }: EquipmentListProps) {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
@@ -928,6 +933,14 @@ export function EquipmentList({
             </Button>
           ))}
         </div>
+
+        {/* NFC Reader - 기구 목록 상단에 표시 */}
+        {nfcEnabled && onNFCTagDetected && (
+          <NFCReader
+            onTagDetected={onNFCTagDetected}
+            isEnabled={nfcEnabled}
+          />
+        )}
 
         {loading && (
           <div className="flex flex-col items-center justify-center py-16 text-gray-400">
