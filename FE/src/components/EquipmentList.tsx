@@ -285,7 +285,7 @@ export function EquipmentList({
       } catch (e) {
         /* ignore */
       }
-      return "http://43.201.88.27";
+      return "https://43.201.88.27";
     })();
 
     const getEquipmentImage = (name: string, type: string): string => {
@@ -852,7 +852,7 @@ export function EquipmentList({
         ? `${label}: ${reportDescription}`
         : label;
 
-      const response = await fetch("http://43.201.88.27/api/reports/", {
+      const response = await fetch("https://43.201.88.27/api/reports/", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

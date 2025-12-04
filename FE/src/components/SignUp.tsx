@@ -21,7 +21,7 @@ export default function SignUp({ onBack, onSubmit }: SignUpProps) {
     setError(null);
 
     try {
-      const response = await fetch("http://43.201.88.27/api/register/", {
+      const response = await fetch("https://43.201.88.27/api/register/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

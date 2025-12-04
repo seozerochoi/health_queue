@@ -22,7 +22,7 @@ export function Login({ onBack, onLoginComplete }: LoginProps) {
     setShowError(false);
 
     try {
-      const response = await fetch("http://43.201.88.27/api/login/", {
+      const response = await fetch("https://43.201.88.27/api/login/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -68,7 +68,7 @@ export function Login({ onBack, onLoginComplete }: LoginProps) {
         // 사용자의 헬스장 정보 가져오기
         const accessToken = data.access;
         const gymResponse = await fetch(
-          "http://43.201.88.27/api/gyms/my-gym/",
+          "https://43.201.88.27/api/gyms/my-gym/",
           {
             method: "GET",
             headers: {

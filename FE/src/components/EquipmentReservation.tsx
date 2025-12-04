@@ -11,10 +11,10 @@ const API_BASE = (() => {
     return (
       meta?.env?.VITE_API_BASE ||
       meta?.env?.REACT_APP_API_BASE ||
-      "http://43.201.88.27"
+      "https://43.201.88.27"
     );
   } catch {
-    return "http://43.201.88.27";
+    return "https://43.201.88.27";
   }
 })();
 

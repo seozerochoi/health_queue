@@ -61,7 +61,7 @@ export function MyPage({
         if (!refresh) throw new Error("No refresh token");
 
         const refreshRes = await fetch(
-          "http://43.201.88.27/api/token/refresh/",
+          "https://43.201.88.27/api/token/refresh/",
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -193,7 +193,7 @@ export function MyPage({
       const form = new FormData();
       form.append("image", blob, "inbody.jpg");
       const res = await fetchWithAuth(
-        "http://43.201.88.27/api/inbody/analyze/",
+        "https://43.201.88.27/api/inbody/analyze/",
         {
           method: "POST",
           body: form,
@@ -246,7 +246,7 @@ export function MyPage({
       const form = new FormData();
       form.append("image", lastBlob, "inbody.jpg");
       const res = await fetchWithAuth(
-        "http://43.201.88.27/api/inbody/analyze/",
+        "https://43.201.88.27/api/inbody/analyze/",
         { method: "POST", body: form }
       );
       if (!res.ok) {
@@ -345,7 +345,7 @@ export function MyPage({
     try {
       setSaving(true);
       const res = await fetchWithAuth(
-        "http://43.201.88.27/api/users/profile/",
+        "https://43.201.88.27/api/users/profile/",
         {
           method: "PATCH",
           body: JSON.stringify(body),
@@ -368,7 +368,7 @@ export function MyPage({
       try {
         setLoading(true);
         const res = await fetchWithAuth(
-          "http://43.201.88.27/api/users/profile/",
+          "https://43.201.88.27/api/users/profile/",
           { method: "GET" }
         );
         if (!res.ok) return;
@@ -382,7 +382,7 @@ export function MyPage({
     const loadLatestInbody = async () => {
       try {
         const res = await fetchWithAuth(
-          "http://43.201.88.27/api/inbody/records/latest/",
+          "https://43.201.88.27/api/inbody/records/latest/",
           { method: "GET" }
         );
         if (res.status === 204) return; // no content
@@ -435,7 +435,7 @@ export function MyPage({
     try {
       setSaving(true);
       const res = await fetchWithAuth(
-        "http://43.201.88.27/api/users/profile/",
+        "https://43.201.88.27/api/users/profile/",
         {
           method: "PATCH",
           body: JSON.stringify(body),
@@ -460,7 +460,7 @@ export function MyPage({
       };
 
       const res = await fetchWithAuth(
-        "http://43.201.88.27/api/users/profile/",
+        "https://43.201.88.27/api/users/profile/",
         {
           method: "PATCH",
           body: JSON.stringify(body),

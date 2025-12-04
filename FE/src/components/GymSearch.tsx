@@ -36,7 +36,7 @@ export function GymSearch({ onGymSelect, onBack, favoriteGymIds = [] }: GymSearc
 
         console.log("GymSearch: Fetching gym info with token");
         const response = await axios.get(
-          'http://43.201.88.27/api/gyms/my-gym/',
+          'https://43.201.88.27/api/gyms/my-gym/',
           {
             headers: {
               Authorization: `Bearer ${token}`

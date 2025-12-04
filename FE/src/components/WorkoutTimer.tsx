@@ -31,7 +31,7 @@ const getApiBase = () => {
     const envBase = process?.env?.REACT_APP_API_BASE;
     if (envBase) return envBase;
   }
-  return "http://43.201.88.27";
+  return "https://43.201.88.27";
 };
 
 export function WorkoutTimer({

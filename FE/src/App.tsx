@@ -138,7 +138,7 @@ export default function App() {
     } catch (e) {
       /* ignore */
     }
-    return "http://43.201.88.27";
+    return "https://43.201.88.27";
   };
 
   const sendImmediateHeartbeat = async (equipmentId?: string | number) => {
@@ -201,7 +201,7 @@ export default function App() {
         console.log("=== 회원가입 완료: 헬스장 저장 시작 ===");
 
         // 1. 먼저 로그인하여 토큰 받기
-        const loginResponse = await fetch("http://43.201.88.27/api/login/", {
+        const loginResponse = await fetch("https://43.201.88.27/api/login/", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -235,7 +235,7 @@ export default function App() {
         console.log("선택한 헬스장 ID:", gymId);
 
         const membershipResponse = await fetch(
-          "http://43.201.88.27/api/gyms/memberships/",
+          "https://43.201.88.27/api/gyms/memberships/",
           {
             method: "POST",
             headers: {
@@ -284,7 +284,7 @@ export default function App() {
     try {
       const token = localStorage.getItem("access_token");
       if (token) {
-        const res = await fetch("http://43.201.88.27/api/gyms/my-gym/", {
+        const res = await fetch("https://43.201.88.27/api/gyms/my-gym/", {
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
@@ -360,7 +360,7 @@ export default function App() {
           console.log(
             "No gym in login payload. Fetching /api/gyms/my-gym/ with token."
           );
-          const res = await fetch("http://43.201.88.27/api/gyms/my-gym/", {
+          const res = await fetch("https://43.201.88.27/api/gyms/my-gym/", {
             headers: {
               Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",
@@ -488,7 +488,7 @@ export default function App() {
 
         // 백엔드에 세션 시작 요청
         const response = await fetch(
-          "http://43.201.88.27/api/workouts/start/",
+          "https://43.201.88.27/api/workouts/start/",
           {
             method: "POST",
             headers: {
@@ -531,7 +531,7 @@ export default function App() {
       }
 
       const response = await fetch(
-        "http://43.201.88.27/api/workouts/join-queue/",
+        "https://43.201.88.27/api/workouts/join-queue/",
         {
           method: "POST",
           headers: {
@@ -595,7 +595,7 @@ export default function App() {
         } catch (e) {
           /* ignore */
         }
-        return "http://43.201.88.27";
+        return "https://43.201.88.27";
       })();
 
       if (token) {
@@ -731,7 +731,7 @@ export default function App() {
         } catch (e) {
           /* ignore */
         }
-        return "http://43.201.88.27";
+        return "https://43.201.88.27";
       })();
 
       const response = await fetch(`${apiBase}/api/workouts/join-queue/`, {
@@ -887,7 +887,7 @@ export default function App() {
         } catch (e) {
           /* ignore */
         }
-        return "http://43.201.88.27";
+        return "https://43.201.88.27";
       })();
 
       // 1. 예약 취소 API 호출
@@ -962,7 +962,7 @@ export default function App() {
       } catch (e) {
         /* ignore */
       }
-      return "http://43.201.88.27";
+      return "https://43.201.88.27";
     })();
     const access = localStorage.getItem("access_token");
     const refresh = localStorage.getItem("refresh_token");
@@ -1139,7 +1139,7 @@ export default function App() {
       if (import.meta.env.VITE_API_URL) {
         return import.meta.env.VITE_API_URL;
       }
-      return "http://43.201.88.27";
+      return "https://43.201.88.27";
     })();
     const access = localStorage.getItem("access_token");
     const refresh = localStorage.getItem("refresh_token");

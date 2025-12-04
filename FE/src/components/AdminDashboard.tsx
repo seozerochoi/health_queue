@@ -111,7 +111,7 @@ export function AdminDashboard({
     }
     try {
       const token = localStorage.getItem("access_token");
-      const response = await fetch("http://43.201.88.27/api/reports/", {
+      const response = await fetch("https://43.201.88.27/api/reports/", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -167,7 +167,7 @@ export function AdminDashboard({
     try {
       const token = localStorage.getItem("access_token");
       const response = await fetch(
-        `http://43.201.88.27/api/reports/${reportId}/`,
+        `https://43.201.88.27/api/reports/${reportId}/`,
         {
           method: "PATCH",
           headers: {
@@ -197,7 +197,7 @@ export function AdminDashboard({
     setIsLoadingEquipment(true);
     try {
       const token = localStorage.getItem("access_token");
-      const response = await fetch("http://43.201.88.27/api/equipment/", {
+      const response = await fetch("https://43.201.88.27/api/equipment/", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -234,7 +234,7 @@ export function AdminDashboard({
 
       // 운영 상태 변경 (백엔드 표준 경로 사용)
       const response = await fetch(
-        `http://43.201.88.27/api/equipment/${equipmentId}/operational-state/`,
+        `https://43.201.88.27/api/equipment/${equipmentId}/operational-state/`,
         {
           method: "PATCH",
           headers: {
@@ -261,7 +261,7 @@ export function AdminDashboard({
         try {
           // 해당 기구의 모든 예약 가져오기
           const reservationsResponse = await fetch(
-            `http://43.201.88.27/api/reservations/?equipment_id=${equipmentId}`,
+            `https://43.201.88.27/api/reservations/?equipment_id=${equipmentId}`,
             {
               headers: {
                 Authorization: `Bearer ${token}`,
@@ -284,7 +284,7 @@ export function AdminDashboard({
               .map(async (reservation: any) => {
                 try {
                   const cancelResponse = await fetch(
-                    `http://43.201.88.27/api/reservations/${reservation.id}/`,
+                    `https://43.201.88.27/api/reservations/${reservation.id}/`,
                     {
                       method: "DELETE",
                       headers: {
@@ -323,7 +323,7 @@ export function AdminDashboard({
         try {
           // 기구 상태를 AVAILABLE로 변경
           const statusResponse = await fetch(
-            `http://43.201.88.27/api/equipment/${equipmentId}/`,
+            `https://43.201.88.27/api/equipment/${equipmentId}/`,
             {
               method: "PATCH",
               headers: {
@@ -397,7 +397,7 @@ export function AdminDashboard({
     console.log("🔔 [AdminDashboard] 운영자 알림 SSE 연결 시작");
 
     const eventSource = new EventSource(
-      `http://43.201.88.27/api/operator-notifications/?access_token=${encodeURIComponent(
+      `https://43.201.88.27/api/operator-notifications/?access_token=${encodeURIComponent(
         token
       )}`
     );
@@ -542,7 +542,7 @@ export function AdminDashboard({
 
       console.log("📤 [기구 등록] Request body:", requestBody);
 
-      const response = await fetch("http://43.201.88.27/api/equipment/", {
+      const response = await fetch("https://43.201.88.27/api/equipment/", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -602,7 +602,7 @@ export function AdminDashboard({
       const token = localStorage.getItem("access_token");
       const today = todayKST(); // YYYY-MM-DD (Asia/Seoul)
       const response = await fetch(
-        `http://43.201.88.27/api/equipment/daily-stats/?date=${today}`,
+        `https://43.201.88.27/api/equipment/daily-stats/?date=${today}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -639,7 +639,7 @@ export function AdminDashboard({
     try {
       const token = localStorage.getItem("access_token");
       const response = await fetch(
-        "http://43.201.88.27/api/utilization/current/",
+        "https://43.201.88.27/api/utilization/current/",
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -669,7 +669,7 @@ export function AdminDashboard({
       const token = localStorage.getItem("access_token");
       const today = todayKST(); // YYYY-MM-DD (Asia/Seoul)
       const response = await fetch(
-        `http://43.201.88.27/api/utilization/hourly/?date=${today}`,
+        `https://43.201.88.27/api/utilization/hourly/?date=${today}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,

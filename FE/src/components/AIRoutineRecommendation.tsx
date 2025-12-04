@@ -25,7 +25,7 @@ type BodyPart =
 type Intensity = "상" | "중" | "하";
 type RecommendMethod = "전체 기구" | "비어있는 기구";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://43.201.88.27";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://43.201.88.27";
 
 interface RoutineStep {
   id: number;

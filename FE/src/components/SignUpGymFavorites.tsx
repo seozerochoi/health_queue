@@ -34,7 +34,7 @@ export function SignUpGymFavorites({ onBack, onComplete }: SignUpGymFavoritesPro
     const fetchGyms = async () => {
       try {
         setLoading(true);
-        const response = await fetch("http://43.201.88.27/api/gyms/gyms/");
+        const response = await fetch("https://43.201.88.27/api/gyms/gyms/");
         
         if (!response.ok) {
           throw new Error("헬스장 목록을 불러올 수 없습니다.");

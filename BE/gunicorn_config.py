@@ -17,7 +17,7 @@ bind = '127.0.0.1:8000'
 # ============================================================
 # AWS 2 CPU 환경에 최적화
 # 공식 권장: workers = (2 × CPU_cores) + 1 = (2 × 2) + 1 = 5
-workers = 4  # 4개 worker (성능 우선)
+workers = 5  # 5개 worker (성능 우선)
 
 # Worker 클래스: sync (기본값, 가장 빠름)
 # SSE가 필요하면 gevent 고려, 일반 API는 sync가 최적
