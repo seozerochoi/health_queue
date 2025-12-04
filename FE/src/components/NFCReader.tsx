@@ -38,41 +38,77 @@ export function NFCReader({ onTagDetected, isEnabled }: NFCReaderProps) {
       console.log("🔍 NFC 스캔 시작");
 
       ndef.onreading = (event: any) => {
-        const { message } = event;
-        console.log("📖 NFC 메시지 수신:", message);
+        const { message, serialNumber } = event;
+        console.log("📖 ===== NFC 메시지 수신 =====");
+        console.log(`  - Serial Number: ${serialNumber}`);
+        console.log(`  - Message:`, message);
+        console.log(`  - Records Count: ${message.records.length}`);
 
         for (const record of message.records) {
-          console.log(`  - Record Type: ${record.recordType}`);
-          console.log(`  - Record Data (Raw):`, record.data);
+          console.log(`\n📄 Record 상세 정보:`);
+          console.log(`  - recordType: "${record.recordType}"`);
+          console.log(`  - mediaType: "${record.mediaType}"`);
+          console.log(`  - encoding: "${record.encoding}"`);
+          console.log(`  - lang: "${record.lang}"`);
+          console.log(`  - data (ArrayBuffer):`, record.data);
 
           if (record.recordType === "text") {
-            const textDecoder = new TextDecoder();
-            const equipmentId = textDecoder.decode(record.data);
-            const trimmedId = equipmentId.trim();
+            try {
+              // NDEF 텍스트 레코드는 첫 바이트가 status byte
+              const dataView = new DataView(record.data);
+              const statusByte = dataView.getUint8(0);
+              const textEncoding = (statusByte & 0x80) !== 0 ? 'utf-16' : 'utf-8';
+              const languageCodeLength = statusByte & 0x3f;
+              
+              // 언어 코드 건너뛰고 실제 텍스트만 추출
+              const textData = record.data.slice(1 + languageCodeLength);
+              const textDecoder = new TextDecoder(textEncoding);
+              const equipmentId = textDecoder.decode(textData);
+              const trimmedId = equipmentId.trim().toUpperCase();
 
-            // 🔍 [NFC 디버깅] 읽은 데이터 상세 로깅
-            console.log("✅ NFC 태그 감지");
-            console.log(`  - 원본: "${equipmentId}"`);
-            console.log(`  - Trim 후: "${trimmedId}"`);
-            console.log(`  - 길이: ${trimmedId.length}`);
-            console.log(
-              `  - Char codes: ${[...trimmedId]
-                .map((c) => c.charCodeAt(0))
-                .join(", ")}`
-            );
-            console.log(
-              `  - Hex: ${trimmedId
-                .split("")
-                .map((c) => c.charCodeAt(0).toString(16))
-                .join(" ")}`
-            );
+              // 🔍 [NFC 디버깅] 읽은 데이터 상세 로깅
+              console.log("\n✅ ===== NFC 텍스트 추출 성공 =====");
+              console.log(`  - 원본 (decode): "${equipmentId}"`);
+              console.log(`  - Trim + Upper: "${trimmedId}"`);
+              console.log(`  - 길이: ${trimmedId.length}`);
+              console.log(
+                `  - Char codes: ${[...trimmedId]
+                  .map((c) => c.charCodeAt(0))
+                  .join(", ")}`
+              );
+              console.log(
+                `  - Hex: ${[...trimmedId]
+                  .map((c) => c.charCodeAt(0).toString(16).padStart(2, '0'))
+                  .join(" ")}`
+              );
 
-            // 읽은 태그 값을 상태에 저장
-            setLastScannedTag(trimmedId);
+              // 읽은 태그 값을 상태에 저장
+              setLastScannedTag(trimmedId);
 
-            // 태그 감지 후 스캔 중단 (중복 방지)
-            setIsScanning(false);
-            onTagDetected(trimmedId);
+              // 태그 감지 후 스캔 중단 (중복 방지)
+              setIsScanning(false);
+              
+              console.log(`\n🚀 onTagDetected 호출: "${trimmedId}"`);
+              onTagDetected(trimmedId);
+            } catch (decodeError) {
+              console.error("❌ 텍스트 디코딩 실패:", decodeError);
+              console.log("  - 원본 record.data:", record.data);
+              
+              // 폴백: 간단하게 디코딩 시도
+              try {
+                const simpleDecoder = new TextDecoder();
+                const fallbackText = simpleDecoder.decode(record.data).trim().toUpperCase();
+                console.log(`  - Fallback 텍스트: "${fallbackText}"`);
+                
+                if (fallbackText && fallbackText.length > 0) {
+                  setLastScannedTag(fallbackText);
+                  setIsScanning(false);
+                  onTagDetected(fallbackText);
+                }
+              } catch (fallbackError) {
+                console.error("❌ Fallback 디코딩도 실패:", fallbackError);
+              }
+            }
 
             // 잠시 후 다시 스캔 활성화
             setTimeout(() => {
