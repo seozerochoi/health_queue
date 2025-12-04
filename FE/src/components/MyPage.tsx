@@ -229,6 +229,13 @@ export function MyPage({
         setServerImageUrl(rec.image_url || null);
         if (rec.id != null && rec.created_at)
           setRecordMeta({ id: rec.id, created_at: rec.created_at });
+
+        // Update latestRecord immediately
+        setLatestRecord({
+          image_url: rec.image_url,
+          parsed: serverParsed || (serverLines.length ? parseFromLines(serverLines) : {}),
+          created_at: rec.created_at,
+        });
       }
     } catch (e) {
       console.error(e);
@@ -258,15 +265,23 @@ export function MyPage({
       const serverParsed = data.parsed || null;
       const serverLinesRaw: any[] = data.raw_lines || [];
       const serverLines: string[] = serverLinesRaw.map((l: any) =>
-        typeof l === "string"
-          ? l
-          : l && typeof l.text === "string"
-          ? l.text
-          : ""
-      );
-      const rec = data.record || null;
       setParsedResult(
         serverParsed || (serverLines.length ? parseFromLines(serverLines) : {})
+      );
+      setRawLines(serverLines);
+      if (rec) {
+        setServerImageUrl(rec.image_url || null);
+        if (rec.id != null && rec.created_at)
+          setRecordMeta({ id: rec.id, created_at: rec.created_at });
+
+        // Update latestRecord immediately
+        setLatestRecord({
+          image_url: rec.image_url,
+          parsed:
+            serverParsed || (serverLines.length ? parseFromLines(serverLines) : {}),
+          created_at: rec.created_at,
+        });
+      } serverParsed || (serverLines.length ? parseFromLines(serverLines) : {})
       );
       setRawLines(serverLines);
       if (rec) {
