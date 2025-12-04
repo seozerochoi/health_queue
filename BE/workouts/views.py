@@ -145,16 +145,54 @@ class StartSessionView(APIView):
         equipment_id = request.data.get('equipment_id')
         user = request.user
 
+        # 🔍 [NFC 디버깅] 수신한 데이터 상세 로깅
+        logger.info(f"🔍 [StartSessionView.post] NFC/Equipment 요청")
+        logger.info(f"  - nfc_tag_id: '{nfc_tag_id}' (type: {type(nfc_tag_id).__name__})")
+        logger.info(f"  - equipment_id: '{equipment_id}' (type: {type(equipment_id).__name__})")
+        logger.info(f"  - user: {user.username} (ID: {user.id})")
+        
+        # NFC 데이터가 있으면 Hex 값으로도 로깅 (숨겨진 문자 감지)
+        if nfc_tag_id:
+            try:
+                hex_value = nfc_tag_id.encode('utf-8').hex()
+                logger.info(f"  - nfc_tag_id hex: {hex_value}")
+                logger.info(f"  - nfc_tag_id length: {len(nfc_tag_id)}")
+            except Exception as e:
+                logger.warning(f"  - nfc_tag_id hex 변환 실패: {e}")
+
         if not nfc_tag_id and not equipment_id:
             return Response({'error': 'nfc_tag_id 또는 equipment_id 중 하나가 필요합니다.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # 🔍 [NFC 디버깅] DB에 있는 모든 NFC 태그 조회
+        try:
+            if nfc_tag_id:
+                all_nfc_tags = list(Equipment.objects.values_list('nfc_tag_id', flat=True).distinct())
+                logger.info(f"📋 [StartSessionView] DB의 모든 nfc_tag_id 목록: {all_nfc_tags}")
+                
+                # 부분 매칭 확인
+                matching_tags = [tag for tag in all_nfc_tags if tag and nfc_tag_id in tag]
+                if matching_tags:
+                    logger.info(f"  ✓ 부분 매칭 발견: {matching_tags}")
+                else:
+                    logger.warning(f"  ✗ 부분 매칭 없음")
+        except Exception as e:
+            logger.error(f"🚨 DB 조회 중 에러: {e}")
+
         try:
             if equipment_id:
+                logger.info(f"🔍 equipment_id로 조회 시도: {equipment_id}")
                 equipment = Equipment.objects.get(id=equipment_id)
             else:
+                logger.info(f"🔍 nfc_tag_id로 조회 시도: '{nfc_tag_id}'")
                 equipment = Equipment.objects.get(nfc_tag_id=nfc_tag_id)
-        except Equipment.DoesNotExist:
+            
+            logger.info(f"✅ 기구 조회 성공: ID={equipment.id}, Name={equipment.name}, NFC={equipment.nfc_tag_id}")
+        except Equipment.DoesNotExist as e:
+            logger.error(f"❌ 기구 조회 실패 (DoesNotExist): nfc_tag_id='{nfc_tag_id}', equipment_id='{equipment_id}'")
             return Response({'error': '해당 기구를 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"🚨 기구 조회 중 예상 외 에러: {e}", exc_info=True)
+            return Response({'error': f'기구 조회 중 오류: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         with transaction.atomic():
             equipment = Equipment.objects.select_for_update().get(pk=equipment.pk)

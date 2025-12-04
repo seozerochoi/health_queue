@@ -13,6 +13,7 @@ import { GymSearch } from "./components/GymSearch";
 import { EquipmentList } from "./components/EquipmentList";
 import { AIRoutineRecommendation } from "./components/AIRoutineRecommendation";
 import { AdminDashboard } from "./components/AdminDashboard";
+import { NFCReader } from "./components/NFCReader";
 import { WorkoutTimer } from "./components/WorkoutTimer";
 import { SatisfactionSurvey } from "./components/SatisfactionSurvey";
 import { ReservationStatus } from "./components/ReservationStatus";
@@ -105,7 +106,9 @@ export default function App() {
   const [userName, setUserName] = useState<string>("");
   const [userGym, setUserGym] = useState<string>("");
   const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [reservationTab, setReservationTab] = useState<"normal" | "ai">("normal");
+  const [reservationTab, setReservationTab] = useState<"normal" | "ai">(
+    "normal"
+  );
   const [notifications, setNotifications] = useState<ReservationNotification[]>(
     []
   );
@@ -171,7 +174,10 @@ export default function App() {
     setCurrentView(view);
   };
 
-  const handleSignUpStep1Complete = async (userId: string, password: string) => {
+  const handleSignUpStep1Complete = async (
+    userId: string,
+    password: string
+  ) => {
     setTempUserId(userId);
     setTempPassword(password);
 
@@ -608,12 +614,18 @@ export default function App() {
   // NFC 태그 감지 시 운동 시작
   const handleNFCTagDetected = async (equipmentId: string | number) => {
     const nfcTagId = String(equipmentId);
-    console.log("🏷️ NFC 태그로 운동 시작:", nfcTagId);
-    
+
+    // 🔍 [NFC 디버깅] 수신한 데이터 상세 로깅
+    console.log("🏷️ NFC 태그로 운동 시작");
+    console.log(`  - 원본 값: "${equipmentId}"`);
+    console.log(`  - String 변환: "${nfcTagId}"`);
+    console.log(`  - 길이: ${nfcTagId.length}`);
+    console.log(
+      `  - Char codes: ${[...nfcTagId].map((c) => c.charCodeAt(0)).join(", ")}`
+    );
+
     // NFC 태그 값을 상태에 저장하여 화면에 표시
     setNfcTagValue(nfcTagId);
-
-    // NFC 태그 ID는 문자열로 전송 (예: "NFC001")
 
     try {
       const token = localStorage.getItem("access_token");
@@ -623,31 +635,52 @@ export default function App() {
       }
 
       const apiBase = getApiBase();
-      console.log(`📡 API 호출: ${apiBase}/api/workouts/start/`);
-      console.log(`📤 전송 데이터: { nfc_tag_id: "${nfcTagId}" }`);
-      
+
+      // 🔍 [NFC 디버깅] API 호출 전 상세 정보 로깅
+      const requestPayload = { nfc_tag_id: nfcTagId };
+      console.log(`📡 API 호출: POST ${apiBase}/api/workouts/start/`);
+      console.log(`📤 전송 데이터:`, JSON.stringify(requestPayload, null, 2));
+      console.log(`🔐 Token: ${token.substring(0, 20)}...`);
+
       const response = await fetch(`${apiBase}/api/workouts/start/`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          nfc_tag_id: nfcTagId,  // equipment_id 대신 nfc_tag_id 사용
-        }),
+        body: JSON.stringify(requestPayload),
       });
 
-      console.log(`📥 API 응답 상태: ${response.status}`);
+      // 🔍 [NFC 디버깅] API 응답 로깅
+      console.log(
+        `📥 API 응답 상태: ${response.status} ${response.statusText}`
+      );
+      console.log(`📥 Content-Type: ${response.headers.get("content-type")}`);
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("NFC 운동 시작 실패:", response.status, errorText);
-        alert(`❌ NFC 태그: ${nfcTagId}\n\n운동 시작에 실패했습니다.\n\n응답 코드: ${response.status}\n에러: ${errorText}\n\n기구가 사용 가능한지 확인해주세요.`);
+        console.error(`❌ NFC 운동 시작 실패`);
+        console.error(`  - Status: ${response.status}`);
+        console.error(`  - Error Body: ${errorText}`);
+
+        // 응답을 JSON으로 파싱 시도
+        let errorDetail = errorText;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorDetail = errorJson.error || errorText;
+        } catch (e) {
+          // JSON 파싱 실패 시 원문 사용
+        }
+
+        alert(
+          `❌ NFC 태그: ${nfcTagId}\n\n운동 시작에 실패했습니다.\n\n응답 코드: ${response.status}\n에러: ${errorDetail}\n\n기구가 사용 가능한지 확인해주세요.`
+        );
         return;
       }
 
       const data = await response.json();
-      console.log("✅ NFC 운동 시작 성공:", data);
+      console.log("✅ NFC 운동 시작 성공");
+      console.log(`  - Response:`, data);
       alert(`✅ NFC 태그 "${nfcTagId}" 인식 성공!\n운동을 시작합니다.`);
 
       // 선택된 장비 설정 - NFC 태그 ID로 기구 찾기
@@ -926,7 +959,7 @@ export default function App() {
       setReservations((prev) => [...prev, serverReservation]);
       setReservationTab("normal"); // 일반 탭으로 전환
       setCurrentView("reservation-status");
-      
+
       // 줄서기 성공 알림 표시
       addNotification({
         reservationId: `queue-success-${Date.now()}`,
@@ -935,7 +968,7 @@ export default function App() {
         secondsLeft: 3,
         type: "queue-success",
       });
-      
+
       // 서버와 동기화하여 취소/상태가 정확하도록 새로 고침
       fetchReservations();
     } catch (error) {
@@ -1203,7 +1236,14 @@ export default function App() {
         const aiReservations = prev.filter((r) => r.isAiRecommended === true);
         // 서버에서 가져온 예약과 AI 추천 예약 병합
         const merged = [...mapped, ...aiReservations];
-        console.log("📋 [fetchReservations] 서버 예약:", mapped.length, "AI 예약:", aiReservations.length, "병합:", merged.length);
+        console.log(
+          "📋 [fetchReservations] 서버 예약:",
+          mapped.length,
+          "AI 예약:",
+          aiReservations.length,
+          "병합:",
+          merged.length
+        );
         return merged;
       });
       return mapped;
@@ -1273,7 +1313,7 @@ export default function App() {
       currentUser: eq.current_user ?? undefined,
       timeRemaining: eq.time_remaining ?? undefined,
       operational_state: eq.operational_state || "NORMAL",
-      nfc_tag_id: eq.nfc_tag_id ?? undefined,  // NFC 태그 ID 추가
+      nfc_tag_id: eq.nfc_tag_id ?? undefined, // NFC 태그 ID 추가
     };
   };
 
@@ -1837,7 +1877,10 @@ export default function App() {
 
   // NFC 스캔 활성화/비활성화 관리
   useEffect(() => {
-    if (currentView === "equipment-list" || currentView === "reservation-status") {
+    if (
+      currentView === "equipment-list" ||
+      currentView === "reservation-status"
+    ) {
       setNfcEnabled(true);
       console.log("✅ NFC 스캔 활성화 (현재 뷰:", currentView, ")");
     } else {
@@ -2004,16 +2047,20 @@ export default function App() {
 
       case "equipment-list":
         return selectedGym ? (
-          <EquipmentList
-            gymName={selectedGym.gym_name || ""}
-            onBack={navigateBack}
-            onEquipmentSelect={handleEquipmentSelect}
-            equipment={equipmentList}
-            loading={equipmentLoading}
-            error={equipmentError}
-            nfcEnabled={nfcEnabled}
-            onNFCTagDetected={handleNFCTagDetected}
-          />
+          <>
+            <NFCReader
+              onTagDetected={handleNFCTagDetected}
+              isEnabled={nfcEnabled}
+            />
+            <EquipmentList
+              gymName={selectedGym.gym_name || ""}
+              onBack={navigateBack}
+              onEquipmentSelect={handleEquipmentSelect}
+              equipment={equipmentList}
+              loading={equipmentLoading}
+              error={equipmentError}
+            />
+          </>
         ) : null;
 
       case "ai-recommendation":
@@ -2057,19 +2104,23 @@ export default function App() {
 
       case "reservation-status":
         return (
-          <ReservationStatus
-            onBack={navigateBack}
-            gymName={selectedGym?.gym_name || ""}
-            reservations={reservations}
-            onCancelReservation={handleCancelReservation}
-            onJoinQueue={handleAiQueueJoin}
-            defaultTab={reservationTab}
-            equipmentList={equipmentList}
-            onMarkAiUsed={handleAiMarkUsed}
-            onStartImmediate={handleAiStartImmediate}
-            nfcEnabled={nfcEnabled}
-            onNFCTagDetected={handleNFCTagDetected}
-          />
+          <>
+            <NFCReader
+              onTagDetected={handleNFCTagDetected}
+              isEnabled={nfcEnabled}
+            />
+            <ReservationStatus
+              onBack={navigateBack}
+              gymName={selectedGym?.gym_name || ""}
+              reservations={reservations}
+              onCancelReservation={handleCancelReservation}
+              onJoinQueue={handleAiQueueJoin}
+              defaultTab={reservationTab}
+              equipmentList={equipmentList}
+              onMarkAiUsed={handleAiMarkUsed}
+              onStartImmediate={handleAiStartImmediate}
+            />
+          </>
         );
 
       case "my-page":
@@ -2119,7 +2170,9 @@ export default function App() {
                 <div className="flex items-start gap-3">
                   <span className="text-2xl">🎉</span>
                   <div className="flex-1">
-                    <div className="font-semibold text-base">기구 예약이 완료되었습니다!</div>
+                    <div className="font-semibold text-base">
+                      기구 예약이 완료되었습니다!
+                    </div>
                     <div className="text-sm text-gray-100 mt-1">
                       예약 내역은 기구 줄서기 조회 창을 이용해주세요
                     </div>
@@ -2128,169 +2181,174 @@ export default function App() {
               </div>
             );
           }
-          
+
           // 기존 NOTIFIED 예약 알림
           return (
-          <div
-            key={n.reservationId}
-            className="bg-blue-900/90 text-white rounded-lg p-3 shadow-lg w-80"
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <div className="font-semibold">
-                  {n.equipmentName || "기구"} - 지금 차례입니다
+            <div
+              key={n.reservationId}
+              className="bg-blue-900/90 text-white rounded-lg p-3 shadow-lg w-80"
+            >
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="font-semibold">
+                    {n.equipmentName || "기구"} - 지금 차례입니다
+                  </div>
+                  <div className="text-sm text-gray-200">
+                    15초 내에 태깅하세요
+                  </div>
                 </div>
-                <div className="text-sm text-gray-200">
-                  15초 내에 태깅하세요
-                </div>
+                <div className="text-2xl font-mono ml-2">{n.secondsLeft}s</div>
               </div>
-              <div className="text-2xl font-mono ml-2">{n.secondsLeft}s</div>
-            </div>
-            <div className="mt-3 flex gap-2">
-              <button
-                className="flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded font-semibold"
-                onClick={async () => {
-                  // ✅ 개선: 단순 화면 전환 대신 서버에 세션 시작 요청 후 성공 시 상태 업데이트
-                  try {
-                    const token = localStorage.getItem("access_token");
-                    if (!token) {
-                      alert("로그인이 필요합니다.");
-                      return;
-                    }
-                    const reservation = reservations.find(
-                      (r) => r.id === n.reservationId
-                    );
-                    if (!reservation) {
-                      console.warn(
-                        "해당 알림에 대응하는 예약을 찾을 수 없습니다."
-                      );
-                      return;
-                    }
-                    const equipmentIdRaw =
-                      reservation.equipment_id || reservation.equipmentId;
-                    if (!equipmentIdRaw) {
-                      console.warn("예약 객체에 equipment_id가 없습니다.");
-                      return;
-                    }
-                    const equipmentId = parseInt(String(equipmentIdRaw), 10);
-                    const apiBase = getApiBase();
-
-                    const res = await fetch(`${apiBase}/api/workouts/start/`, {
-                      method: "POST",
-                      headers: {
-                        Authorization: `Bearer ${token}`,
-                        "Content-Type": "application/json",
-                      },
-                      body: JSON.stringify({ equipment_id: equipmentId }),
-                    });
-
-                    if (!res.ok) {
-                      const errorText = await res.text().catch(() => "");
-                      console.error(
-                        "세션 시작 API 실패:",
-                        res.status,
-                        errorText
-                      );
-                      alert(
-                        "세션 시작에 실패했습니다. 다시 시도하거나 관리자에게 문의하세요."
-                      );
-                      return;
-                    }
-
-                    const sessionData = await res.json();
-                    console.log("[ToastStart] 세션 시작 성공:", sessionData);
-
-                    // 선택된 기구 설정 (장비 리스트에서 찾기)
-                    const equipment = equipmentList.find(
-                      (eq) => String(eq.id) === String(equipmentId)
-                    );
-                    if (equipment) {
-                      setSelectedEquipment(equipment);
-                    }
-                    setWorkoutStartTime(new Date());
-                    setCurrentView("workout-timer");
-
-                    // 알림 제거
-                    setNotifications((prev) =>
-                      prev.filter((x) => x.reservationId !== n.reservationId)
-                    );
-
-                    // 예약 목록/장비 상태 새로고침 (큐 반영)
+              <div className="mt-3 flex gap-2">
+                <button
+                  className="flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded font-semibold"
+                  onClick={async () => {
+                    // ✅ 개선: 단순 화면 전환 대신 서버에 세션 시작 요청 후 성공 시 상태 업데이트
                     try {
-                      fetchReservations();
-                      fetchEquipment();
-                    } catch (e) {
-                      console.warn("세션 시작 후 데이터 새로고침 실패", e);
-                    }
-                  } catch (err) {
-                    console.error("알림 시작 처리 중 오류", err);
-                    alert("세션 시작 처리 중 오류가 발생했습니다.");
-                  }
-                }}
-              >
-                시작
-              </button>
-              <button
-                className="flex-1 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded font-semibold"
-                onClick={async () => {
-                  // 예약 거절 (leave-queue API 사용)
-                  try {
-                    const token = localStorage.getItem("access_token");
-                    if (!token) {
-                      alert("로그인이 필요합니다.");
-                      return;
-                    }
-
-                    const apiBase = getApiBase();
-
-                    const response = await fetch(
-                      `${apiBase}/api/workouts/leave-queue/`,
-                      {
-                        method: "POST",
-                        headers: {
-                          Authorization: `Bearer ${token}`,
-                          "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({
-                          reservation_id: n.reservationId,
-                        }),
+                      const token = localStorage.getItem("access_token");
+                      if (!token) {
+                        alert("로그인이 필요합니다.");
+                        return;
                       }
-                    );
+                      const reservation = reservations.find(
+                        (r) => r.id === n.reservationId
+                      );
+                      if (!reservation) {
+                        console.warn(
+                          "해당 알림에 대응하는 예약을 찾을 수 없습니다."
+                        );
+                        return;
+                      }
+                      const equipmentIdRaw =
+                        reservation.equipment_id || reservation.equipmentId;
+                      if (!equipmentIdRaw) {
+                        console.warn("예약 객체에 equipment_id가 없습니다.");
+                        return;
+                      }
+                      const equipmentId = parseInt(String(equipmentIdRaw), 10);
+                      const apiBase = getApiBase();
 
-                    if (response.ok || response.status === 404) {
-                      console.log("✅ 예약 거절 (탈퇴) 성공");
+                      const res = await fetch(
+                        `${apiBase}/api/workouts/start/`,
+                        {
+                          method: "POST",
+                          headers: {
+                            Authorization: `Bearer ${token}`,
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify({ equipment_id: equipmentId }),
+                        }
+                      );
+
+                      if (!res.ok) {
+                        const errorText = await res.text().catch(() => "");
+                        console.error(
+                          "세션 시작 API 실패:",
+                          res.status,
+                          errorText
+                        );
+                        alert(
+                          "세션 시작에 실패했습니다. 다시 시도하거나 관리자에게 문의하세요."
+                        );
+                        return;
+                      }
+
+                      const sessionData = await res.json();
+                      console.log("[ToastStart] 세션 시작 성공:", sessionData);
+
+                      // 선택된 기구 설정 (장비 리스트에서 찾기)
+                      const equipment = equipmentList.find(
+                        (eq) => String(eq.id) === String(equipmentId)
+                      );
+                      if (equipment) {
+                        setSelectedEquipment(equipment);
+                      }
+                      setWorkoutStartTime(new Date());
+                      setCurrentView("workout-timer");
 
                       // 알림 제거
                       setNotifications((prev) =>
                         prev.filter((x) => x.reservationId !== n.reservationId)
                       );
 
-                      // 예약 목록/장비 상태 갱신
+                      // 예약 목록/장비 상태 새로고침 (큐 반영)
                       try {
                         fetchReservations();
                         fetchEquipment();
                       } catch (e) {
-                        console.warn("거절 후 데이터 새로고침 실패", e);
+                        console.warn("세션 시작 후 데이터 새로고침 실패", e);
                       }
-                    } else {
-                      const errorText = await response.text().catch(() => "");
-                      console.error(
-                        "예약 거절 실패:",
-                        response.status,
-                        errorText
-                      );
-                      alert("예약 거절에 실패했습니다.");
+                    } catch (err) {
+                      console.error("알림 시작 처리 중 오류", err);
+                      alert("세션 시작 처리 중 오류가 발생했습니다.");
                     }
-                  } catch (error) {
-                    console.error("예약 거절 중 오류:", error);
-                    alert("예약 거절 중 오류가 발생했습니다.");
-                  }
-                }}
-              >
-                거절
-              </button>
+                  }}
+                >
+                  시작
+                </button>
+                <button
+                  className="flex-1 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded font-semibold"
+                  onClick={async () => {
+                    // 예약 거절 (leave-queue API 사용)
+                    try {
+                      const token = localStorage.getItem("access_token");
+                      if (!token) {
+                        alert("로그인이 필요합니다.");
+                        return;
+                      }
+
+                      const apiBase = getApiBase();
+
+                      const response = await fetch(
+                        `${apiBase}/api/workouts/leave-queue/`,
+                        {
+                          method: "POST",
+                          headers: {
+                            Authorization: `Bearer ${token}`,
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify({
+                            reservation_id: n.reservationId,
+                          }),
+                        }
+                      );
+
+                      if (response.ok || response.status === 404) {
+                        console.log("✅ 예약 거절 (탈퇴) 성공");
+
+                        // 알림 제거
+                        setNotifications((prev) =>
+                          prev.filter(
+                            (x) => x.reservationId !== n.reservationId
+                          )
+                        );
+
+                        // 예약 목록/장비 상태 갱신
+                        try {
+                          fetchReservations();
+                          fetchEquipment();
+                        } catch (e) {
+                          console.warn("거절 후 데이터 새로고침 실패", e);
+                        }
+                      } else {
+                        const errorText = await response.text().catch(() => "");
+                        console.error(
+                          "예약 거절 실패:",
+                          response.status,
+                          errorText
+                        );
+                        alert("예약 거절에 실패했습니다.");
+                      }
+                    } catch (error) {
+                      console.error("예약 거절 중 오류:", error);
+                      alert("예약 거절 중 오류가 발생했습니다.");
+                    }
+                  }}
+                >
+                  거절
+                </button>
+              </div>
             </div>
-          </div>
           );
         })}
       </div>
