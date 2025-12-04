@@ -183,8 +183,14 @@ class StartSessionView(APIView):
                 logger.info(f"🔍 equipment_id로 조회 시도: {equipment_id}")
                 equipment = Equipment.objects.get(id=equipment_id)
             else:
-                logger.info(f"🔍 nfc_tag_id로 조회 시도: '{nfc_tag_id}'")
-                equipment = Equipment.objects.get(nfc_tag_id=nfc_tag_id)
+                # NFC 태그 ID 정규화: 앞뒤 공백 제거, 대문자로 통일
+                normalized_nfc = nfc_tag_id.strip().upper()
+                logger.info(f"🔍 nfc_tag_id로 조회 시도")
+                logger.info(f"  - 원본: '{nfc_tag_id}'")
+                logger.info(f"  - 정규화: '{normalized_nfc}'")
+                
+                # 대소문자 구분 없이 검색 (iexact)
+                equipment = Equipment.objects.get(nfc_tag_id__iexact=normalized_nfc)
             
             logger.info(f"✅ 기구 조회 성공: ID={equipment.id}, Name={equipment.name}, NFC={equipment.nfc_tag_id}")
         except Equipment.DoesNotExist as e:
