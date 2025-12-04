@@ -50,20 +50,46 @@ export function NFCReader({ onTagDetected, isEnabled }: NFCReaderProps) {
           console.log(`  - mediaType: "${record.mediaType}"`);
           console.log(`  - encoding: "${record.encoding}"`);
           console.log(`  - lang: "${record.lang}"`);
-          console.log(`  - data (ArrayBuffer):`, record.data);
+          console.log(`  - data 타입:`, typeof record.data);
+          console.log(`  - data:`, record.data);
 
           if (record.recordType === "text") {
             try {
-              // NDEF 텍스트 레코드는 첫 바이트가 status byte
-              const dataView = new DataView(record.data);
-              const statusByte = dataView.getUint8(0);
-              const textEncoding = (statusByte & 0x80) !== 0 ? 'utf-16' : 'utf-8';
-              const languageCodeLength = statusByte & 0x3f;
-              
-              // 언어 코드 건너뛰고 실제 텍스트만 추출
-              const textData = record.data.slice(1 + languageCodeLength);
-              const textDecoder = new TextDecoder(textEncoding);
-              const equipmentId = textDecoder.decode(textData);
+              let equipmentId = "";
+
+              // Web NFC API의 텍스트 레코드는 이미 파싱된 문자열일 수 있음
+              if (typeof record.data === "string") {
+                equipmentId = record.data;
+                console.log("  ✓ record.data는 이미 문자열");
+              } else if (record.data instanceof ArrayBuffer) {
+                // ArrayBuffer인 경우 직접 파싱
+                console.log("  ✓ record.data는 ArrayBuffer, 파싱 시작");
+                const dataView = new DataView(record.data);
+                const statusByte = dataView.getUint8(0);
+                const languageCodeLength = statusByte & 0x3f;
+
+                const textData = record.data.slice(1 + languageCodeLength);
+                const textDecoder = new TextDecoder("utf-8");
+                equipmentId = textDecoder.decode(textData);
+              } else {
+                // 알 수 없는 형식 - 문자열로 변환 시도
+                console.log("  ⚠ 알 수 없는 data 형식, toString() 시도");
+                equipmentId = String(record.data);
+              }
+
+              // "TYPE: TEXT\nTEXT: NFC001" 같은 메타데이터 형식 처리
+              if (
+                equipmentId.includes("TEXT:") ||
+                equipmentId.includes("TYPE:")
+              ) {
+                console.log("  ⚠ 메타데이터 형식 감지, TEXT: 추출 시도");
+                const match = equipmentId.match(/TEXT:\s*([^\s\n]+)/i);
+                if (match && match[1]) {
+                  equipmentId = match[1];
+                  console.log(`  ✓ 추출된 값: "${equipmentId}"`);
+                }
+              }
+
               const trimmedId = equipmentId.trim().toUpperCase();
 
               // 🔍 [NFC 디버깅] 읽은 데이터 상세 로깅
@@ -78,36 +104,31 @@ export function NFCReader({ onTagDetected, isEnabled }: NFCReaderProps) {
               );
               console.log(
                 `  - Hex: ${[...trimmedId]
-                  .map((c) => c.charCodeAt(0).toString(16).padStart(2, '0'))
+                  .map((c) => c.charCodeAt(0).toString(16).padStart(2, "0"))
                   .join(" ")}`
               );
+
+              // NFC 형식 검증 (NFC001 ~ NFC999)
+              if (!/^NFC\d{3}$/i.test(trimmedId)) {
+                console.error(`  ❌ 잘못된 NFC 형식: "${trimmedId}"`);
+                alert(
+                  `잘못된 NFC 태그 형식입니다: ${trimmedId}\n\n올바른 형식: NFC001 ~ NFC999`
+                );
+                return;
+              }
 
               // 읽은 태그 값을 상태에 저장
               setLastScannedTag(trimmedId);
 
               // 태그 감지 후 스캔 중단 (중복 방지)
               setIsScanning(false);
-              
+
               console.log(`\n🚀 onTagDetected 호출: "${trimmedId}"`);
               onTagDetected(trimmedId);
             } catch (decodeError) {
               console.error("❌ 텍스트 디코딩 실패:", decodeError);
-              console.log("  - 원본 record.data:", record.data);
-              
-              // 폴백: 간단하게 디코딩 시도
-              try {
-                const simpleDecoder = new TextDecoder();
-                const fallbackText = simpleDecoder.decode(record.data).trim().toUpperCase();
-                console.log(`  - Fallback 텍스트: "${fallbackText}"`);
-                
-                if (fallbackText && fallbackText.length > 0) {
-                  setLastScannedTag(fallbackText);
-                  setIsScanning(false);
-                  onTagDetected(fallbackText);
-                }
-              } catch (fallbackError) {
-                console.error("❌ Fallback 디코딩도 실패:", fallbackError);
-              }
+              console.log("  - 원본 record:", record);
+              alert(`NFC 태그 읽기 실패: ${decodeError}`);
             }
 
             // 잠시 후 다시 스캔 활성화
@@ -165,7 +186,11 @@ export function NFCReader({ onTagDetected, isEnabled }: NFCReaderProps) {
 
   return (
     <div className="flex items-center justify-center gap-2 p-3 bg-blue-500/20 border border-blue-500/50 rounded-lg mb-4">
-      <Wifi className={`w-5 h-5 text-blue-400 flex-shrink-0 ${isScanning ? "animate-pulse" : ""}`} />
+      <Wifi
+        className={`w-5 h-5 text-blue-400 flex-shrink-0 ${
+          isScanning ? "animate-pulse" : ""
+        }`}
+      />
       <p className="text-blue-400 text-sm font-medium">
         {isScanning ? "NFC 스캔 중..." : "NFC 연결"}
       </p>
