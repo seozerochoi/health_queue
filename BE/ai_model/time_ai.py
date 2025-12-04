@@ -393,11 +393,13 @@ class AIEngine:
 
         # 3. [핵심 추가 4] 메모리에 저장 (Experience Replay)
         features = self._extract_features(user, equipment)
-        self.memory.append((features, target_residual))
+        recent_sample = (features, target_residual)
+        self.memory.append(recent_sample)
 
         # 4. [핵심 추가 5] 배치 학습 (Batch Training)
         # 현재 데이터 하나만 학습하는 것이 아니라, 과거의 기억을 꺼내 함께 복습
-        loss = self._replay_train(epochs=1) # 사용자 응답 속도를 위해 Epoch은 1회만 수행
+        # [개선] 최신 피드백을 즉시 반영하기 위해 Epoch 수를 늘리고, recent_sample을 명시적으로 전달
+        loss = self._replay_train(epochs=5, recent_sample=recent_sample)
 
         # 5. [핵심 추가 6] 모델 자동 저장 (Auto-Save)
         # 학습된 뇌(가중치)를 파일로 저장하여 서버 재시작 시에도 유지되도록 함
@@ -408,19 +410,34 @@ class AIEngine:
 
         return target_time, loss
 
-    def _replay_train(self, epochs=1):
+    def _replay_train(self, epochs=1, recent_sample=None):
         """
         [내부 함수] 메모리에서 배치를 꺼내 학습하는 함수
         """
-        if len(self.memory) < self.batch_size:
+        # [개선] 최신 샘플이 있다면 메모리가 부족해도 학습 진행 (Cold Start 문제 해결)
+        if len(self.memory) < self.batch_size and recent_sample is None:
             return 0.0 # 데이터가 너무 적으면 학습 스킵
 
         self.model.train()
         total_loss = 0
 
         for _ in range(epochs):
-            # 메모리에서 랜덤하게 batch_size만큼 샘플링 (과거 데이터 복습)
-            batch = random.sample(self.memory, self.batch_size)
+            # [개선] 최신 피드백 Oversampling (배치의 25% 할당)
+            if recent_sample:
+                n_recent = 8 # 32개 중 8개 (25%)
+                batch = [recent_sample] * n_recent
+                
+                n_needed = self.batch_size - n_recent
+                if len(self.memory) >= n_needed:
+                    batch += random.sample(self.memory, n_needed)
+                else:
+                    # 메모리가 부족하면 있는 것 다 넣고 나머지는 최신 샘플로 채움
+                    batch += list(self.memory)
+                    while len(batch) < self.batch_size:
+                        batch.append(recent_sample)
+            else:
+                # 메모리에서 랜덤하게 batch_size만큼 샘플링 (과거 데이터 복습)
+                batch = random.sample(self.memory, self.batch_size)
             
             # Tensor 변환
             batch_features = torch.stack([item[0] for item in batch])
