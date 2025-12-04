@@ -100,18 +100,18 @@ export function NFCReader({ onTagDetected, isEnabled }: NFCReaderProps) {
               ) {
                 console.log("  ⚠ 메타데이터 형식 감지, TEXT: 추출 시도");
                 console.log(`  - 추출 전 equipmentId: "${equipmentId}"`);
-                
+
                 const match = equipmentId.match(/TEXT:\s*([^\s\n]+)/i);
                 console.log(`  - 정규표현식 매칭 결과:`, match);
-                
+
                 // 디버깅 alert
                 alert(
                   `[메타데이터 추출 디버깅]\n\n` +
-                  `원본: "${equipmentId}"\n\n` +
-                  `매칭 결과: ${match ? 'SUCCESS' : 'FAIL'}\n` +
-                  `추출값: ${match && match[1] ? `"${match[1]}"` : 'NONE'}`
+                    `원본: "${equipmentId}"\n\n` +
+                    `매칭 결과: ${match ? "SUCCESS" : "FAIL"}\n` +
+                    `추출값: ${match && match[1] ? `"${match[1]}"` : "NONE"}`
                 );
-                
+
                 if (match && match[1]) {
                   equipmentId = match[1];
                   console.log(`  ✓ 추출 성공: "${equipmentId}"`);
@@ -121,7 +121,7 @@ export function NFCReader({ onTagDetected, isEnabled }: NFCReaderProps) {
               }
 
               const trimmedId = equipmentId.trim().toUpperCase();
-              
+
               // 추가 디버깅
               console.log(`  - trim 전 equipmentId: "${equipmentId}"`);
               console.log(`  - trim 후 trimmedId: "${trimmedId}"`);
