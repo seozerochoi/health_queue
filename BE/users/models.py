@@ -50,12 +50,12 @@ class UserProfile(models.Model):
     skeletal_muscle_mass_kg = models.FloatField(blank=True, null=True)
     body_fat_mass_kg = models.FloatField(blank=True, null=True)
 
-    # 부위별 근육 분석 (kg)
-    segment_right_arm_kg = models.FloatField(blank=True, null=True)
-    segment_left_arm_kg = models.FloatField(blank=True, null=True)
-    segment_trunk_kg = models.FloatField(blank=True, null=True)
-    segment_right_leg_kg = models.FloatField(blank=True, null=True)
-    segment_left_leg_kg = models.FloatField(blank=True, null=True)
+    # 부위별 근육 분석 (%) - 표준 체중 대비 백분율
+    segment_right_arm_percent = models.FloatField(blank=True, null=True)
+    segment_left_arm_percent = models.FloatField(blank=True, null=True)
+    segment_trunk_percent = models.FloatField(blank=True, null=True)
+    segment_right_leg_percent = models.FloatField(blank=True, null=True)
+    segment_left_leg_percent = models.FloatField(blank=True, null=True)
     
     EXPERIENCE_CHOICES = [
         ('BEGINNER', 'Beginner'),

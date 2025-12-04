@@ -81,11 +81,11 @@ class BaseAIView(APIView):
                 fat_mass=n(getattr(profile, 'body_fat_mass_kg', None)),
                 height=n(getattr(profile, 'height_cm', None)),
                 fat_rate=n(getattr(profile, 'body_fat_percentage', None)),
-                r_arm=n(getattr(profile, 'segment_right_arm_kg', None)),
-                l_arm=n(getattr(profile, 'segment_left_arm_kg', None)),
-                trunk=n(getattr(profile, 'segment_trunk_kg', None)),
-                r_leg=n(getattr(profile, 'segment_right_leg_kg', None)),
-                l_leg=n(getattr(profile, 'segment_left_leg_kg', None))
+                r_arm=n(getattr(profile, 'segment_right_arm_percent', None)),
+                l_arm=n(getattr(profile, 'segment_left_arm_percent', None)),
+                trunk=n(getattr(profile, 'segment_trunk_percent', None)),
+                r_leg=n(getattr(profile, 'segment_right_leg_percent', None)),
+                l_leg=n(getattr(profile, 'segment_left_leg_percent', None))
             )
 
             # gender: normalize a few common representations

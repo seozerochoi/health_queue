@@ -131,8 +131,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'gender', 'age', 'height_cm', 'weight_kg', 'experience_level',
             'exercise_goal', 'inbody_score', 'bmi', 'body_fat_percentage',
             'skeletal_muscle_mass_kg', 'body_fat_mass_kg',
-            'segment_right_arm_kg', 'segment_left_arm_kg', 'segment_trunk_kg',
-            'segment_right_leg_kg', 'segment_left_leg_kg',
+            'segment_right_arm_percent', 'segment_left_arm_percent', 'segment_trunk_percent',
+            'segment_right_leg_percent', 'segment_left_leg_percent',
         ]
 
 
