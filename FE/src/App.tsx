@@ -536,20 +536,19 @@ export default function App() {
           return;
         }
 
+        const apiBase = getApiBase();
+
         // 백엔드에 세션 시작 요청
-        const response = await fetch(
-          "https://43.201.88.27/api/workouts/start/",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              equipment_id: parseInt(equipment.id),
-            }),
-          }
-        );
+        const response = await fetch(`${apiBase}/api/workouts/start/`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            equipment_id: parseInt(equipment.id),
+          }),
+        });
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -561,6 +560,33 @@ export default function App() {
         const sessionData = await response.json();
         console.log("세션 시작 성공:", sessionData);
 
+        // [AI 시간 추천] 일반 시작에도 AI 추천 적용
+        let finalEquipment = { ...equipment };
+        try {
+          console.log("🤖 AI 시간 추천 요청 중...");
+          const aiResponse = await fetch(`${apiBase}/api/ai/time/`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              equipment_id: equipment.id,
+            }),
+          });
+
+          if (aiResponse.ok) {
+            const aiData = await aiResponse.json();
+            console.log("🤖 AI 추천 시간 수신:", aiData.recommended_time);
+            finalEquipment.allocatedTime = aiData.recommended_time;
+          } else {
+            console.warn("AI 시간 추천 응답 실패:", aiResponse.status);
+          }
+        } catch (aiError) {
+          console.warn("AI 시간 추천 요청 실패 (기본값 사용):", aiError);
+        }
+
+        setSelectedEquipment(finalEquipment);
         setWorkoutStartTime(new Date());
         setDirectWorkout(true);
         await sendImmediateHeartbeat(equipment.id);
