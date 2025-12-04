@@ -211,7 +211,7 @@ class InbodyAnalyzeView(APIView):
                         "   - 첫 번째 항목: 체중 (Weight)\n"
                         "   - 두 번째 항목: 골격근량 (Skeletal Muscle Mass)\n"
                         "   - 세 번째 항목: 체지방량 (Body Fat Mass)\n"
-                        "4. 세그멘탈 표 또는 표기(있으면): 우측/하단에 부위별 근육분석의 표준대비 %(Right/Left Arm, Trunk, Right/Left Leg)\n"
+                        "4. 세그멘탈 표 또는 표기(있으면): 우측/하단에 부위별 근육분석의 표준대비 %값 (Right/Left Arm, Trunk, Right/Left Leg)\n"
                         "5. 우측 하단: '비만평가' 또는 'Obesity Evaluation' 섹션\n"
                         "   - 체지방률 (Body Fat Percentage) - '%' 기호 포함\n"
                         "   - BMI (Body Mass Index) - 'BMI' 레이블 근처\n\n"
@@ -242,7 +242,7 @@ class InbodyAnalyzeView(APIView):
                         "   - body_fat_mass_kg: 3-80\n"
                         "   - body_fat_percentage: 5-65\n"
                         "   - bmi: 10-50\n"
-                        "   - segment_*_%: 각 부위별 표준대비 퍼센트 (0-200% 범위)\n\n"
+                        "   - segment_*_%: 0-200% (각 부위별 표준대비 %값)\n\n"
                     
                         "=== 출력 형식 ===\n"
                         "순수한 JSON 객체만 반환하세요. 설명이나 마크다운 없이 JSON만 출력하세요.\n"
@@ -310,11 +310,11 @@ class InbodyAnalyzeView(APIView):
                         "   - 예: 'BMI 27.3' → 27.3\n"
                         "   → bmi에 저장\n\n"
                     
-                        "10단계: 세그멘탈(부위별) 근육량 찾기 (가능하면)\n"
+                        "10단계: 세그멘탈(부위별) 근육량(%) 찾기 (가능하면)\n"
                         "   - 표기 예: 'Right Arm', 'Left Arm', 'Trunk', 'Right Leg', 'Left Leg'\n"
                         "   - 또는 한국어: '우측 팔', '좌측 팔', '몸통', '우측 다리', '좌측 다리'\n"
-                        "   - InBody 결과지에서 '표준체중 대비(%)' 또는 'Percentage of standard value' 값을 찾으세요.\n"
-                        "   - 각 부위: 보통 80-130% 범위입니다.\n"
+                        "   - InBody 결과지에서 '표준체중 대비 (%)' 또는 'Percentage of standard value' 값을 찾으세요.\n"
+                        "   - 각 부위: 보통 60-170% 범위입니다.\n"
                         "   → segment_right_arm_percent, segment_left_arm_percent, segment_trunk_percent,\n"
                         "      segment_right_leg_percent, segment_left_leg_percent에 저장\n\n"
                     
