@@ -219,11 +219,23 @@ class AIEngine:
         
         for _ in range(sample_size):
             # 랜덤 가상 유저 데이터 생성
+            # [수정] 실제 데이터(kg)와 유사한 스케일로 랜덤 값 생성
+            w = random.uniform(50, 100) # 체중
+            m = random.uniform(20, 40)  # 골격근량
+            
+            # 부위별 근육량 (kg) - 대략적인 비율 가정
+            # 팔: 근육량의 5~7%, 다리: 15~20%, 몸통: 45~55%
+            r_a = m * random.uniform(0.05, 0.08)
+            l_a = m * random.uniform(0.05, 0.08)
+            trunk = m * random.uniform(0.45, 0.55)
+            r_l = m * random.uniform(0.15, 0.20)
+            l_l = m * random.uniform(0.15, 0.20)
+
             d_inbody = InBodyData(
-                score=random.uniform(60, 90), weight=random.uniform(50, 100),
-                muscle_mass=random.uniform(20, 40), fat_mass=random.uniform(10, 30),
+                score=random.uniform(60, 90), weight=w,
+                muscle_mass=m, fat_mass=random.uniform(10, 30),
                 height=random.uniform(150, 190), fat_rate=random.uniform(10, 40),
-                r_arm=100, l_arm=100, trunk=100, r_leg=100, l_leg=100
+                r_arm=r_a, l_arm=l_a, trunk=trunk, r_leg=r_l, l_leg=l_l
             )
             d_user = User(0, "dummy", random.choice([0,1]), random.choice([0,1]), d_inbody)
             d_equip = Equipment(0, "dummy_eq", random.choice([0,1]), "General")
@@ -289,6 +301,13 @@ class AIEngine:
         # 현재 데이터 하나만 학습하는 것이 아니라, 과거의 기억을 꺼내 함께 복습
         loss = self._replay_train(epochs=1) # 사용자 응답 속도를 위해 Epoch은 1회만 수행
 
+        # 5. [핵심 추가 6] 모델 자동 저장 (Auto-Save)
+        # 학습된 뇌(가중치)를 파일로 저장하여 서버 재시작 시에도 유지되도록 함
+        try:
+            self.save_checkpoint("time_ai_checkpoint.pth")
+        except Exception as e:
+            print(f"⚠️ 모델 자동 저장 실패: {e}")
+
         return target_time, loss
 
     def _replay_train(self, epochs=1):
@@ -319,62 +338,3 @@ class AIEngine:
             total_loss += loss.item()
 
         return total_loss / epochs
-
-# ==============================================================================
-# 4. 시뮬레이션 실행 (Simulation Scenario)
-# 실제 서비스 환경에서의 동작 흐름을 시연합니다.
-# ==============================================================================
-
-def run_simulation():
-    # [Step 1] 시스템 초기화
-    ai_system = AIEngine()
-    ai_system.pretrain_with_formula() # 서버 시작 시 Cold Start 방지 학습 수행
-    
-    # [Step 2] 데이터 등록 (기구 및 사용자)
-    bench_press = Equipment(1, "벤치프레스", 0, "Chest") # 상체 운동
-    leg_press = Equipment(2, "레그프레스", 1, "Legs")    # 하체 운동
-    
-    # 사용자: 김헬스 (고숙련자, 근비대 목적, 표준 체형 가정)
-    my_inbody = InBodyData(85, 75, 35, 15, 175, 20, 100, 100, 100, 100, 100)
-    user_kim = User(101, "김헬스", 0, 1, my_inbody) 
-    
-    print("\n" + "="*50)
-    print(f"🏋️‍♂️ [입장] 회원: {user_kim.name} | 상태: {my_inbody.score}점 (목적: 근비대)")
-    print("="*50 + "\n")
-
-    # --- [Scenario 1] 첫 번째 태깅 및 추천 ---
-    print(f"📱 [Action] {user_kim.name}님이 '{bench_press.name}' 태깅")
-    
-    # AI 초기 추천 (선행 학습된 규칙 기반 값과 유사)
-    rec_time = ai_system.predict_time(user_kim, bench_press)
-    print(f"🤖 [AI 추천] 초기 분석 결과: {rec_time:.1f}분 할당")
-    print("   (Note: 초기에는 수학 공식 값과 유사합니다.)\n")
-    
-    # ... 운동 수행 ...
-    
-    # --- [Scenario 2] 운동 후 피드백 반영 ---
-    # 가정: 숙련자라서 추천 시간이 부족하다고 느낌 (평점 2점: 부족함)
-    feedback = 2 
-    print(f"📝 [Feedback] 사용자 반응: \"시간이 좀 부족합니다.\" (평점: 2점 -> 목표 시간 증가)")
-    
-    # 피드백을 통한 실시간 학습 수행 (기억 저장 및 배치 학습)
-    target_time, loss = ai_system.update_with_feedback(user_kim, bench_press, rec_time, feedback)
-    print(f"🧠 [Learning] 피드백 반영 및 배치 학습 완료 (Loss: {loss:.6f})")
-    print(f"   AI Insight: \"사용자의 선호 시간을 약 {target_time:.1f}분으로 조정하고 기억했습니다.\"\n")
-    
-    print("-" * 30)
-    print("   ... 며칠 후 재방문 (AI가 기억을 되살립니다) ...")
-    print("-" * 30 + "\n")
-
-    # --- [Scenario 3] 재방문 시 변화된 추천 확인 ---
-    print(f"📱 [Action] {user_kim.name}님이 다시 '{bench_press.name}' 태깅")
-    
-    new_rec_time = ai_system.predict_time(user_kim, bench_press)
-    print(f"🤖 [AI 추천] 업데이트된 추천 시간: {new_rec_time:.1f}분")
-    
-    diff = new_rec_time - rec_time
-    print(f"✅ [Result] 학습 효과: 이전 대비 {diff:.1f}분 증가된 시간 추천")
-    print("   (Note: 배치 학습을 통해 일반화된 성능을 유지하면서 개인화가 진행됨)")
-
-if __name__ == "__main__":
-    run_simulation()
