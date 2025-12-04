@@ -600,11 +600,40 @@ export default function App() {
       console.log("✅ NFC 운동 시작 성공:", data);
 
       // 선택된 장비 설정 - NFC 태그 ID로 기구 찾기
-      const equipment = equipmentList.find(
+      const foundEquipment = equipmentList.find(
         (e) => e.nfc_tag_id === nfcTagId || String(e.id) === nfcTagId
       );
-      if (equipment) {
-        setSelectedEquipment(equipment);
+
+      if (foundEquipment) {
+        let finalEquipment = { ...foundEquipment };
+
+        // [AI 시간 추천] AI에게 적정 운동 시간 물어보기
+        try {
+          console.log("🤖 AI 시간 추천 요청 중...");
+          const aiResponse = await fetch(`${apiBase}/api/ai/time/`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              equipment_id: foundEquipment.id,
+            }),
+          });
+
+          if (aiResponse.ok) {
+            const aiData = await aiResponse.json();
+            console.log("🤖 AI 추천 시간 수신:", aiData.recommended_time);
+            // AI가 추천한 시간으로 덮어쓰기
+            finalEquipment.allocatedTime = aiData.recommended_time;
+          } else {
+            console.warn("AI 시간 추천 응답 실패:", aiResponse.status);
+          }
+        } catch (aiError) {
+          console.warn("AI 시간 추천 요청 실패 (기본값 사용):", aiError);
+        }
+
+        setSelectedEquipment(finalEquipment);
       } else {
         console.warn("기구를 찾을 수 없음, NFC ID:", nfcTagId);
         setSelectedEquipment({
@@ -623,8 +652,8 @@ export default function App() {
       setDirectWorkout(true);
 
       // 즉시 heartbeat 전송 - equipment.id 사용
-      if (equipment) {
-        await sendImmediateHeartbeat(equipment.id);
+      if (foundEquipment) {
+        await sendImmediateHeartbeat(foundEquipment.id);
       }
 
       // 장비 상태 갱신
