@@ -317,6 +317,12 @@ class InbodyAnalyzeView(APIView):
                         "   - 각 부위: 0.5-20kg 범위\n"
                         "   → segment_right_arm_kg, segment_left_arm_kg, segment_trunk_kg,\n"
                         "      segment_right_leg_kg, segment_left_leg_kg에 저장\n\n"
+
+                        "11단계: 세그멘탈(부위별) 근육량 비율(%) 찾기 (표준체중 대비)\n"
+                        "   - kg 값 옆에 괄호나 그래프로 표시된 % 값 (예: 100%, 115%)\n"
+                        "   - 보통 40-200% 범위\n"
+                        "   → segment_right_arm_percent, segment_left_arm_percent, segment_trunk_percent,\n"
+                        "      segment_right_leg_percent, segment_left_leg_percent에 저장\n\n"
                     
                         "⚠️ 주의사항:\n"
                         "- 괄호 안의 범위 값(정상 범위)은 절대 추출하지 마세요\n"
@@ -330,7 +336,9 @@ class InbodyAnalyzeView(APIView):
                         '"inbody_score": 85, "skeletal_muscle_mass_kg": 25.8, "body_fat_mass_kg": 18.2, '
                         '"body_fat_percentage": 36.2, "bmi": 27.3, '
                         '"segment_right_arm_kg": 2.5, "segment_left_arm_kg": 2.3, '
-                        '"segment_trunk_kg": 10.2, "segment_right_leg_kg": 8.0, "segment_left_leg_kg": 7.9}\n\n'
+                        '"segment_trunk_kg": 10.2, "segment_right_leg_kg": 8.0, "segment_left_leg_kg": 7.9, '
+                        '"segment_right_arm_percent": 100.0, "segment_left_arm_percent": 98.5, '
+                        '"segment_trunk_percent": 105.2, "segment_right_leg_percent": 102.0, "segment_left_leg_percent": 101.5}\n\n'
                     
                         "이제 이미지를 분석하여 JSON만 반환해주세요:"
                 )
@@ -398,6 +406,11 @@ class InbodyAnalyzeView(APIView):
                     'segment_trunk_kg': to_num(data.get('segment_trunk_kg')),
                     'segment_right_leg_kg': to_num(data.get('segment_right_leg_kg')),
                     'segment_left_leg_kg': to_num(data.get('segment_left_leg_kg')),
+                    'segment_right_arm_percent': to_num(data.get('segment_right_arm_percent')),
+                    'segment_left_arm_percent': to_num(data.get('segment_left_arm_percent')),
+                    'segment_trunk_percent': to_num(data.get('segment_trunk_percent')),
+                    'segment_right_leg_percent': to_num(data.get('segment_right_leg_percent')),
+                    'segment_left_leg_percent': to_num(data.get('segment_left_leg_percent')),
                 }
 
                 # Persist image and parsed result
