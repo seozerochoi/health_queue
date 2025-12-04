@@ -72,12 +72,18 @@ class RoutineAIEngine:
         # DB Equipment가 없거나 호환 객체가 아니면 안전한 더미를 사용
         if not self.equipments:
             dummy = Equipment(0, "DUMMY", 0, "GENERAL")
-            return self.time_ai._extract_features(user, dummy)[:12]
-
-        # DB Equipment를 time_ai.Equipment로 변환해 사용
-        db_eq = self.equipments[0]
-        ai_eq = self._to_ai_equipment(db_eq)
-        return self.time_ai._extract_features(user, ai_eq)[:12]
+            full_features = self.time_ai._extract_features(user, dummy)
+        else:
+            # DB Equipment를 time_ai.Equipment로 변환해 사용
+            db_eq = self.equipments[0]
+            ai_eq = self._to_ai_equipment(db_eq)
+            full_features = self.time_ai._extract_features(user, ai_eq)
+            
+        # [Update] time_ai._extract_features가 14차원(User 12 + Equip 2)을 반환하므로
+        # User Feature(0~6, 9~13)만 추출하여 12차원으로 구성
+        # Indices: 0-6(Raw User), 7-8(Equip), 9-13(Derived User)
+        user_features = torch.cat((full_features[:7], full_features[9:]))
+        return user_features
 
     def _get_equip_tensor(self, equipment):
         """

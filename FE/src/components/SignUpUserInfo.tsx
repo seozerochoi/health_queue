@@ -28,6 +28,11 @@ export function SignUpUserInfo({ onBack, onNext }: SignUpUserInfoProps) {
     weight_kg: string;
     skeletal_muscle_mass_kg: string;
     body_fat_mass_kg: string;
+    segment_right_arm_percent: string;
+    segment_left_arm_percent: string;
+    segment_trunk_percent: string;
+    segment_right_leg_percent: string;
+    segment_left_leg_percent: string;
   } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -123,7 +128,12 @@ export function SignUpUserInfo({ onBack, onNext }: SignUpUserInfoProps) {
             height_cm: data.height_cm ? String(data.height_cm) : "",
             weight_kg: data.weight_kg ? String(data.weight_kg) : "",
             skeletal_muscle_mass_kg: data.skeletal_muscle_mass_kg ? String(data.skeletal_muscle_mass_kg) : "",
-            body_fat_mass_kg: data.body_fat_mass_kg ? String(data.body_fat_mass_kg) : ""
+            body_fat_mass_kg: data.body_fat_mass_kg ? String(data.body_fat_mass_kg) : "",
+            segment_right_arm_percent: data.segment_right_arm_percent ? String(data.segment_right_arm_percent) : "",
+            segment_left_arm_percent: data.segment_left_arm_percent ? String(data.segment_left_arm_percent) : "",
+            segment_trunk_percent: data.segment_trunk_percent ? String(data.segment_trunk_percent) : "",
+            segment_right_leg_percent: data.segment_right_leg_percent ? String(data.segment_right_leg_percent) : "",
+            segment_left_leg_percent: data.segment_left_leg_percent ? String(data.segment_left_leg_percent) : "",
         });
         setShowCropper(false);
       } else {
@@ -145,7 +155,12 @@ export function SignUpUserInfo({ onBack, onNext }: SignUpUserInfoProps) {
               height_cm: parseFloat(inbodyData.height_cm),
               weight_kg: parseFloat(inbodyData.weight_kg),
               skeletal_muscle_mass_kg: parseFloat(inbodyData.skeletal_muscle_mass_kg),
-              body_fat_mass_kg: parseFloat(inbodyData.body_fat_mass_kg)
+              body_fat_mass_kg: parseFloat(inbodyData.body_fat_mass_kg),
+              segment_right_arm_percent: parseFloat(inbodyData.segment_right_arm_percent),
+              segment_left_arm_percent: parseFloat(inbodyData.segment_left_arm_percent),
+              segment_trunk_percent: parseFloat(inbodyData.segment_trunk_percent),
+              segment_right_leg_percent: parseFloat(inbodyData.segment_right_leg_percent),
+              segment_left_leg_percent: parseFloat(inbodyData.segment_left_leg_percent),
           };
       }
       
@@ -286,6 +301,51 @@ export function SignUpUserInfo({ onBack, onNext }: SignUpUserInfoProps) {
                               onChange={(e) => setInbodyData({...inbodyData, body_fat_mass_kg: e.target.value})}
                               className="h-8 bg-background text-white"
                           />
+                      </div>
+                      <div className="col-span-2 pt-2 border-t border-gray-700">
+                          <label className="text-xs text-gray-400 block mb-2">부위별 근육 분석 (%)</label>
+                          <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                  <label className="text-[10px] text-gray-500">오른팔</label>
+                                  <Input 
+                                      value={inbodyData.segment_right_arm_percent} 
+                                      onChange={(e) => setInbodyData({...inbodyData, segment_right_arm_percent: e.target.value})}
+                                      className="h-7 text-xs bg-background text-white"
+                                  />
+                              </div>
+                              <div className="space-y-1">
+                                  <label className="text-[10px] text-gray-500">왼팔</label>
+                                  <Input 
+                                      value={inbodyData.segment_left_arm_percent} 
+                                      onChange={(e) => setInbodyData({...inbodyData, segment_left_arm_percent: e.target.value})}
+                                      className="h-7 text-xs bg-background text-white"
+                                  />
+                              </div>
+                              <div className="space-y-1">
+                                  <label className="text-[10px] text-gray-500">몸통</label>
+                                  <Input 
+                                      value={inbodyData.segment_trunk_percent} 
+                                      onChange={(e) => setInbodyData({...inbodyData, segment_trunk_percent: e.target.value})}
+                                      className="h-7 text-xs bg-background text-white"
+                                  />
+                              </div>
+                              <div className="space-y-1">
+                                  <label className="text-[10px] text-gray-500">오른다리</label>
+                                  <Input 
+                                      value={inbodyData.segment_right_leg_percent} 
+                                      onChange={(e) => setInbodyData({...inbodyData, segment_right_leg_percent: e.target.value})}
+                                      className="h-7 text-xs bg-background text-white"
+                                  />
+                              </div>
+                              <div className="space-y-1">
+                                  <label className="text-[10px] text-gray-500">왼다리</label>
+                                  <Input 
+                                      value={inbodyData.segment_left_leg_percent} 
+                                      onChange={(e) => setInbodyData({...inbodyData, segment_left_leg_percent: e.target.value})}
+                                      className="h-7 text-xs bg-background text-white"
+                                  />
+                              </div>
+                          </div>
                       </div>
                   </div>
               )}

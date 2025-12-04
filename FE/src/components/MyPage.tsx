@@ -421,16 +421,16 @@ export function MyPage({
     if (parsed.bmi != null) body.bmi = parsed.bmi;
 
     // 세그멘탈 근육량 필드들
-    if (parsed.segment_right_arm_kg != null)
-      body.segment_right_arm_kg = parsed.segment_right_arm_kg;
-    if (parsed.segment_left_arm_kg != null)
-      body.segment_left_arm_kg = parsed.segment_left_arm_kg;
-    if (parsed.segment_trunk_kg != null)
-      body.segment_trunk_kg = parsed.segment_trunk_kg;
-    if (parsed.segment_right_leg_kg != null)
-      body.segment_right_leg_kg = parsed.segment_right_leg_kg;
-    if (parsed.segment_left_leg_kg != null)
-      body.segment_left_leg_kg = parsed.segment_left_leg_kg;
+    if (parsed.segment_right_arm_percent != null)
+      body.segment_right_arm_percent = parsed.segment_right_arm_percent;
+    if (parsed.segment_left_arm_percent != null)
+      body.segment_left_arm_percent = parsed.segment_left_arm_percent;
+    if (parsed.segment_trunk_percent != null)
+      body.segment_trunk_percent = parsed.segment_trunk_percent;
+    if (parsed.segment_right_leg_percent != null)
+      body.segment_right_leg_percent = parsed.segment_right_leg_percent;
+    if (parsed.segment_left_leg_percent != null)
+      body.segment_left_leg_percent = parsed.segment_left_leg_percent;
 
     try {
       setSaving(true);
@@ -934,21 +934,21 @@ export function MyPage({
                     {/* 세그멘탈 근육량 (InBody 770) */}
                     <div className="mt-4 space-y-2">
                       <Label className="text-sm text-muted-foreground">
-                        부위별 근육량 (InBody 770)
+                        부위별 근육량 (%)
                       </Label>
 
                       <div className="flex items-center gap-3">
                         <label className="text-sm text-foreground w-32">
-                          우측 팔(kg)
+                          우측 팔(%)
                         </label>
                         <Input
                           type="number"
                           step="0.1"
-                          value={parsedResult?.segment_right_arm_kg ?? ""}
+                          value={parsedResult?.segment_right_arm_percent ?? ""}
                           onChange={(e) => {
                             setParsedResult({
                               ...parsedResult,
-                              segment_right_arm_kg: e.target.value
+                              segment_right_arm_percent: e.target.value
                                 ? Number(e.target.value)
                                 : null,
                             });
@@ -959,16 +959,16 @@ export function MyPage({
 
                       <div className="flex items-center gap-3">
                         <label className="text-sm text-foreground w-32">
-                          좌측 팔(kg)
+                          좌측 팔(%)
                         </label>
                         <Input
                           type="number"
                           step="0.1"
-                          value={parsedResult?.segment_left_arm_kg ?? ""}
+                          value={parsedResult?.segment_left_arm_percent ?? ""}
                           onChange={(e) => {
                             setParsedResult({
                               ...parsedResult,
-                              segment_left_arm_kg: e.target.value
+                              segment_left_arm_percent: e.target.value
                                 ? Number(e.target.value)
                                 : null,
                             });
@@ -979,16 +979,16 @@ export function MyPage({
 
                       <div className="flex items-center gap-3">
                         <label className="text-sm text-foreground w-32">
-                          몸통(kg)
+                          몸통(%)
                         </label>
                         <Input
                           type="number"
                           step="0.1"
-                          value={parsedResult?.segment_trunk_kg ?? ""}
+                          value={parsedResult?.segment_trunk_percent ?? ""}
                           onChange={(e) => {
                             setParsedResult({
                               ...parsedResult,
-                              segment_trunk_kg: e.target.value
+                              segment_trunk_percent: e.target.value
                                 ? Number(e.target.value)
                                 : null,
                             });
@@ -999,16 +999,16 @@ export function MyPage({
 
                       <div className="flex items-center gap-3">
                         <label className="text-sm text-foreground w-32">
-                          우측 다리(kg)
+                          우측 다리(%)
                         </label>
                         <Input
                           type="number"
                           step="0.1"
-                          value={parsedResult?.segment_right_leg_kg ?? ""}
+                          value={parsedResult?.segment_right_leg_percent ?? ""}
                           onChange={(e) => {
                             setParsedResult({
                               ...parsedResult,
-                              segment_right_leg_kg: e.target.value
+                              segment_right_leg_percent: e.target.value
                                 ? Number(e.target.value)
                                 : null,
                             });
@@ -1019,16 +1019,16 @@ export function MyPage({
 
                       <div className="flex items-center gap-3">
                         <label className="text-sm text-foreground w-32">
-                          좌측 다리(kg)
+                          좌측 다리(%)
                         </label>
                         <Input
                           type="number"
                           step="0.1"
-                          value={parsedResult?.segment_left_leg_kg ?? ""}
+                          value={parsedResult?.segment_left_leg_percent ?? ""}
                           onChange={(e) => {
                             setParsedResult({
                               ...parsedResult,
-                              segment_left_leg_kg: e.target.value
+                              segment_left_leg_percent: e.target.value
                                 ? Number(e.target.value)
                                 : null,
                             });

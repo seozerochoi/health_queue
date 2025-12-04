@@ -250,9 +250,9 @@ class InbodyAnalyzeView(APIView):
                         '"weight_kg": 숫자 또는 null, "inbody_score": 숫자 또는 null, '
                         '"skeletal_muscle_mass_kg": 숫자 또는 null, "body_fat_mass_kg": 숫자 또는 null, '
                         '"body_fat_percentage": 숫자 또는 null, "bmi": 숫자 또는 null, '
-                        '"segment_right_arm_%": 숫자 또는 null, "segment_left_arm_kg": 숫자 또는 null, '
-                        '"segment_trunk_%": 숫자 또는 null, "segment_right_leg_kg": 숫자 또는 null, '
-                        '"segment_left_leg_%": 숫자 또는 null}'
+                        '"segment_right_arm_percent": 숫자 또는 null, "segment_left_arm_percent": 숫자 또는 null, '
+                        '"segment_trunk_percent": 숫자 또는 null, "segment_right_leg_percent": 숫자 또는 null, '
+                        '"segment_left_leg_percent": 숫자 또는 null}'
                 )
 
                 user_prompt = (
