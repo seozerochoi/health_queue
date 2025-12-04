@@ -13,7 +13,6 @@ import { GymSearch } from "./components/GymSearch";
 import { EquipmentList } from "./components/EquipmentList";
 import { AIRoutineRecommendation } from "./components/AIRoutineRecommendation";
 import { AdminDashboard } from "./components/AdminDashboard";
-import { NFCReader } from "./components/NFCReader";
 import { WorkoutTimer } from "./components/WorkoutTimer";
 import { SatisfactionSurvey } from "./components/SatisfactionSurvey";
 import { ReservationStatus } from "./components/ReservationStatus";
@@ -2047,20 +2046,16 @@ export default function App() {
 
       case "equipment-list":
         return selectedGym ? (
-          <>
-            <NFCReader
-              onTagDetected={handleNFCTagDetected}
-              isEnabled={nfcEnabled}
-            />
-            <EquipmentList
-              gymName={selectedGym.gym_name || ""}
-              onBack={navigateBack}
-              onEquipmentSelect={handleEquipmentSelect}
-              equipment={equipmentList}
-              loading={equipmentLoading}
-              error={equipmentError}
-            />
-          </>
+          <EquipmentList
+            gymName={selectedGym.gym_name || ""}
+            onBack={navigateBack}
+            onEquipmentSelect={handleEquipmentSelect}
+            equipment={equipmentList}
+            loading={equipmentLoading}
+            error={equipmentError}
+            nfcEnabled={nfcEnabled}
+            onNFCTagDetected={handleNFCTagDetected}
+          />
         ) : null;
 
       case "ai-recommendation":
@@ -2104,23 +2099,19 @@ export default function App() {
 
       case "reservation-status":
         return (
-          <>
-            <NFCReader
-              onTagDetected={handleNFCTagDetected}
-              isEnabled={nfcEnabled}
-            />
-            <ReservationStatus
-              onBack={navigateBack}
-              gymName={selectedGym?.gym_name || ""}
-              reservations={reservations}
-              onCancelReservation={handleCancelReservation}
-              onJoinQueue={handleAiQueueJoin}
-              defaultTab={reservationTab}
-              equipmentList={equipmentList}
-              onMarkAiUsed={handleAiMarkUsed}
-              onStartImmediate={handleAiStartImmediate}
-            />
-          </>
+          <ReservationStatus
+            onBack={navigateBack}
+            gymName={selectedGym?.gym_name || ""}
+            reservations={reservations}
+            onCancelReservation={handleCancelReservation}
+            onJoinQueue={handleAiQueueJoin}
+            defaultTab={reservationTab}
+            equipmentList={equipmentList}
+            onMarkAiUsed={handleAiMarkUsed}
+            onStartImmediate={handleAiStartImmediate}
+            nfcEnabled={nfcEnabled}
+            onNFCTagDetected={handleNFCTagDetected}
+          />
         );
 
       case "my-page":
