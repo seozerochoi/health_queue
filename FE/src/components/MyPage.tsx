@@ -372,6 +372,14 @@ export function MyPage({
         return;
       }
       alert("분석 결과가 프로필에 저장되었습니다.");
+
+      // Update latestRecord display with the applied values
+      if (latestRecord) {
+        setLatestRecord({
+          ...latestRecord,
+          parsed: { ...latestRecord.parsed, ...parsedResult },
+        });
+      }
     } finally {
       setSaving(false);
     }
