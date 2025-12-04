@@ -62,101 +62,39 @@ export function NFCReader({ onTagDetected, isEnabled }: NFCReaderProps) {
                 equipmentId = record.data;
                 console.log("  ✓ record.data는 이미 문자열:", equipmentId);
               } else if (record.data instanceof DataView) {
-                // DataView인 경우: NDEF 텍스트 레코드 파싱
-                console.log("  ✓ record.data는 DataView, NDEF 텍스트 파싱");
+                // DataView 전체를 UTF-8로 디코딩 후 끝 6자리 추출
+                console.log("  ✓ record.data는 DataView, 전체 디코딩 후 끝 6자리 추출");
                 
-                try {
-                  // NDEF Text Record 구조:
-                  // [0] = Status Byte (bit 7: UTF-8/UTF-16, bit 0-5: 언어 코드 길이)
-                  // [1..1+lang_len] = 언어 코드 (예: "en")
-                  // [1+lang_len..end] = 실제 텍스트 데이터
-                  
-                  const statusByte = record.data.getUint8(0);
-                  const languageCodeLength = statusByte & 0x3f; // 하위 6비트
-                  const isUtf16 = (statusByte & 0x80) !== 0; // 최상위 비트
-                  
-                  console.log(`  - Status Byte: 0x${statusByte.toString(16)}`);
-                  console.log(`  - Language Code Length: ${languageCodeLength}`);
-                  console.log(`  - UTF-16: ${isUtf16}`);
-                  
-                  // 언어 코드 건너뛰고 텍스트 데이터만 추출
-                  const textStartIndex = 1 + languageCodeLength;
-                  const textLength = record.data.byteLength - textStartIndex;
-                  const textBytes = new Uint8Array(textLength);
-                  
-                  for (let i = 0; i < textLength; i++) {
-                    textBytes[i] = record.data.getUint8(textStartIndex + i);
-                  }
-                  
-                  const encoding = isUtf16 ? "utf-16" : "utf-8";
-                  const textDecoder = new TextDecoder(encoding);
-                  equipmentId = textDecoder.decode(textBytes);
-                  
-                  console.log(`  ✓ NDEF 파싱 결과: "${equipmentId}"`);
-                } catch (parseError) {
-                  console.error("  ✗ NDEF 파싱 실패:", parseError);
-                  // 파싱 실패 시 전체를 UTF-8로 디코딩 시도
-                  const textBytes = new Uint8Array(record.data.byteLength);
-                  for (let i = 0; i < record.data.byteLength; i++) {
-                    textBytes[i] = record.data.getUint8(i);
-                  }
-                  const textDecoder = new TextDecoder("utf-8");
-                  equipmentId = textDecoder.decode(textBytes);
-                  console.log(`  ⚠ Fallback 디코딩 결과: "${equipmentId}"`);
+                const textBytes = new Uint8Array(record.data.byteLength);
+                for (let i = 0; i < record.data.byteLength; i++) {
+                  textBytes[i] = record.data.getUint8(i);
                 }
-              } else if (record.data instanceof ArrayBuffer) {
-                // ArrayBuffer인 경우 직접 파싱
-                console.log("  ✓ record.data는 ArrayBuffer, 파싱 시작");
-                const dataView = new DataView(record.data);
-                const statusByte = dataView.getUint8(0);
-                const languageCodeLength = statusByte & 0x3f;
-
-                const textData = record.data.slice(1 + languageCodeLength);
+                
                 const textDecoder = new TextDecoder("utf-8");
-                equipmentId = textDecoder.decode(textData);
+                const fullText = textDecoder.decode(textBytes);
+                console.log(`  - 전체 디코딩: "${fullText}"`);
+                
+                // 끝에서 6자리 추출 (NFC001, NFC021 등)
+                equipmentId = fullText.slice(-6);
+                console.log(`  ✓ 끝 6자리 추출: "${equipmentId}"`);
+              } else if (record.data instanceof ArrayBuffer) {
+                // ArrayBuffer인 경우 Uint8Array로 변환 후 끝 6자리 추출
+                console.log("  ✓ record.data는 ArrayBuffer, 디코딩 후 끝 6자리 추출");
+                const textDecoder = new TextDecoder("utf-8");
+                const fullText = textDecoder.decode(record.data);
+                console.log(`  - 전체 디코딩: "${fullText}"`);
+                
+                equipmentId = fullText.slice(-6);
+                console.log(`  ✓ 끝 6자리 추출: "${equipmentId}"`);
               } else {
                 // 알 수 없는 형식 - 문자열로 변환 시도
                 console.log("  ⚠ 알 수 없는 data 형식, toString() 시도");
                 equipmentId = String(record.data);
               }
 
-              // "TYPE: TEXT\nTEXT: NFC001" 또는 "TYPETEXT TEXT:NFC001" 같은 메타데이터 형식 처리
-              if (
-                equipmentId.includes("TEXT:") ||
-                equipmentId.includes("TYPE:") ||
-                equipmentId.includes("TYPETEXT")
-              ) {
-                console.log("  ⚠ 메타데이터 형식 감지, NFC ID 추출 시도");
-                console.log(`  - 추출 전 equipmentId: "${equipmentId}"`);
+              console.log(`📌 최종 equipmentId: "${equipmentId}"`);
 
-                // 여러 패턴 시도
-                // 1. "TEXT: NFC001" 또는 "TEXT:NFC001"
-                let match = equipmentId.match(/TEXT:\s*(NFC\d{3})/i);
-                
-                // 2. 매칭 실패 시 "NFC001" 패턴 직접 찾기
-                if (!match) {
-                  match = equipmentId.match(/(NFC\d{3})/i);
-                }
-                
-                console.log(`  - 정규표현식 매칭 결과:`, match);
-
-                if (match && match[1]) {
-                  equipmentId = match[1];
-                  console.log(`  ✓ 추출 성공: "${equipmentId}"`);
-                } else {
-                  console.log(`  ✗ 정규표현식 매칭 실패`);
-                  // 마지막 시도: 공백으로 split해서 NFC로 시작하는 것 찾기
-                  const parts = equipmentId.split(/[\s:]+/);
-                  const nfcPart = parts.find(p => /^NFC\d{3}$/i.test(p));
-                  if (nfcPart) {
-                    equipmentId = nfcPart;
-                    console.log(`  ✓ split으로 추출 성공: "${equipmentId}"`);
-                  } else {
-                    console.log(`  ✗ 모든 추출 방법 실패, 원본 유지`);
-                  }
-                }
-              }
-
+              // 추출된 값 검증: NFC + 3자리 숫자 형식인지 확인
               const trimmedId = equipmentId.trim().toUpperCase();
 
               // 추가 디버깅
