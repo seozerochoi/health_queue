@@ -216,8 +216,12 @@ class AIEngine:
         [Cold Start 문제 해결]
         초기 학습 데이터가 없을 때, 가상 유저 데이터를 생성하여 규칙 기반(Formula) 값으로 
         모델을 선행 학습시킵니다.
+        
+        [Hybrid AI Update]
+        이제 AI는 '공식 값'과 '실제 값'의 차이(Residual)를 학습합니다.
+        초기 상태에서는 공식이 완벽하다고 가정하므로, AI가 0(보정 없음)을 출력하도록 학습합니다.
         """
-        print("⚡ [System] AI 모델 선행 학습(Pre-training) 시작... (Rule-Base 기준)")
+        print("⚡ [System] AI 모델 선행 학습(Pre-training) 시작... (Residual Learning: Target=0)")
         
         for _ in range(sample_size):
             # 랜덤 가상 유저 데이터 생성
@@ -244,11 +248,12 @@ class AIEngine:
             d_equip = Equipment(0, "dummy_eq", random.choice([0,1]), "General", base_time=random.randint(10, 30))
             
             # 수학 공식 엔진을 통해 정답(Label) 생성
-            formula_time = self.formula_engine.calculate_time(d_user, d_equip)
+            # Hybrid 방식이므로 AI의 목표값은 0 (공식 그대로 사용)
+            target_residual = 0.0
             features = self._extract_features(d_user, d_equip)
             
             # [중요] 가상 데이터도 메모리에 추가하여 초기 지식으로 활용
-            self.memory.append((features, formula_time))
+            self.memory.append((features, target_residual))
 
         # 초기 메모리에 있는 데이터로 1차 학습 (Batch Training)
         self._replay_train(epochs=50)
@@ -259,13 +264,23 @@ class AIEngine:
     def predict_time(self, user, equipment):
         """
         현재 학습된 모델을 사용하여 추천 운동 시간을 예측합니다.
+        [Hybrid AI Logic]
+        최종 시간 = (공식 계산 시간) + (AI 보정 시간)
         """
+        # 1. 공식 기반 계산 (Base Logic) - 즉시 적용됨
+        base_time = self.formula_engine.calculate_time(user, equipment)
+
+        # 2. AI 보정값 예측 (Residual Learning)
         self.model.eval()
         with torch.no_grad():
             inputs = self._extract_features(user, equipment).unsqueeze(0)
-            pred = self.model(inputs).item()
+            adjustment = self.model(inputs).item()
+        
+        # 3. 최종 시간 산출
+        final_time = base_time + adjustment
+
         # 안전 범위 적용 (5분 ~ 90분)
-        return max(5.0, min(90.0, pred))
+        return max(5.0, min(90.0, final_time))
 
     def update_with_feedback(self, user, equipment, recommended_time, feedback_score):
         """
@@ -296,9 +311,14 @@ class AIEngine:
         max_limit = recommended_time * 1.5
         target_time = max(min_limit, min(max_limit, target_time))
 
+        # [Hybrid AI Update]
+        # AI는 (목표 시간 - 공식 시간)의 차이를 학습해야 함
+        formula_time = self.formula_engine.calculate_time(user, equipment)
+        target_residual = target_time - formula_time
+
         # 3. [핵심 추가 4] 메모리에 저장 (Experience Replay)
         features = self._extract_features(user, equipment)
-        self.memory.append((features, target_time))
+        self.memory.append((features, target_residual))
 
         # 4. [핵심 추가 5] 배치 학습 (Batch Training)
         # 현재 데이터 하나만 학습하는 것이 아니라, 과거의 기억을 꺼내 함께 복습
