@@ -65,14 +65,33 @@ export function NFCReader({ onTagDetected, isEnabled }: NFCReaderProps) {
                 // DataView인 경우 버퍼 추출 후 파싱
                 console.log("  ✓ record.data는 DataView, 파싱 시작");
                 const statusByte = record.data.getUint8(0);
+                const isUtf16 = (statusByte & 0x80) !== 0;
                 const languageCodeLength = statusByte & 0x3f;
 
-                const buffer = record.data.buffer.slice(
-                  record.data.byteOffset + 1 + languageCodeLength,
-                  record.data.byteOffset + record.data.byteLength
+                // 디버깅 정보를 alert로 표시
+                alert(
+                  `[DataView 디버깅]\n` +
+                    `Status Byte: 0x${statusByte.toString(16)}\n` +
+                    `UTF-16: ${isUtf16}\n` +
+                    `Lang Length: ${languageCodeLength}\n` +
+                    `byteOffset: ${record.data.byteOffset}\n` +
+                    `byteLength: ${record.data.byteLength}\n` +
+                    `Skip: ${1 + languageCodeLength}`
                 );
-                const textDecoder = new TextDecoder("utf-8");
-                equipmentId = textDecoder.decode(buffer);
+
+                const textStartOffset = 1 + languageCodeLength;
+                const textByteLength = record.data.byteLength - textStartOffset;
+
+                // DataView에서 직접 바이트 배열 추출
+                const textBytes = new Uint8Array(textByteLength);
+                for (let i = 0; i < textByteLength; i++) {
+                  textBytes[i] = record.data.getUint8(textStartOffset + i);
+                }
+
+                const textDecoder = new TextDecoder(
+                  isUtf16 ? "utf-16" : "utf-8"
+                );
+                equipmentId = textDecoder.decode(textBytes);
               } else if (record.data instanceof ArrayBuffer) {
                 // ArrayBuffer인 경우 직접 파싱
                 console.log("  ✓ record.data는 ArrayBuffer, 파싱 시작");
