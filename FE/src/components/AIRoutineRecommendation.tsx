@@ -329,7 +329,7 @@ export function AIRoutineRecommendation({
                   <div>
                     <span className="text-gray-300">총 운동시간: </span>
                     <span className="text-white font-semibold">
-                      {totalTime}분
+                      {Math.round(totalTime)}분
                     </span>
                   </div>
                   <div>
@@ -382,7 +382,7 @@ export function AIRoutineRecommendation({
                           </h4>
                           <div className="flex items-center space-x-2 text-sm text-gray-300">
                             <Clock className="h-3 w-3" />
-                            <span>{step.time}분</span>
+                            <span>{Math.round(step.time)}분</span>
                           </div>
                         </div>
                       </div>
