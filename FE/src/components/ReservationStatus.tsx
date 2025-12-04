@@ -51,6 +51,7 @@ interface ReservationStatusProps {
   onStartImmediate?: (equipmentId: number) => void;
   nfcEnabled?: boolean;
   onNFCTagDetected?: (equipmentId: string | number) => void;
+  onCreateNewRoutine?: () => void;
 }
 
 export function ReservationStatus({
@@ -65,6 +66,7 @@ export function ReservationStatus({
   onStartImmediate,
   nfcEnabled = false,
   onNFCTagDetected,
+  onCreateNewRoutine,
 }: ReservationStatusProps) {
   // AI 추천 예약과 일반 예약 분리
   const aiReservations = reservations.filter((r) => r.isAiRecommended === true);
@@ -279,147 +281,163 @@ export function ReservationStatus({
                   <h3 className="text-lg font-medium text-foreground mb-2">
                     AI 추천 기구 내역이 없습니다
                   </h3>
-                  <p className="text-muted-foreground">
+                  <p className="text-muted-foreground mb-4">
                     AI 루틴 추천을 통해 맞춤형 운동을 시작해보세요.
                   </p>
+                  {onCreateNewRoutine && (
+                    <Button onClick={onCreateNewRoutine} className="bg-blue-600 hover:bg-blue-700">
+                      AI 루틴 생성하기
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             ) : (
-              aiReservations.map((reservation) => {
-                const name =
-                  reservation.equipmentName || reservation.equipment || "기구";
-                const image =
-                  reservation.equipment_image ||
-                  reservation.equipmentImage ||
-                  null;
-                const position =
-                  reservation.waitingPosition ??
-                  reservation.waiting_position ??
-                  null;
-                const allocated =
-                  reservation.equipment_allocated_time ??
-                  reservation.equipmentAllocatedTime ??
-                  reservation.duration ??
-                  null;
-                const eqId =
-                  reservation.equipment_id ?? reservation.equipmentId ?? null;
-                const waitingCount =
-                  reservation.waitingCount ?? reservation.waiting_count ?? 0;
+              <div className="space-y-4">
+                {aiReservations.map((reservation) => {
+                  const name =
+                    reservation.equipmentName || reservation.equipment || "기구";
+                  const image =
+                    reservation.equipment_image ||
+                    reservation.equipmentImage ||
+                    null;
+                  const position =
+                    reservation.waitingPosition ??
+                    reservation.waiting_position ??
+                    null;
+                  const allocated =
+                    reservation.equipment_allocated_time ??
+                    reservation.equipmentAllocatedTime ??
+                    reservation.duration ??
+                    null;
+                  const eqId =
+                    reservation.equipment_id ?? reservation.equipmentId ?? null;
+                  const waitingCount =
+                    reservation.waitingCount ?? reservation.waiting_count ?? 0;
 
-                // 실시간 기구 상태 가져오기
-                const equipmentStatus = eqId ? equipmentStatuses[String(eqId)] : null;
-                const status = equipmentStatus?.status || "AVAILABLE";
-                const currentWaitingCount = equipmentStatus?.waitingCount || 0;
-                // 대문자로 정규화하여 비교
-                const isAvailable = status === "AVAILABLE";
-                const isInUse = status === "IN_USE" || status === "IN-USE";
-                const isDimmed = !!(reservation.aiCanceled || reservation.aiUsed);
+                  // 실시간 기구 상태 가져오기
+                  const equipmentStatus = eqId ? equipmentStatuses[String(eqId)] : null;
+                  const status = equipmentStatus?.status || "AVAILABLE";
+                  const currentWaitingCount = equipmentStatus?.waitingCount || 0;
+                  // 대문자로 정규화하여 비교
+                  const isAvailable = status === "AVAILABLE";
+                  const isInUse = status === "IN_USE" || status === "IN-USE";
+                  const isDimmed = !!(reservation.aiCanceled || reservation.aiUsed);
 
-                // 디버깅 로그
-                console.log(`🎯 [UI 렌더링] ${name} (ID: ${eqId}):`, {
-                  equipmentStatus,
-                  status,
-                  isAvailable,
-                  isInUse,
-                });
+                  // 디버깅 로그
+                  console.log(`🎯 [UI 렌더링] ${name} (ID: ${eqId}):`, {
+                    equipmentStatus,
+                    status,
+                    isAvailable,
+                    isInUse,
+                  });
 
-                return (
-                  <Card
-                    key={reservation.id}
-                    className={`bg-card border-border transition ${
-                      isDimmed ? "opacity-50 grayscale pointer-events-none" : ""
-                    }`}
-                  >
-                    <CardHeader className="pb-4">
-                      <div className="flex justify-between items-start">
-                        <div className="flex items-start space-x-3">
-                          {image ? (
-                            <img
-                              src={image}
-                              alt={String(name)}
-                              className="h-16 w-16 rounded-md object-cover"
-                            />
-                          ) : (
-                            <div className="h-16 w-16 rounded-md bg-muted flex items-center justify-center text-sm text-muted-foreground">
-                              이미지 없음
-                            </div>
-                          )}
+                  return (
+                    <Card
+                      key={reservation.id}
+                      className={`bg-card border-border transition ${
+                        isDimmed ? "opacity-50 grayscale pointer-events-none" : ""
+                      }`}
+                    >
+                      <CardHeader className="pb-4">
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-start space-x-3">
+                            {image ? (
+                              <img
+                                src={image}
+                                alt={String(name)}
+                                className="h-16 w-16 rounded-md object-cover"
+                              />
+                            ) : (
+                              <div className="h-16 w-16 rounded-md bg-muted flex items-center justify-center text-sm text-muted-foreground">
+                                이미지 없음
+                              </div>
+                            )}
 
-                          <div>
-                            <CardTitle className="text-foreground">
-                              {name}
-                            </CardTitle>
-                            <div className="flex items-center space-x-2 mt-2 text-sm text-muted-foreground">
-                              <Clock className="h-4 w-4" />
-                              <span>{reservation.reservationTime}</span>
-                              {allocated ? (
-                                <span className="ml-2">
-                                  권장 시간: {allocated}분
-                                </span>
-                              ) : null}
-                              {eqId ? (
-                                <span className="ml-2">• ID: {eqId}</span>
-                              ) : null}
+                            <div>
+                              <CardTitle className="text-foreground">
+                                {name}
+                              </CardTitle>
+                              <div className="flex items-center space-x-2 mt-2 text-sm text-muted-foreground">
+                                <Clock className="h-4 w-4" />
+                                <span>{reservation.reservationTime}</span>
+                                {allocated ? (
+                                  <span className="ml-2">
+                                    권장 시간: {allocated}분
+                                  </span>
+                                ) : null}
+                                {eqId ? (
+                                  <span className="ml-2">• ID: {eqId}</span>
+                                ) : null}
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        {/* 실시간 상태 표시 (배지만) */}
-                        <div className="flex flex-col items-end gap-2">
-                          {isAvailable ? (
-                            <Badge className="bg-green-100 text-green-700">바로 이용가능</Badge>
-                          ) : isInUse ? (
-                            <>
-                              <Badge className="bg-red-100 text-red-700">
-                                사용중
+                          {/* 실시간 상태 표시 (배지만) */}
+                          <div className="flex flex-col items-end gap-2">
+                            {isAvailable ? (
+                              <Badge className="bg-green-100 text-green-700">바로 이용가능</Badge>
+                            ) : isInUse ? (
+                              <>
+                                <Badge className="bg-red-100 text-red-700">
+                                  사용중
+                                </Badge>
+                              </>
+                            ) : (
+                              <Badge className="bg-yellow-100 text-yellow-700">
+                                대기중
                               </Badge>
-                            </>
-                          ) : (
-                            <Badge className="bg-yellow-100 text-yellow-700">
-                              대기중
-                            </Badge>
-                          )}
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="border-red-600 text-red-400 hover:bg-red-900/20"
-                        onClick={() => {
-                          if (onCancelReservation && eqId) {
-                            onCancelReservation(reservation.id, eqId, waitingCount);
-                          }
-                        }}
-                      >
-                        사용 취소
-                      </Button>
-                      {/* 상태별 액션 버튼: 이용 완료 버튼 제거, 동일 위치에 배치 */}
-                      {onStartImmediate && isAvailable && eqId && (
+                      </CardHeader>
+                      <CardContent className="pt-0">
                         <Button
                           variant="outline"
                           size="sm"
-                          className="ml-2 border-green-500 text-green-400 hover:bg-green-900/20"
-                          onClick={() => onStartImmediate(Number(eqId))}
+                          className="border-red-600 text-red-400 hover:bg-red-900/20"
+                          onClick={() => {
+                            if (onCancelReservation && eqId) {
+                              onCancelReservation(reservation.id, eqId, waitingCount);
+                            }
+                          }}
                         >
-                          바로 시작
+                          사용 취소
                         </Button>
-                      )}
-                      {onJoinQueue && isInUse && eqId && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="ml-2 border-blue-500 text-blue-400 hover:bg-blue-900/20"
-                          onClick={() => onJoinQueue(Number(eqId), name)}
-                        >
-                          줄서기
-                        </Button>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })
+                        {/* 상태별 액션 버튼: 이용 완료 버튼 제거, 동일 위치에 배치 */}
+                        {onStartImmediate && isAvailable && eqId && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="ml-2 border-green-500 text-green-400 hover:bg-green-900/20"
+                            onClick={() => onStartImmediate(Number(eqId))}
+                          >
+                            바로 시작
+                          </Button>
+                        )}
+                        {onJoinQueue && isInUse && eqId && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="ml-2 border-blue-500 text-blue-400 hover:bg-blue-900/20"
+                            onClick={() => onJoinQueue(Number(eqId), name)}
+                          >
+                            줄서기
+                          </Button>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+                
+                {onCreateNewRoutine && (
+                  <Button 
+                    onClick={onCreateNewRoutine} 
+                    className="w-full bg-blue-600 hover:bg-blue-700 mt-4"
+                  >
+                    새로운 AI 루틴 생성하기
+                  </Button>
+                )}
+              </div>
             )}
           </TabsContent>
         </Tabs>

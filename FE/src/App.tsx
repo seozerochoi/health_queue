@@ -2233,6 +2233,7 @@ export default function App() {
             onStartImmediate={handleAiStartImmediate}
             nfcEnabled={nfcEnabled}
             onNFCTagDetected={handleNFCTagDetected}
+            onCreateNewRoutine={() => setCurrentView("ai-recommendation")}
           />
         );
 
