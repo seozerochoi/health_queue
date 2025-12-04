@@ -93,30 +93,40 @@ export function NFCReader({ onTagDetected, isEnabled }: NFCReaderProps) {
                 equipmentId = String(record.data);
               }
 
-              // "TYPE: TEXT\nTEXT: NFC001" 같은 메타데이터 형식 처리
+              // "TYPE: TEXT\nTEXT: NFC001" 또는 "TYPETEXT TEXT:NFC001" 같은 메타데이터 형식 처리
               if (
                 equipmentId.includes("TEXT:") ||
-                equipmentId.includes("TYPE:")
+                equipmentId.includes("TYPE:") ||
+                equipmentId.includes("TYPETEXT")
               ) {
-                console.log("  ⚠ 메타데이터 형식 감지, TEXT: 추출 시도");
+                console.log("  ⚠ 메타데이터 형식 감지, NFC ID 추출 시도");
                 console.log(`  - 추출 전 equipmentId: "${equipmentId}"`);
 
-                const match = equipmentId.match(/TEXT:\s*([^\s\n]+)/i);
+                // 여러 패턴 시도
+                // 1. "TEXT: NFC001" 또는 "TEXT:NFC001"
+                let match = equipmentId.match(/TEXT:\s*(NFC\d{3})/i);
+                
+                // 2. 매칭 실패 시 "NFC001" 패턴 직접 찾기
+                if (!match) {
+                  match = equipmentId.match(/(NFC\d{3})/i);
+                }
+                
                 console.log(`  - 정규표현식 매칭 결과:`, match);
-
-                // 디버깅 alert
-                alert(
-                  `[메타데이터 추출 디버깅]\n\n` +
-                    `원본: "${equipmentId}"\n\n` +
-                    `매칭 결과: ${match ? "SUCCESS" : "FAIL"}\n` +
-                    `추출값: ${match && match[1] ? `"${match[1]}"` : "NONE"}`
-                );
 
                 if (match && match[1]) {
                   equipmentId = match[1];
                   console.log(`  ✓ 추출 성공: "${equipmentId}"`);
                 } else {
-                  console.log(`  ✗ 정규표현식 매칭 실패, 원본 유지`);
+                  console.log(`  ✗ 정규표현식 매칭 실패`);
+                  // 마지막 시도: 공백으로 split해서 NFC로 시작하는 것 찾기
+                  const parts = equipmentId.split(/[\s:]+/);
+                  const nfcPart = parts.find(p => /^NFC\d{3}$/i.test(p));
+                  if (nfcPart) {
+                    equipmentId = nfcPart;
+                    console.log(`  ✓ split으로 추출 성공: "${equipmentId}"`);
+                  } else {
+                    console.log(`  ✗ 모든 추출 방법 실패, 원본 유지`);
+                  }
                 }
               }
 
