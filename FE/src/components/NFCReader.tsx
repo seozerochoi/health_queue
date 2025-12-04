@@ -11,6 +11,7 @@ export function NFCReader({ onTagDetected, isEnabled }: NFCReaderProps) {
   const [nfcSupported, setNfcSupported] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastScannedTag, setLastScannedTag] = useState<string | null>(null);
 
   useEffect(() => {
     // Web NFC API 지원 확인
@@ -45,11 +46,15 @@ export function NFCReader({ onTagDetected, isEnabled }: NFCReaderProps) {
           if (record.recordType === "text") {
             const textDecoder = new TextDecoder();
             const equipmentId = textDecoder.decode(record.data);
-            console.log("✅ NFC 태그 감지 - 기구 ID:", equipmentId);
+            const trimmedId = equipmentId.trim();
+            console.log("✅ NFC 태그 감지 - 기구 ID:", trimmedId);
+            
+            // 읽은 태그 값을 상태에 저장
+            setLastScannedTag(trimmedId);
             
             // 태그 감지 후 스캔 중단 (중복 방지)
             setIsScanning(false);
-            onTagDetected(equipmentId.trim());
+            onTagDetected(trimmedId);
             
             // 잠시 후 다시 스캔 활성화
             setTimeout(() => {
@@ -140,6 +145,16 @@ export function NFCReader({ onTagDetected, isEnabled }: NFCReaderProps) {
             <p className="text-blue-600 font-semibold">NFC 스캔 준비 완료</p>
           </div>
         )}
+        
+        {/* 마지막으로 스캔한 태그 표시 */}
+        {lastScannedTag && (
+          <div className="mt-4 p-3 bg-green-100 border border-green-300 rounded-lg">
+            <p className="text-green-800 text-sm text-center font-mono">
+              ✅ 마지막 스캔: <strong>{lastScannedTag}</strong>
+            </p>
+          </div>
+        )}
+        
         {error && (
           <div className="mt-4 p-3 bg-red-100 border border-red-300 rounded-lg">
             <p className="text-red-700 text-sm text-center">{error}</p>

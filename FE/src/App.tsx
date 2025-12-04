@@ -125,6 +125,8 @@ export default function App() {
   const [directWorkout, setDirectWorkout] = useState<boolean>(false);
   // NFC 스캔 활성화 여부
   const [nfcEnabled, setNfcEnabled] = useState(false);
+  // NFC 태그 읽은 값 표시용
+  const [nfcTagValue, setNfcTagValue] = useState<string>("");
 
   const getApiBase = () => {
     try {
@@ -606,10 +608,13 @@ export default function App() {
 
   // NFC 태그 감지 시 운동 시작
   const handleNFCTagDetected = async (equipmentId: string | number) => {
-    console.log("🏷️ NFC 태그로 운동 시작:", equipmentId);
+    const nfcTagId = String(equipmentId);
+    console.log("🏷️ NFC 태그로 운동 시작:", nfcTagId);
+    
+    // NFC 태그 값을 상태에 저장하여 화면에 표시
+    setNfcTagValue(nfcTagId);
 
     // NFC 태그 ID는 문자열로 전송 (예: "NFC001")
-    const nfcTagId = String(equipmentId);
 
     try {
       const token = localStorage.getItem("access_token");
@@ -619,6 +624,9 @@ export default function App() {
       }
 
       const apiBase = getApiBase();
+      console.log(`📡 API 호출: ${apiBase}/api/workouts/start/`);
+      console.log(`📤 전송 데이터: { nfc_tag_id: "${nfcTagId}" }`);
+      
       const response = await fetch(`${apiBase}/api/workouts/start/`, {
         method: "POST",
         headers: {
@@ -630,15 +638,18 @@ export default function App() {
         }),
       });
 
+      console.log(`📥 API 응답 상태: ${response.status}`);
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error("NFC 운동 시작 실패:", response.status, errorText);
-        alert("운동 시작에 실패했습니다. 기구가 사용 가능한지 확인해주세요.");
+        alert(`❌ NFC 태그: ${nfcTagId}\n\n운동 시작에 실패했습니다.\n\n응답 코드: ${response.status}\n에러: ${errorText}\n\n기구가 사용 가능한지 확인해주세요.`);
         return;
       }
 
       const data = await response.json();
       console.log("✅ NFC 운동 시작 성공:", data);
+      alert(`✅ NFC 태그 "${nfcTagId}" 인식 성공!\n운동을 시작합니다.`);
 
       // 선택된 장비 설정 - NFC 태그 ID로 기구 찾기
       const foundEquipment = equipmentList.find(
