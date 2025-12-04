@@ -698,14 +698,37 @@ export default function App() {
               return;
             }
           } else {
-            // 다른 기구 → 현재 운동 먼저 종료 필요
-            alert(`⚠️ 현재 "${currentEquipmentNFC}" 기구로 운동 중입니다.\n먼저 해당 기구를 태깅하여 운동을 종료해주세요.`);
-            return;
+            // 다른 기구 → 현재 운동 자동 종료 후 새 기구로 전환
+            console.log("🔄 다른 기구 태깅 감지 → 현재 운동 종료 후 새 기구 시작");
+            
+            const endResponse = await fetch(`${apiBase}/api/workouts/end/`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({}),
+            });
+
+            if (!endResponse.ok) {
+              console.error("이전 운동 종료 실패:", await endResponse.text());
+              alert("이전 운동 종료에 실패했습니다.");
+              return;
+            }
+            
+            console.log("✅ 이전 운동 종료 성공, 새 기구로 전환");
+            // 상태 초기화
+            setSelectedEquipment(null);
+            setWorkoutStartTime(null);
+            await fetchEquipment();
+            
+            // 잠시 대기 후 새 운동 시작 (DB 동기화)
+            await new Promise(resolve => setTimeout(resolve, 300));
           }
         }
       }
 
-      // 2️⃣ 운동 세션이 없으면 → 운동 시작
+      // 2️⃣ 운동 세션이 없거나 이전 운동 종료 완료 → 새 운동 시작
       console.log("🎬 새로운 운동 시작");
       
       // 🔍 [NFC 디버깅] API 호출 전 상세 정보 로깅

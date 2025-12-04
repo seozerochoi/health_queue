@@ -55,7 +55,7 @@ export function WorkoutTimer({
   const consecutiveHeartbeatFailures = useRef(0);
   const sseRef = useRef<EventSource | null>(null);
 
-  // 뒤로가기 핸들러 - 운동 종료 API 호출
+  // 뒤로가기 핸들러 - 운동 중에는 사용 불가 (UI에서 숨김)
   const handleBack = async () => {
     if (isEnding) return;
 
@@ -541,16 +541,10 @@ export function WorkoutTimer({
 
       <div className="max-w-md mx-auto">
         <div className="flex items-center justify-between mb-6">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleBack}
-            className="text-white hover:bg-gray-800"
-          >
-            <ArrowLeft className="w-6 h-6" />
-          </Button>
+          {/* 운동 중에는 뒤로가기 버튼 숨김 */}
+          <div className="w-10"></div>
           <h1 className="text-lg text-white">{equipment.name}</h1>
-          <div></div>
+          <div className="w-10"></div>
         </div>
 
         <div className="flex flex-col items-center space-y-8">
