@@ -405,6 +405,20 @@ class InbodyAnalyzeView(APIView):
                 record = InbodyRecord(user=request.user, source='gpt', parsed=parsed)
                 record.image.save(filename, ContentFile(img_bytes), save=True)
 
+                # Update UserProfile with the new data
+                try:
+                    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+                    updated = False
+                    for key, value in parsed.items():
+                        if value is not None and hasattr(profile, key):
+                            setattr(profile, key, value)
+                            updated = True
+                    if updated:
+                        profile.save()
+                        logger.info(f"Updated UserProfile for user {request.user.id} with InBody data (GPT)")
+                except Exception as e:
+                    logger.error(f"Failed to update UserProfile: {e}")
+
                 return Response({
                     'source': 'gpt',
                     'parsed': parsed,
@@ -697,6 +711,20 @@ class InbodyAnalyzeView(APIView):
             filename = f"inbody_{request.user.id}.jpg"
             record = InbodyRecord(user=request.user, source='rekognition', parsed=parsed)
             record.image.save(filename, ContentFile(img_bytes), save=True)
+
+            # Update UserProfile with the new data
+            try:
+                profile, _ = UserProfile.objects.get_or_create(user=request.user)
+                updated = False
+                for key, value in parsed.items():
+                    if value is not None and hasattr(profile, key):
+                        setattr(profile, key, value)
+                        updated = True
+                if updated:
+                    profile.save()
+                    logger.info(f"Updated UserProfile for user {request.user.id} with InBody data (Rekognition)")
+            except Exception as e:
+                logger.error(f"Failed to update UserProfile: {e}")
 
             return Response({
                 'source': 'rekognition',
