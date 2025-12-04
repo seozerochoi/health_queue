@@ -4,7 +4,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('equipment', '0006_remove_equipmentdailystats_state_only'),
+        ('equipment', '0006_merge_0003_add_subcategory_0005_equipment_daily_stats'),
     ]
 
     operations = [

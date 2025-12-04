@@ -140,6 +140,9 @@ class RoutineAIEngine:
         is_beginner = user.inbody.score < 70
         
         # 강도에 따른 난이도 허용 범위 설정
+        # 입력값 정규화 (공백 제거)
+        intensity = str(intensity).strip()
+
         allowed_difficulties = ['LOW', 'MID', 'HIGH']
         if intensity == '중':
             allowed_difficulties = ['LOW', 'MID']
@@ -147,34 +150,50 @@ class RoutineAIEngine:
             allowed_difficulties = ['LOW']
 
         # --- [Logic 2] 후보군 필터링 (Filtering) ---
-        candidates = []
-        for eq in self.equipments:
-            # 2-1. 타겟 부위 매칭 (DB 데이터 기반)
-            if not self._is_target_match(eq, target_parts):
-                continue
-                
-            # 2-2. 난이도 필터링
-            eq_diff = getattr(eq, 'difficulty', 'MID')
-            if eq_diff not in allowed_difficulties:
-                continue
-
-            # 2-3. 초보자 보호 로직
-            # 초보자에게 FREE_WEIGHT는 가급적 제외 (단, 덤벨 컬 같은 단순 관절은 허용 가능)
-            eq_type = getattr(eq, 'type', 'MACHINE')
-            if is_beginner and eq_type == 'FREE_WEIGHT':
-                # 난이도가 LOW인 프리웨이트는 허용, HIGH(벤치프레스 등)는 제외
-                if eq_diff == 'HIGH':
+        def filter_candidates(allowed_diffs):
+            filtered = []
+            for eq in self.equipments:
+                # 2-1. 타겟 부위 매칭 (DB 데이터 기반)
+                if not self._is_target_match(eq, target_parts):
                     continue
+                    
+                # 2-2. 난이도 필터링 (대소문자 무시)
+                eq_diff = str(getattr(eq, 'difficulty', 'MID')).upper()
+                if eq_diff not in allowed_diffs:
+                    continue
+
+                # 2-3. 초보자 보호 로직
+                # 초보자에게 FREE_WEIGHT는 가급적 제외 (단, 덤벨 컬 같은 단순 관절은 허용 가능)
+                eq_type = str(getattr(eq, 'type', 'MACHINE')).upper()
+                if is_beginner and eq_type == 'FREE_WEIGHT':
+                    # 난이도가 LOW인 프리웨이트는 허용, HIGH(벤치프레스 등)는 제외
+                    if eq_diff == 'HIGH':
+                        continue
+                
+                # 2-4. 가용성 모드 체크
+                if availability_mode == 'AVAILABLE_ONLY':
+                    # 사용 중이면 1차 필터링에서 제외 (나중에 대체제로 찾을 수 있음)
+                    # occupancy key can be DB id or ai_model.Equipment.equip_id
+                    occ_key = getattr(eq, 'equip_id', getattr(eq, 'id', None))
+                    if current_occupancy.get(occ_key, False): 
+                        continue 
+                
+                filtered.append(eq)
+            return filtered
+
+        candidates = filter_candidates(allowed_difficulties)
+        
+        # [Fallback System] 결과가 없을 경우 난이도 범위를 단계적으로 넓혀서 재검색
+        if not candidates:
+            # 1. '하' 선택 시 -> '중' 난이도까지 확장
+            if intensity == '하':
+                print("⚠️ '하' 난이도 기구 없음 -> '중' 난이도 포함 재검색")
+                candidates = filter_candidates(['LOW', 'MID'])
             
-            # 2-4. 가용성 모드 체크
-            if availability_mode == 'AVAILABLE_ONLY':
-                # 사용 중이면 1차 필터링에서 제외 (나중에 대체제로 찾을 수 있음)
-                # occupancy key can be DB id or ai_model.Equipment.equip_id
-                occ_key = getattr(eq, 'equip_id', getattr(eq, 'id', None))
-                if current_occupancy.get(occ_key, False): 
-                    continue 
-            
-            candidates.append(eq)
+            # 2. 여전히 없거나, '중' 선택 시 -> 전체 난이도('상' 포함)로 확장
+            if not candidates and (intensity == '하' or intensity == '중'):
+                print("⚠️ 기구 부족 -> 전체 난이도(상/중/하) 포함 재검색")
+                candidates = filter_candidates(['LOW', 'MID', 'HIGH'])
             
         if not candidates: return []
 

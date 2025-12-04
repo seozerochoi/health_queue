@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('equipment', '0003_add_subcategory'),
+        ('equipment', '0004_type_subcategory_difficulty'),
         ('equipment', '0005_equipment_daily_stats'),
     ]
 

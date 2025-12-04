@@ -4,7 +4,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('equipment', '0005_equipment_daily_stats'),
+        ('equipment', '0007_equipment_ai_model_body_part_image_url'),
     ]
 
     # 이 마이그레이션은 EquipmentDailyStats 모델을 equipment 앱 상태에서 제거하되
