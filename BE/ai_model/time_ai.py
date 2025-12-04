@@ -49,12 +49,13 @@ class Equipment:
     """
     운동 기구 정보를 관리하는 클래스입니다.
     """
-    def __init__(self, equip_id, name, main_part, sub_part):
+    def __init__(self, equip_id, name, main_part, sub_part, base_time=15):
         self.equip_id = equip_id
         self.name = name
         self.main_part = main_part # 0: Upper(상체), 1: Lower(하체)
         # 세부 타겟 부위 (예: "Chest", "Back", "Legs" 등)
-        self.sub_part = sub_part    
+        self.sub_part = sub_part
+        self.base_time = base_time # 기구별 기본 세팅 시간 (분)    
 
 # ==============================================================================
 # 2. 규칙 기반 엔진 (Rule-Based Formula Engine) - [The Teacher]
@@ -77,9 +78,9 @@ class FormulaEngine:
         ib = user.inbody
         
         # --- [Step 1] 기본 운동 시간 (Base Time) 설정 ---
-        # Diet: (3세트 * 15회 + 휴식 60초) * 3종목 = 약 315초
-        # Bulk-up: (3세트 * 10회 + 휴식 90초) * 3종목 = 약 360초
-        base_seconds = 360 if user.goal == 1 else 315
+        # 기구별 설정된 기본 시간(분)을 초 단위로 변환하여 기준점으로 사용
+        # 예: 15분 -> 900초
+        base_seconds = equipment.base_time * 60
         
         # --- [Step 2] 숙련도 지수 (Proficiency Factor: x1) ---
         # 인바디 점수가 80점 이상일수록 숙련자로 간주하여 시간을 늘림 (시그모이드 적용)
@@ -157,8 +158,8 @@ class AdaptiveNetwork(nn.Module):
 
 class AIEngine:
     def __init__(self):
-        # 입력 Feature Dimension 정의 (총 12개 Feature 사용)
-        self.input_dim = 12 
+        # 입력 Feature Dimension 정의 (총 13개 Feature 사용)
+        self.input_dim = 13 
         self.model = AdaptiveNetwork(self.input_dim)
         
         # [개선] 학습률(Learning Rate)을 0.001로 낮추어 급격한 변화를 방지하고 안정성을 높임
@@ -205,7 +206,8 @@ class AIEngine:
             ib.segmental_muscle['ra'],
             ib.segmental_muscle['la'],
             ib.segmental_muscle['trunk'],
-            leg_avg
+            leg_avg,
+            equipment.base_time # [New Feature] 기구별 기본 시간 추가
         ]
         return torch.FloatTensor(features)
 
@@ -238,7 +240,8 @@ class AIEngine:
                 r_arm=r_a, l_arm=l_a, trunk=trunk, r_leg=r_l, l_leg=l_l
             )
             d_user = User(0, "dummy", random.choice([0,1]), random.choice([0,1]), d_inbody)
-            d_equip = Equipment(0, "dummy_eq", random.choice([0,1]), "General")
+            # [수정] 가상 기구 생성 시 랜덤한 기본 시간(10~30분) 부여하여 다양성 학습
+            d_equip = Equipment(0, "dummy_eq", random.choice([0,1]), "General", base_time=random.randint(10, 30))
             
             # 수학 공식 엔진을 통해 정답(Label) 생성
             formula_time = self.formula_engine.calculate_time(d_user, d_equip)

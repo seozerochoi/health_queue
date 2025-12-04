@@ -192,7 +192,8 @@ class TimePredictionView(BaseAIView):
             equip_id=db_equip.id,
             name=db_equip.name,
             main_part=0 if db_equip.body_part == 'UPPER' else 1, # 예시 로직
-            sub_part=db_equip.subcategory
+            sub_part=db_equip.subcategory,
+            base_time=db_equip.base_session_time_minutes # DB에 설정된 기본 시간 전달
         )
 
         recommended_time = time_engine.predict_time(ai_user, ai_equip)
@@ -230,7 +231,13 @@ class FeedbackView(BaseAIView):
                 
                 # DB 객체 가져오기 & AI 객체 변환
                 db_eq = get_object_or_404(Equipment, pk=equip_id)
-                ai_eq = AIEquipment(db_eq.id, db_eq.name, 0, db_eq.subcategory) # 간소화
+                ai_eq = AIEquipment(
+                    db_eq.id, 
+                    db_eq.name, 
+                    0, 
+                    db_eq.subcategory,
+                    base_time=db_eq.base_session_time_minutes
+                ) # 간소화
 
                 target, loss = time_engine.update_with_feedback(ai_user, ai_eq, used_time, score)
                 
