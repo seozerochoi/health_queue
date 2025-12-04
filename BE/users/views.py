@@ -211,7 +211,7 @@ class InbodyAnalyzeView(APIView):
                         "   - 첫 번째 항목: 체중 (Weight)\n"
                         "   - 두 번째 항목: 골격근량 (Skeletal Muscle Mass)\n"
                         "   - 세 번째 항목: 체지방량 (Body Fat Mass)\n"
-                        "4. 세그멘탈 표 또는 표기(있으면): 우측/하단에 부위별 근육분석의 표준대비 %(Right/Left Arm, Trunk, Right/Left Leg)\n"
+                        "4. 세그멘탈 표 또는 표기(있으면): 우측/하단에 부위별 근육량(Right/Left Arm, Trunk, Right/Left Leg)\n"
                         "5. 우측 하단: '비만평가' 또는 'Obesity Evaluation' 섹션\n"
                         "   - 체지방률 (Body Fat Percentage) - '%' 기호 포함\n"
                         "   - BMI (Body Mass Index) - 'BMI' 레이블 근처\n\n"
@@ -242,7 +242,7 @@ class InbodyAnalyzeView(APIView):
                         "   - body_fat_mass_kg: 3-80\n"
                         "   - body_fat_percentage: 5-65\n"
                         "   - bmi: 10-50\n"
-                        "   - segment_*_%: 각 부위별 표준대비 퍼센트 (0-200% 범위)\n\n"
+                        "   - segment_*_kg: 각 부위별 근육량 (0.5-20kg 범위)\n\n"
                     
                         "=== 출력 형식 ===\n"
                         "순수한 JSON 객체만 반환하세요. 설명이나 마크다운 없이 JSON만 출력하세요.\n"
@@ -250,9 +250,9 @@ class InbodyAnalyzeView(APIView):
                         '"weight_kg": 숫자 또는 null, "inbody_score": 숫자 또는 null, '
                         '"skeletal_muscle_mass_kg": 숫자 또는 null, "body_fat_mass_kg": 숫자 또는 null, '
                         '"body_fat_percentage": 숫자 또는 null, "bmi": 숫자 또는 null, '
-                        '"segment_right_arm_percent": 숫자 또는 null, "segment_left_arm_percent": 숫자 또는 null, '
-                        '"segment_trunk_percent": 숫자 또는 null, "segment_right_leg_percent": 숫자 또는 null, '
-                        '"segment_left_leg_percent": 숫자 또는 null}'
+                        '"segment_right_arm_kg": 숫자 또는 null, "segment_left_arm_kg": 숫자 또는 null, '
+                        '"segment_trunk_kg": 숫자 또는 null, "segment_right_leg_kg": 숫자 또는 null, '
+                        '"segment_left_leg_kg": 숫자 또는 null}'
                 )
 
                 user_prompt = (
@@ -313,10 +313,10 @@ class InbodyAnalyzeView(APIView):
                         "10단계: 세그멘탈(부위별) 근육량 찾기 (가능하면)\n"
                         "   - 표기 예: 'Right Arm', 'Left Arm', 'Trunk', 'Right Leg', 'Left Leg'\n"
                         "   - 또는 한국어: '우측 팔', '좌측 팔', '몸통', '우측 다리', '좌측 다리'\n"
-                        "   - InBody 결과지에서 '표준체중 대비(%)' 또는 'Percentage of standard value' 값을 찾으세요.\n"
-                        "   - 각 부위: 보통 80-130% 범위입니다.\n"
-                        "   → segment_right_arm_percent, segment_left_arm_percent, segment_trunk_percent,\n"
-                        "      segment_right_leg_percent, segment_left_leg_percent에 저장\n\n"
+                        "   - InBody 770은 부위별 kg 표기가 있음. 없는 경우 null로 둡니다.\n"
+                        "   - 각 부위: 0.5-20kg 범위\n"
+                        "   → segment_right_arm_kg, segment_left_arm_kg, segment_trunk_kg,\n"
+                        "      segment_right_leg_kg, segment_left_leg_kg에 저장\n\n"
                     
                         "⚠️ 주의사항:\n"
                         "- 괄호 안의 범위 값(정상 범위)은 절대 추출하지 마세요\n"
@@ -329,8 +329,8 @@ class InbodyAnalyzeView(APIView):
                         '{"gender": "Male", "age": 35, "height_cm": 156.0, "weight_kg": 59.1, '
                         '"inbody_score": 85, "skeletal_muscle_mass_kg": 25.8, "body_fat_mass_kg": 18.2, '
                         '"body_fat_percentage": 36.2, "bmi": 27.3, '
-                        '"segment_right_arm_percent": 105.2, "segment_left_arm_percent": 103.5, '
-                        '"segment_trunk_percent": 100.1, "segment_right_leg_percent": 98.5, "segment_left_leg_percent": 99.0}\n\n'
+                        '"segment_right_arm_kg": 2.5, "segment_left_arm_kg": 2.3, '
+                        '"segment_trunk_kg": 10.2, "segment_right_leg_kg": 8.0, "segment_left_leg_kg": 7.9}\n\n'
                     
                         "이제 이미지를 분석하여 JSON만 반환해주세요:"
                 )
@@ -393,11 +393,11 @@ class InbodyAnalyzeView(APIView):
                     'body_fat_mass_kg': to_num(data.get('body_fat_mass_kg')),
                     'body_fat_percentage': to_num(data.get('body_fat_percentage')),
                     'bmi': to_num(data.get('bmi')),
-                    'segment_right_arm_percent': to_num(data.get('segment_right_arm_percent')),
-                    'segment_left_arm_percent': to_num(data.get('segment_left_arm_percent')),
-                    'segment_trunk_percent': to_num(data.get('segment_trunk_percent')),
-                    'segment_right_leg_percent': to_num(data.get('segment_right_leg_percent')),
-                    'segment_left_leg_percent': to_num(data.get('segment_left_leg_percent')),
+                    'segment_right_arm_kg': to_num(data.get('segment_right_arm_kg')),
+                    'segment_left_arm_kg': to_num(data.get('segment_left_arm_kg')),
+                    'segment_trunk_kg': to_num(data.get('segment_trunk_kg')),
+                    'segment_right_leg_kg': to_num(data.get('segment_right_leg_kg')),
+                    'segment_left_leg_kg': to_num(data.get('segment_left_leg_kg')),
                 }
 
                 # Persist image and parsed result

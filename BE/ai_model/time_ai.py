@@ -49,14 +49,14 @@ class Equipment:
     """
     운동 기구 정보를 관리하는 클래스입니다.
     """
-    def __init__(self, equip_id, name, main_part, sub_part, base_time=15, equip_type='MACHINE'):
+    def __init__(self, equip_id, name, main_part, sub_part, base_time=None, equip_type=None):
         self.equip_id = equip_id
         self.name = name
         self.main_part = main_part # 0: Upper(상체), 1: Lower(하체)
         # 세부 타겟 부위 (예: "Chest", "Back", "Legs" 등)
         self.sub_part = sub_part
-        self.base_time = base_time # 기구별 기본 세팅 시간 (분) - 참고용
-        self.equip_type = equip_type # 'CARDIO', 'MACHINE', 'FREE_WEIGHT' 등
+        self.base_time = base_time
+        self.equip_type = equip_type    
 
 # ==============================================================================
 # 2. 규칙 기반 엔진 (Rule-Based Formula Engine) - [The Teacher]
@@ -78,105 +78,79 @@ class FormulaEngine:
         """
         ib = user.inbody
         
-        # --- [Step 1] 변수 표준화 및 지표 계산 ---
+        # --- [Step 1] 기본 운동 시간 (Base Time) 설정 ---
+        # DB의 고정 시간(base_time)은 무시하고, 기구 타입과 운동 목적에 따라 AI가 직접 산출합니다.
         
-        # 1. 숙련도 지수 (x1) - 인바디 점수 정규화 (시그모이드)
-        # 80점을 표준 0.5로 매핑
+        # 1-1. 기구 타입에 따른 베이스 설정
+        # 유산소(CARDIO)는 기본 호흡량이 필요하므로 길게, 근력 운동은 세트 단위로 짧게 설정
+        eq_type = str(equipment.equip_type).upper()
+        
+        if eq_type == 'CARDIO':
+            # 유산소 기본: 20분 (1200초)
+            # 다이어트 목적이면 더 길게(30분), 근비대면 웜업 정도로 짧게(15분)
+            if user.goal == 0: # Diet
+                base_seconds = 1800 # 30분
+            else: # Bulk-up
+                base_seconds = 900  # 15분
+        else:
+            # 근력 운동 (Machine, Free Weight 등)
+            # Diet: (3세트 * 15회 + 휴식 60초) * 3종목(가정) = 약 315초 (약 5분)
+            # Bulk-up: (3세트 * 10회 + 휴식 90초) * 3종목(가정) = 약 360초 (약 6분)
+            base_seconds = 360 if user.goal == 1 else 315
+        
+        # --- [Step 2] 숙련도 지수 (Proficiency Factor: x1) ---
+        # 인바디 점수가 80점 이상일수록 숙련자로 간주하여 시간을 늘림 (시그모이드 적용)
         x1 = 1 / (1 + np.exp(-0.1 * (ib.score - 80)))
         
-        # 2. 상대적 비만도 (rel_obesity)
-        # WHO 아시아-태평양 비만기준: 남자 25%, 여자 30%
+        # --- [Step 3] 상황 계수 (Situation Coefficient) ---
+        # 3-1. 상대적 비만도 계산
         std_fat = self.STD_FAT_RATE[user.gender]
         rel_obesity = ib.fat_rate / std_fat
         
-        # 3. 근지방 비율 (muscle_fat_ratio)
-        # 마른 비만과 근육형 과체중 구분용
+        # 3-2. 근육/지방 비율 (간략화: 골격근량 / 체지방량)
         muscle_fat_ratio = ib.muscle_mass / (ib.fat_mass if ib.fat_mass > 0 else 1)
         
-        # 4. 근감소증 위험도 (x4) - AWGS 기준
-        # 골격근량 지수 = 골격근량 / (키^2)
-        # 기준치 7.0 미만일 경우 부족률 계산
+        # 3-3. 운동 목적 계수 적용
+        if user.goal == 0: # Diet
+            # 비만도가 높을수록 유산소성/반복 운동 시간 증가 (+ 가중치)
+            purpose_coeff = 0.5 * max(0, rel_obesity - 1.0)
+        else: # Bulk-up
+            # 비만도가 높으면 관절 부하 등을 고려해 시간 소폭 감소, 단 근육량이 많으면 상쇄
+            purpose_coeff = -0.5 * max(0, rel_obesity - 1.0) * (1 - min(1, muscle_fat_ratio))
+            
+        situation_coeff = (1 + 0.67 * x1) * (1 + purpose_coeff)
+        
+        # --- [Step 4] 조정 계수 (Adjustment Coefficient) ---
+        # 4-1. 근감소증 위험도 (SMI 지수) 반영
         height_m = ib.height / 100
         smi = ib.muscle_mass / (height_m ** 2) if height_m > 0 else 0
-        x4 = max(0, (7.0 - smi) / 7.0)
         
-        # 5. 상하체 불균형 지수 (imbalance)
-        # 상체 평균 % / 하체 평균 %
+        # SMI 기준(7.0) 미달 시 부상 방지를 위해 시간 감소
+        x4 = max(0, (7.0 - smi) / 7.0)
+        sarcopenia_coeff = 1.0 - (x4 * 0.75)
+        
+        # 4-2. 상하체 불균형 지수 반영
         mus = ib.segmental_muscle
         upper_avg = (mus['ra'] + mus['la'] + mus['trunk']) / 3
         lower_avg = (mus['rl'] + mus['ll']) / 2
-        imbalance = upper_avg / lower_avg if lower_avg > 0 else 1.0
+        imbalance = upper_avg / lower_avg if lower_avg > 0 else 1.0 # >1: 상체 발달형, <1: 하체 발달형
         
-        
-        # --- [Step 2] 기본 운동 시간 (Base Time) 설정 ---
-        # 미국스포츠의학회(ACSM) 기준
-        
-        if user.goal == 1: # Bulk-up (근비대)
-            # 1세트당 6~12회, 휴식 60~90초 -> 3세트 기준 (1회 3초 가정)
-            # (3*10회 + 90초) * 3세트 = 360초 = 6분
-            base_seconds = 360.0
-        else: # Diet (다이어트)
-            # 1세트당 15회 이상, 휴식 60초 미만 -> 3세트 기준
-            # (3*15회 + 60초) * 3세트 = 315초 = 5.25분
-            base_seconds = 315.0
+        # 신체 밸런스를 맞추기 위해 약점 부위 운동 시간을 조정
+        if equipment.main_part == 0: # 상체 기구 이용 시
+            # 상체가 이미 강함(>1) -> 시간 감소 / 상체가 약함(<1) -> 시간 증가
+            y = -0.3 * (imbalance - 1.0) 
+        else: # 하체 기구 이용 시
+            # 하체가 이미 강함(<1) -> 시간 감소 / 하체가 약함(>1) -> 시간 증가
+            y = 0.3 * (imbalance - 1.0)
             
-        # 유산소 기구일 경우 기본 시간 재설정 (PDF에는 명시 없으나 통상적 기준 적용 필요)
-        # 여기서는 PDF 로직의 일관성을 위해 근력 운동 기준으로 계산된 base_seconds를 
-        # 유산소에도 적용하되, 유산소 특성상 배수를 적용하는 것이 타당해 보임.
-        # 일단 PDF 공식 그대로 적용.
-        
-        
-        # --- [Step 3] 상황 계수 (Situation Coefficient) ---
-        # 상황계수 = (1 + 0.67*x1) * (1 + 신체운동목적계수)
-        
-        # 0.67*x1: 숙련자(5세트) 보정 (초보자 3세트 대비 약 1.67배)
-        proficiency_factor = 1 + 0.67 * x1
-        
-        # 신체운동목적계수
-        if user.goal == 0: # Diet
-            # 다이어트: 시간 증가 (칼로리 소모)
-            purpose_coeff = 0.5 * max(0, rel_obesity - 1.0)
-        else: # Bulk-up
-            # 근비대: 시간 감소 (관절 부하 감소), 단 근육형 과체중은 패널티 상쇄
-            purpose_coeff = -0.5 * max(0, rel_obesity - 1.0) * (1 - min(1, muscle_fat_ratio))
-            
-        situation_coeff = proficiency_factor * (1 + purpose_coeff)
-        
-        
-        # --- [Step 4] 조정 계수 (Adjustment Coefficient) ---
-        # 조정계수 = 근감소증보정계수 * 상하체균형보정계수
-        
-        # 근감소증 보정계수
-        sarcopenia_coeff = 1.0 - (x4 * 0.75)
-        
-        # 상하체 균형 보정계수
-        # alpha = 상하체불균형지수 - 1.0
-        alpha = imbalance - 1.0
-        
-        if equipment.main_part == 0: # 상체 기구
-            # 상체가 약하면(imbalance < 1.0 -> alpha < 0) 시간 증가 (gamma > 0)
-            # 상체가 강하면(imbalance > 1.0 -> alpha > 0) 시간 감소 (gamma < 0)
-            gamma = -0.30 * alpha
-        else: # 하체 기구
-            # 하체가 약하면(imbalance > 1.0 -> alpha > 0) 시간 증가 (gamma > 0)
-            # 하체가 강하면(imbalance < 1.0 -> alpha < 0) 시간 감소 (gamma < 0)
-            gamma = 0.30 * alpha
-            
-        balance_coeff = 1.0 + gamma
-        
-        
+        balance_coeff = 1.0 + y
+
         # --- [Final] 최종 시간 산출 ---
         final_seconds = base_seconds * situation_coeff * sarcopenia_coeff * balance_coeff
         final_minutes = final_seconds / 60.0
         
-        # 유산소 기구의 경우 기본 시간이 너무 짧게 계산될 수 있으므로(5~6분), 
-        # 유산소 특성을 고려하여 최소 시간 보정 (예: x3 ~ x5)
-        if equipment.equip_type == 'CARDIO':
-            final_minutes *= 5.0 
-
-        # 안전 범위 클램핑 (최소 5분 ~ 최대 60분)
-        return max(5.0, min(60.0, final_minutes))
-
+        # 안전 범위 클램핑 (최소 5분 ~ 최대 90분)
+        return max(5.0, min(90.0, final_minutes))
 
 # ==============================================================================
 # 3. AI 신경망 모델 (Adaptive AI Model) - [The Student]
@@ -200,9 +174,8 @@ class AdaptiveNetwork(nn.Module):
 
 class AIEngine:
     def __init__(self):
-        # 입력 Feature Dimension 정의 (총 14개 Feature 사용)
-        # Raw(7) + Equip(2) + Derived(5) = 14
-        self.input_dim = 14 
+        # 입력 Feature Dimension 정의 (총 12개 Feature 사용)
+        self.input_dim = 12 
         self.model = AdaptiveNetwork(self.input_dim)
         
         # [개선] 학습률(Learning Rate)을 0.001로 낮추어 급격한 변화를 방지하고 안정성을 높임
@@ -236,53 +209,20 @@ class AIEngine:
     def _extract_features(self, user, equipment):
         """
         User 및 Equipment 객체 정보를 AI 모델 입력용 텐서(Tensor)로 변환합니다.
-        [Update] PDF 공식에서 사용된 핵심 파생 변수들을 Feature로 추가하여
-        AI가 '비슷한 유형의 사람'을 더 잘 식별하도록 개선했습니다.
         """
         ib = user.inbody
         height_m = ib.height / 100
         bmi = ib.weight / (height_m**2) if height_m > 0 else 0
-        
-        # 1. PDF 핵심 지표 계산
-        # 숙련도 지수 (x1)
-        x1 = 1 / (1 + np.exp(-0.1 * (ib.score - 80)))
-        
-        # 상대적 비만도
-        std_fat = 25.0 if user.gender == 0 else 30.0
-        rel_obesity = ib.fat_rate / std_fat
-        
-        # 근지방 비율
-        muscle_fat_ratio = ib.muscle_mass / (ib.fat_mass if ib.fat_mass > 0 else 1)
-        
-        # 근감소증 위험도 (x4)
-        smi = ib.muscle_mass / (height_m ** 2) if height_m > 0 else 0
-        x4 = max(0, (7.0 - smi) / 7.0)
-        
-        # 상하체 불균형 지수
-        mus = ib.segmental_muscle
-        upper_avg = (mus['ra'] + mus['la'] + mus['trunk']) / 3
-        lower_avg = (mus['rl'] + mus['ll']) / 2
-        imbalance = upper_avg / lower_avg if lower_avg > 0 else 1.0
-        
-        # 공식 계산 시간 (Formula Time) - AI가 기준점을 알 수 있도록 제공
-        # (순환 참조 방지를 위해 FormulaEngine 인스턴스를 새로 만들지 않고 로직만 간단히 참조하거나, 
-        #  여기서는 복잡도를 줄이기 위해 생략하고 위 파생 변수들로 충분하다고 판단함)
+        leg_avg = (ib.segmental_muscle['rl'] + ib.segmental_muscle['ll']) / 2
         
         features = [
-            # Raw Data
             ib.score, ib.fat_rate, ib.muscle_mass, ib.height, bmi,
             user.gender, user.goal,
-            
-            # Equipment Info
             equipment.main_part, # 0:Upper, 1:Lower
-            equipment.base_time, # DB Base Time
-            
-            # [New] Derived Features (PDF Logic) - AI의 '통찰력'을 높여주는 핵심 힌트
-            x1,               # 숙련도
-            rel_obesity,      # 상대적 비만도
-            muscle_fat_ratio, # 근지방 비율
-            x4,               # 근감소증 위험도
-            imbalance         # 상하체 불균형
+            ib.segmental_muscle['ra'],
+            ib.segmental_muscle['la'],
+            ib.segmental_muscle['trunk'],
+            leg_avg
         ]
         return torch.FloatTensor(features)
 
@@ -291,12 +231,8 @@ class AIEngine:
         [Cold Start 문제 해결]
         초기 학습 데이터가 없을 때, 가상 유저 데이터를 생성하여 규칙 기반(Formula) 값으로 
         모델을 선행 학습시킵니다.
-        
-        [Hybrid AI Update]
-        이제 AI는 '공식 값'과 '실제 값'의 차이(Residual)를 학습합니다.
-        초기 상태에서는 공식이 완벽하다고 가정하므로, AI가 0(보정 없음)을 출력하도록 학습합니다.
         """
-        print("⚡ [System] AI 모델 선행 학습(Pre-training) 시작... (Residual Learning: Target=0)")
+        print("⚡ [System] AI 모델 선행 학습(Pre-training) 시작... (Rule-Base 기준)")
         
         for _ in range(sample_size):
             # 랜덤 가상 유저 데이터 생성
@@ -304,13 +240,13 @@ class AIEngine:
             w = random.uniform(50, 100) # 체중
             m = random.uniform(20, 40)  # 골격근량
             
-            # 부위별 근육량 (%) - 표준 체중 대비 백분율 (보통 80~130% 범위)
-            # [수정] kg 단위가 아닌 % 단위로 생성
-            r_a = random.uniform(80, 120)
-            l_a = random.uniform(80, 120)
-            trunk = random.uniform(90, 110)
-            r_l = random.uniform(80, 120)
-            l_l = random.uniform(80, 120)
+            # 부위별 근육량 (kg) - 대략적인 비율 가정
+            # 팔: 근육량의 5~7%, 다리: 15~20%, 몸통: 45~55%
+            r_a = m * random.uniform(0.05, 0.08)
+            l_a = m * random.uniform(0.05, 0.08)
+            trunk = m * random.uniform(0.45, 0.55)
+            r_l = m * random.uniform(0.15, 0.20)
+            l_l = m * random.uniform(0.15, 0.20)
 
             d_inbody = InBodyData(
                 score=random.uniform(60, 90), weight=w,
@@ -319,16 +255,14 @@ class AIEngine:
                 r_arm=r_a, l_arm=l_a, trunk=trunk, r_leg=r_l, l_leg=l_l
             )
             d_user = User(0, "dummy", random.choice([0,1]), random.choice([0,1]), d_inbody)
-            # [수정] 가상 기구 생성 시 랜덤한 기본 시간(10~30분) 부여하여 다양성 학습
-            d_equip = Equipment(0, "dummy_eq", random.choice([0,1]), "General", base_time=random.randint(10, 30))
+            d_equip = Equipment(0, "dummy_eq", random.choice([0,1]), "General")
             
             # 수학 공식 엔진을 통해 정답(Label) 생성
-            # Hybrid 방식이므로 AI의 목표값은 0 (공식 그대로 사용)
-            target_residual = 0.0
+            formula_time = self.formula_engine.calculate_time(d_user, d_equip)
             features = self._extract_features(d_user, d_equip)
             
             # [중요] 가상 데이터도 메모리에 추가하여 초기 지식으로 활용
-            self.memory.append((features, target_residual))
+            self.memory.append((features, formula_time))
 
         # 초기 메모리에 있는 데이터로 1차 학습 (Batch Training)
         self._replay_train(epochs=50)
@@ -339,23 +273,13 @@ class AIEngine:
     def predict_time(self, user, equipment):
         """
         현재 학습된 모델을 사용하여 추천 운동 시간을 예측합니다.
-        [Hybrid AI Logic]
-        최종 시간 = (공식 계산 시간) + (AI 보정 시간)
         """
-        # 1. 공식 기반 계산 (Base Logic) - 즉시 적용됨
-        base_time = self.formula_engine.calculate_time(user, equipment)
-
-        # 2. AI 보정값 예측 (Residual Learning)
         self.model.eval()
         with torch.no_grad():
             inputs = self._extract_features(user, equipment).unsqueeze(0)
-            adjustment = self.model(inputs).item()
-        
-        # 3. 최종 시간 산출
-        final_time = base_time + adjustment
-
+            pred = self.model(inputs).item()
         # 안전 범위 적용 (5분 ~ 90분)
-        return max(5.0, min(90.0, final_time))
+        return max(5.0, min(90.0, pred))
 
     def update_with_feedback(self, user, equipment, recommended_time, feedback_score):
         """
@@ -386,14 +310,9 @@ class AIEngine:
         max_limit = recommended_time * 1.5
         target_time = max(min_limit, min(max_limit, target_time))
 
-        # [Hybrid AI Update]
-        # AI는 (목표 시간 - 공식 시간)의 차이를 학습해야 함
-        formula_time = self.formula_engine.calculate_time(user, equipment)
-        target_residual = target_time - formula_time
-
         # 3. [핵심 추가 4] 메모리에 저장 (Experience Replay)
         features = self._extract_features(user, equipment)
-        self.memory.append((features, target_residual))
+        self.memory.append((features, target_time))
 
         # 4. [핵심 추가 5] 배치 학습 (Batch Training)
         # 현재 데이터 하나만 학습하는 것이 아니라, 과거의 기억을 꺼내 함께 복습

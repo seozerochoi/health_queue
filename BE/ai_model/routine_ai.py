@@ -347,18 +347,22 @@ class RoutineAIEngine:
         try:
             main_part = 0 if str(getattr(db_eq, 'body_part', 'UPPER')).upper() == 'UPPER' else 1
             sub_part = getattr(db_eq, 'subcategory', None) or str(getattr(db_eq, 'name', 'GENERAL'))
-            base_time = getattr(db_eq, 'base_session_time_minutes', 15) # DB 값 사용
+            
+            # [수정] DB의 base_session_time_minutes와 type을 함께 전달
+            base_time = getattr(db_eq, 'base_session_time_minutes', None)
+            equip_type = getattr(db_eq, 'type', None)
             
             return Equipment(
                 getattr(db_eq, 'id', getattr(db_eq, 'equip_id', 0)),
                 getattr(db_eq, 'name', 'Unknown'),
                 main_part,
                 sub_part,
-                base_time=base_time
+                base_time=base_time,
+                equip_type=equip_type
             )
         except Exception:
             # 실패 시 안전한 기본값 반환
-            return Equipment(0, "DUMMY", 0, "GENERAL", base_time=15)
+            return Equipment(0, "DUMMY", 0, "GENERAL")
 
     def _sort_routine_scientifically(self, routine_list, is_beginner):
         """
