@@ -1,4 +1,4 @@
-from django.db import migrations, models
+﻿from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
@@ -21,7 +21,7 @@ class Migration(migrations.Migration):
                 ],
             ),
         ),
-        migrations.AlterField(
+        migrations.AddField(
             model_name='equipment',
             name='subcategory',
             field=models.CharField(
