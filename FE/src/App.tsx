@@ -13,7 +13,7 @@ import { GymSearch } from "./components/GymSearch";
 import { EquipmentList } from "./components/EquipmentList";
 import { AIRoutineRecommendation } from "./components/AIRoutineRecommendation";
 import { AdminDashboard } from "./components/AdminDashboard";
-import { NFCTagging } from "./components/NFCTagging";
+import { NFCReader } from "./components/NFCReader";
 import { WorkoutTimer } from "./components/WorkoutTimer";
 import { SatisfactionSurvey } from "./components/SatisfactionSurvey";
 import { ReservationStatus } from "./components/ReservationStatus";
@@ -85,7 +85,6 @@ type AppView =
   | "equipment-list"
   | "ai-recommendation"
   | "admin-dashboard"
-  | "nfc-tagging"
   | "workout-timer"
   | "satisfaction-survey"
   | "reservation-status"
@@ -124,6 +123,8 @@ export default function App() {
   const [tempPassword, setTempPassword] = useState<string>("");
   // 사용자가 NFC 과정을 거치지 않고 바로 타이머로 진입했는지 여부
   const [directWorkout, setDirectWorkout] = useState<boolean>(false);
+  // NFC 스캔 활성화 여부
+  const [nfcEnabled, setNfcEnabled] = useState(false);
 
   const getApiBase = () => {
     try {
@@ -562,13 +563,77 @@ export default function App() {
     }
   };
 
-  const handleStartNFC = () => {
-    setCurrentView("nfc-tagging");
-  };
+  // NFC 태그 감지 시 운동 시작
+  const handleNFCTagDetected = async (equipmentId: string | number) => {
+    console.log("🏷️ NFC 태그로 운동 시작:", equipmentId);
 
-  const handleTaggingComplete = () => {
-    setWorkoutStartTime(new Date());
-    setCurrentView("workout-timer");
+    const numEquipmentId = typeof equipmentId === "string"
+      ? parseInt(equipmentId)
+      : equipmentId;
+
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        alert("로그인이 필요합니다.");
+        return;
+      }
+
+      const apiBase = getApiBase();
+      const response = await fetch(`${apiBase}/api/workouts/start/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          equipment_id: numEquipmentId,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("NFC 운동 시작 실패:", response.status, errorText);
+        alert("운동 시작에 실패했습니다. 기구가 사용 가능한지 확인해주세요.");
+        return;
+      }
+
+      const data = await response.json();
+      console.log("✅ NFC 운동 시작 성공:", data);
+
+      // 선택된 장비 설정
+      const equipment = equipmentList.find(
+        (e) => Number(e.id) === numEquipmentId
+      );
+      if (equipment) {
+        setSelectedEquipment(equipment);
+      } else {
+        console.warn("기구를 찾을 수 없음, ID:", numEquipmentId);
+        setSelectedEquipment({
+          id: String(numEquipmentId),
+          name: "운동 기구",
+          state: "IN-USE",
+          type: "",
+          status: "in-use",
+          image: "",
+          allocatedTime: 0,
+        } as Equipment);
+      }
+
+      setWorkoutStartTime(new Date());
+      setCurrentView("workout-timer");
+      setDirectWorkout(true);
+
+      // 즉시 heartbeat 전송
+      await sendImmediateHeartbeat(numEquipmentId);
+
+      // 장비 상태 갱신
+      await fetchEquipment();
+
+      console.log("🎬 운동 타이머 화면으로 이동");
+    } catch (error) {
+      console.error("NFC 운동 시작 중 오류:", error);
+      alert("운동 시작 중 오류가 발생했습니다.");
+    }
   };
 
   const handleWorkoutComplete = () => {
@@ -1688,6 +1753,17 @@ export default function App() {
     }
   }, [currentView, userName]);
 
+  // NFC 스캔 활성화/비활성화 관리
+  useEffect(() => {
+    if (currentView === "equipment-list" || currentView === "reservation-status") {
+      setNfcEnabled(true);
+      console.log("✅ NFC 스캔 활성화 (현재 뷰:", currentView, ")");
+    } else {
+      setNfcEnabled(false);
+      console.log("🚫 NFC 스캔 비활성화");
+    }
+  }, [currentView]);
+
   // equipment-list 탭 선택 시 항상 API로 최신 데이터 로드
   useEffect(() => {
     if (currentView === "equipment-list" && userName) {
@@ -1759,19 +1835,12 @@ export default function App() {
         setCurrentView("mode-selection");
         setSelectedMode(null);
         break;
-      case "nfc-tagging":
-        setCurrentView("equipment-list");
-        break;
       case "workout-timer":
-        // 바로 시작한 경우엔 NFC 화면이 없으므로 목록으로 돌아간다
-        if (directWorkout) {
-          setCurrentView("equipment-list");
-          setSelectedEquipment(null);
-          setWorkoutStartTime(null);
-          setDirectWorkout(false);
-        } else {
-          setCurrentView("nfc-tagging");
-        }
+        // 바로 시작한 경우 목록으로 돌아간다
+        setCurrentView("equipment-list");
+        setSelectedEquipment(null);
+        setWorkoutStartTime(null);
+        setDirectWorkout(false);
         break;
       case "satisfaction-survey":
         setCurrentView("equipment-list");
@@ -1853,14 +1922,20 @@ export default function App() {
 
       case "equipment-list":
         return selectedGym ? (
-          <EquipmentList
-            gymName={selectedGym.gym_name || ""}
-            onBack={navigateBack}
-            onEquipmentSelect={handleEquipmentSelect}
-            equipment={equipmentList}
-            loading={equipmentLoading}
-            error={equipmentError}
-          />
+          <>
+            <NFCReader
+              onTagDetected={handleNFCTagDetected}
+              isEnabled={nfcEnabled}
+            />
+            <EquipmentList
+              gymName={selectedGym.gym_name || ""}
+              onBack={navigateBack}
+              onEquipmentSelect={handleEquipmentSelect}
+              equipment={equipmentList}
+              loading={equipmentLoading}
+              error={equipmentError}
+            />
+          </>
         ) : null;
 
       case "ai-recommendation":
@@ -1880,15 +1955,6 @@ export default function App() {
             onLogout={handleLogout}
           />
         );
-
-      case "nfc-tagging":
-        return selectedEquipment ? (
-          <NFCTagging
-            equipmentName={selectedEquipment.name}
-            onBack={navigateBack}
-            onTaggingComplete={handleTaggingComplete}
-          />
-        ) : null;
 
       case "workout-timer":
         return selectedEquipment ? (
@@ -1913,17 +1979,23 @@ export default function App() {
 
       case "reservation-status":
         return (
-          <ReservationStatus
-            onBack={navigateBack}
-            gymName={selectedGym?.gym_name || ""}
-            reservations={reservations}
-            onCancelReservation={handleCancelReservation}
-            onJoinQueue={handleAiQueueJoin}
-            defaultTab={reservationTab}
-            equipmentList={equipmentList}
-            onMarkAiUsed={handleAiMarkUsed}
-            onStartImmediate={handleAiStartImmediate}
-          />
+          <>
+            <NFCReader
+              onTagDetected={handleNFCTagDetected}
+              isEnabled={nfcEnabled}
+            />
+            <ReservationStatus
+              onBack={navigateBack}
+              gymName={selectedGym?.gym_name || ""}
+              reservations={reservations}
+              onCancelReservation={handleCancelReservation}
+              onJoinQueue={handleAiQueueJoin}
+              defaultTab={reservationTab}
+              equipmentList={equipmentList}
+              onMarkAiUsed={handleAiMarkUsed}
+              onStartImmediate={handleAiStartImmediate}
+            />
+          </>
         );
 
       case "my-page":

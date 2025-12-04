@@ -1,16 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🏋️</text></svg>"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Health Queue</title>
+    <script type="module" crossorigin src="/assets/index-CL-1boq8.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-afEUNdt6.css">
+  </head>
 
-  <!DOCTYPE html>
-  <html lang="en">
-    <head>
-      <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>Health_queue</title>
-      <script type="module" crossorigin src="/assets/index-61kv2paV.js"></script>
-      <link rel="stylesheet" crossorigin href="/assets/index-GH03yrAp.css">
-    </head>
-
-    <body>
-      <div id="root"></div>
-    </body>
-  </html>
-  
+  <body>
+    <div id="root"></div>
+    <!-- Token storage shim: redirect critical auth keys to sessionStorage for per-tab isolation -->
+    <script>
+      (function () {
+        try {
+          const KEYS = ["access_token", "refresh_token", "current_user"];
+          // Migrate existing localStorage tokens (if any) into sessionStorage once
+          KEYS.forEach((k) => {
+            const sv = sessionStorage.getItem(k);
+            if (!sv) {
+              const lv = localStorage.getItem(k);
+              if (lv) sessionStorage.setItem(k, lv);
+            }
+          });
+          // Monkey patch localStorage methods for these keys so legacy code paths transparently use sessionStorage
+          const lg = localStorage.getItem.bind(localStorage);
+          localStorage.getItem = function (key) {
+            if (KEYS.includes(key)) return sessionStorage.getItem(key);
+            return lg(key);
+          };
+          const ls = localStorage.setItem.bind(localStorage);
+          localStorage.setItem = function (key, value) {
+            if (KEYS.includes(key)) return sessionStorage.setItem(key, value);
+            return ls(key, value);
+          };
+          const lr = localStorage.removeItem.bind(localStorage);
+          localStorage.removeItem = function (key) {
+            if (KEYS.includes(key)) return sessionStorage.removeItem(key);
+            return lr(key);
+          };
+          // Optional: expose helper
+          window.__tokenStorage = {
+            get: (k) => sessionStorage.getItem(k),
+            set: (k, v) => sessionStorage.setItem(k, v),
+            remove: (k) => sessionStorage.removeItem(k),
+          };
+          console.log(
+            "[AuthStorage] Using sessionStorage for tokens (per-tab isolation)"
+          );
+        } catch (e) {
+          console.warn("[AuthStorage] shim failed", e);
+        }
+      })();
+    </script>
+  </body>
+</html>
