@@ -205,8 +205,8 @@ class AIEngine:
         self.input_dim = 14 
         self.model = AdaptiveNetwork(self.input_dim)
         
-        # [개선] 학습률(Learning Rate)을 0.001로 낮추어 급격한 변화를 방지하고 안정성을 높임
-        self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
+        # [개선] 학습률(Learning Rate)을 0.01로 높여 피드백 반영 속도를 높임
+        self.optimizer = optim.Adam(self.model.parameters(), lr=0.01)
         self.criterion = nn.MSELoss()
         self.formula_engine = FormulaEngine()
         self.is_trained = False
@@ -399,7 +399,7 @@ class AIEngine:
         # 4. [핵심 추가 5] 배치 학습 (Batch Training)
         # 현재 데이터 하나만 학습하는 것이 아니라, 과거의 기억을 꺼내 함께 복습
         # [개선] 최신 피드백을 즉시 반영하기 위해 Epoch 수를 늘리고, recent_sample을 명시적으로 전달
-        loss = self._replay_train(epochs=5, recent_sample=recent_sample)
+        loss = self._replay_train(epochs=10, recent_sample=recent_sample)
 
         # 5. [핵심 추가 6] 모델 자동 저장 (Auto-Save)
         # 학습된 뇌(가중치)를 파일로 저장하여 서버 재시작 시에도 유지되도록 함
@@ -422,9 +422,9 @@ class AIEngine:
         total_loss = 0
 
         for _ in range(epochs):
-            # [개선] 최신 피드백 Oversampling (배치의 25% 할당)
+            # [개선] 최신 피드백 Oversampling (배치의 50% 할당)
             if recent_sample:
-                n_recent = 8 # 32개 중 8개 (25%)
+                n_recent = 16 # 32개 중 16개 (50%)
                 batch = [recent_sample] * n_recent
                 
                 n_needed = self.batch_size - n_recent
