@@ -947,7 +947,7 @@ export function AdminDashboard({
                   }
 
                   return (
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-4">
                       {filteredUsers.map((user) => {
                         // 상태 뱃지 스타일
                         const getStatusBadge = (status: UserStatus) => {
