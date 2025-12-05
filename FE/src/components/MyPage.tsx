@@ -481,19 +481,9 @@ export function MyPage({
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-4xl mx-auto space-y-6">
-        {/* 헤더: 좌측 뒤로가기, 중앙 제목, 우측 로그아웃 */}
+        {/* 헤더: 중앙 제목, 우측 로그아웃 */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onBack}
-              className="text-foreground hover:bg-secondary"
-            >
-              뒤로
-            </Button>
-            <h1 className="text-2xl font-bold text-foreground">마이페이지</h1>
-          </div>
+          <h1 className="text-2xl font-bold text-foreground">마이페이지</h1>
           <Button
             variant="outline"
             size="sm"

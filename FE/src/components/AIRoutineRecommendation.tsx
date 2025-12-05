@@ -303,15 +303,7 @@ export function AIRoutineRecommendation({
     return (
       <div className="min-h-screen bg-background p-4">
         <div className="max-w-2xl mx-auto space-y-6">
-          <div className="flex items-center space-x-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setStep("form")}
-              className="text-white hover:bg-gray-700"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
+          <div className="flex items-center">
             <h1 className="text-2xl font-bold text-white">AI 추천 루틴</h1>
           </div>
 
@@ -454,23 +446,16 @@ export function AIRoutineRecommendation({
               <div className="flex space-x-4">
                 <Button
                   onClick={async () => {
-                    // 피드백 전송 후 재생성 (실시간 반영)
+                    // 피드백 전송 후 입력 폼으로 돌아가기
                     await submitFeedback();
                     setEquipmentRatings({});
-                    generateRoutine();
+                    setStep("form");
                   }}
                   variant="outline"
                   className="flex-1 border-gray-600 text-gray-300 hover:bg-gray-700"
                   disabled={isLoading}
                 >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      생성 중...
-                    </>
-                  ) : (
-                    "다시 생성하기"
-                  )}
+                  다시 생성하기
                 </Button>
                 <Button
                   onClick={async () => {
@@ -493,15 +478,7 @@ export function AIRoutineRecommendation({
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-md mx-auto space-y-6">
-        <div className="flex items-center space-x-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onBack}
-            className="text-white hover:bg-gray-700"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
+        <div className="flex items-center">
           <h1 className="text-2xl font-bold text-white">AI 루틴 추천</h1>
         </div>
 
