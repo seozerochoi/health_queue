@@ -4,7 +4,6 @@ import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
-import { NFCReader } from "./NFCReader";
 
 interface Equipment {
   id: number | string;
@@ -164,14 +163,6 @@ export function ReservationStatus({
               AI 추천 기구 조회
             </TabsTrigger>
           </TabsList>
-
-          {/* NFC Reader - 탭 상단에 표시 */}
-          {nfcEnabled && onNFCTagDetected && (
-            <NFCReader
-              onTagDetected={onNFCTagDetected}
-              isEnabled={nfcEnabled}
-            />
-          )}
 
           {/* 예약 내역 탭 */}
           <TabsContent value="normal" className="space-y-4">
