@@ -530,9 +530,9 @@ export function AIRoutineRecommendation({
               </div>
             </div>
 
-            {/* 운동 강도 선택 */}
+            {/* 컨디션 선택 */}
             <div className="space-y-3">
-              <h3 className="text-white font-semibold">운동 강도 선택</h3>
+              <h3 className="text-white font-semibold">오늘의 컨디션</h3>
               <div className="flex gap-2">
                 {intensities.map((level) => (
                   <button
@@ -544,7 +544,11 @@ export function AIRoutineRecommendation({
                         : "bg-gray-800 border-gray-600 text-gray-300 hover:border-gray-400"
                     }`}
                   >
-                    {level}
+                    {level === "상"
+                      ? "좋음 (상)"
+                      : level === "중"
+                      ? "보통 (중)"
+                      : "나쁨 (하)"}
                   </button>
                 ))}
               </div>
