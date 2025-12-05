@@ -164,7 +164,9 @@ def finalize_session(session: UsageSession, now=None, *, reason: Optional[str] =
 
     # 📊 일일 통계 업데이트
     try:
-        from equipment.daily_stats_models import EquipmentDailyStats
+        # 기존에 잘못된 모듈 경로로 인해 통계 업데이트가 실패하고 있었습니다.
+        # EquipmentDailyStats 모델은 reports.models 에 있습니다.
+        from reports.models import EquipmentDailyStats
         from datetime import timedelta
         
         # 실제 사용 시간 계산 (분 단위)

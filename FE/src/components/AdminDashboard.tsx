@@ -691,26 +691,43 @@ export function AdminDashboard({
       console.log(`[${type}] 추출된 records:`, records);
       console.log(`[${type}] 레코드 개수:`, records.length);
 
+      // 데이터가 없으면 조용히 빈 상태로 두고 화면 메시지에 맡김
+      if (records.length === 0) {
+        console.warn(`⚠️ [${type}] 데이터 없음 - 기간: ${start} ~ ${end}`);
+        setUsageStats([]);
+        return;
+      }
+
       if (type === "equipment") {
+        console.log(`[equipment] 기구별 변환 시작...`);
         const transformed: Usage[] = records
-          .map((stat: any) => ({
-            equipment: stat.equipment_name,
-            totalUsage: stat.usage_count,
-            averageTime: Math.round(stat.average_time_minutes),
-            satisfaction: 0,
-          }))
+          .map((stat: any) => {
+            console.log(`  - ${stat.equipment_name}: ${stat.usage_count}회`);
+            return {
+              equipment: stat.equipment_name,
+              totalUsage: stat.usage_count,
+              averageTime: Math.round(stat.average_time_minutes),
+              satisfaction: 0,
+            };
+          })
           .sort((a, b) => a.equipment.localeCompare(b.equipment, "ko"));
+        console.log(`[equipment] 변환 완료: ${transformed.length}개 기구`);
         setUsageStats(transformed);
       } else {
         // 부위별: 백엔드 API에서 이미 집계된 데이터 사용
+        console.log(`[body_part] 부위별 변환 시작...`);
         const bodyPartStats: Usage[] = records
-          .map((stat: any) => ({
-            equipment: stat.body_part,
-            totalUsage: stat.usage_count,
-            averageTime: Math.round(stat.average_time_minutes),
-            satisfaction: 0,
-          }))
+          .map((stat: any) => {
+            console.log(`  - ${stat.body_part}: ${stat.usage_count}회`);
+            return {
+              equipment: stat.body_part,
+              totalUsage: stat.usage_count,
+              averageTime: Math.round(stat.average_time_minutes),
+              satisfaction: 0,
+            };
+          })
           .sort((a, b) => a.equipment.localeCompare(b.equipment, "ko"));
+        console.log(`[body_part] 변환 완료: ${bodyPartStats.length}개 부위`);
         setUsageStats(bodyPartStats);
       }
     } catch (error) {
@@ -1533,7 +1550,7 @@ export function AdminDashboard({
                   </div>
                   <Button
                     onClick={() => fetchUsageStats(statsViewType, statsStartDate, statsEndDate)}
-                    className="bg-blue-600 hover:bg-blue-700"
+                    className="bg-blue-600 hover:bg-blue-700 ml-2"
                   >
                     조회
                   </Button>
