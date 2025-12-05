@@ -75,6 +75,7 @@ export function SatisfactionSurvey({
           equipment_id: equipment.id,
           score: timeSufficiency,
           used_time: actualUsageTime,
+          allocated_time: equipment.allocatedTime || 0, // 할당 시간 추가 전송
           comment: feedback,
         }),
       });
