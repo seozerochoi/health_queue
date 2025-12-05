@@ -40,23 +40,29 @@ logger = logging.getLogger(__name__)
 def get_online_users(request):
     """
     활성 사용자 목록 조회
-    - 운동 중인 사용자
-    - 대기 중인 사용자
+    - 운동 중인 사용자 (UsageSession에서 조회)
+    - 대기 중인 사용자 (Reservation에서 조회)
     - 기타 사용자 (최근 접속일시 포함)
     """
-    from workouts.models import Reservation
+    from workouts.models import Reservation, UsageSession
     
     now = timezone.now()
     
-    # 운동 중인 사용자 ID 목록
+    # 운동 중인 사용자 ID 목록 (UsageSession에서 조회 - end_time이 NULL인 것)
     exercising_user_ids = list(
-        Reservation.objects.filter(status='IN_USE').values_list('user_id', flat=True)
+        UsageSession.objects.filter(end_time__isnull=True).values_list('user_id', flat=True)
     )
     
-    # 대기 중인 사용자 ID 목록
+    # 대기 중인 사용자 ID 목록 (Reservation에서 조회)
     waiting_user_ids = list(
         Reservation.objects.filter(status__in=['WAITING', 'NOTIFIED']).values_list('user_id', flat=True)
     )
+    
+    # 디버깅 로그
+    logger.info(f"[get_online_users] 운동 중: {exercising_user_ids}")
+    logger.info(f"[get_online_users] 대기 중: {waiting_user_ids}")
+    print(f"🏋️ 운동 중인 사용자 ID: {exercising_user_ids}")
+    print(f"⏳ 대기 중인 사용자 ID: {waiting_user_ids}")
     
     # 결과 조합
     result = []
@@ -65,16 +71,18 @@ def get_online_users(request):
     for user_id in set(exercising_user_ids):
         try:
             user = User.objects.get(id=user_id)
-            reservation = Reservation.objects.filter(user_id=user_id, status='IN_USE').first()
-            result.append({
+            session = UsageSession.objects.filter(user_id=user_id, end_time__isnull=True).first()
+            user_data = {
                 'id': user.id,
                 'username': user.username,
                 'first_name': user.first_name or user.username,
                 'status': 'exercising',
-                'equipment_id': reservation.equipment_id if reservation else None,
-                'equipment_name': reservation.equipment.name if reservation and reservation.equipment else None,
+                'equipment_id': session.equipment_id if session else None,
+                'equipment_name': session.equipment.name if session and session.equipment else None,
                 'last_login': user.last_login.isoformat() if user.last_login else None,
-            })
+            }
+            result.append(user_data)
+            print(f"✅ 운동 중 사용자 추가: {user_data}")
         except User.DoesNotExist:
             continue
     
@@ -84,15 +92,23 @@ def get_online_users(request):
             continue  # 이미 운동 중으로 처리됨
         try:
             user = User.objects.get(id=user_id)
-            result.append({
+            reservation = Reservation.objects.filter(user_id=user_id, status__in=['WAITING', 'NOTIFIED']).first()
+            user_data = {
                 'id': user.id,
                 'username': user.username,
                 'first_name': user.first_name or user.username,
                 'status': 'waiting',
+                'equipment_id': reservation.equipment_id if reservation else None,
+                'equipment_name': reservation.equipment.name if reservation and reservation.equipment else None,
                 'last_login': user.last_login.isoformat() if user.last_login else None,
-            })
+            }
+            result.append(user_data)
+            print(f"✅ 대기 중 사용자 추가: {user_data}")
         except User.DoesNotExist:
             continue
+    
+    print(f"📊 최종 결과 count: {len(result)}")
+    logger.info(f"[get_online_users] 최종 결과: {result}")
     
     return Response({'users': result, 'count': len(result)})
 

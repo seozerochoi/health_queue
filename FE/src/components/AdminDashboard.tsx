@@ -743,6 +743,10 @@ export function AdminDashboard({
       const onlineData = await onlineResponse.json();
       const onlineUsers = onlineData.users || [];
 
+      console.log("=== 온라인 사용자 API 응답 ===");
+      console.log("onlineData:", onlineData);
+      console.log("onlineUsers:", onlineUsers);
+
       // 2. 전체 사용자 목록 조회 (모든 사용자 필터용)
       const allUsersResponse = await fetch("https://43.201.88.27/api/users/", {
         headers: {
@@ -772,7 +776,16 @@ export function AdminDashboard({
         };
       });
 
+      console.log("=== 병합 결과 ===");
       console.log("사용자 목록:", enrichedUsers);
+      console.log(
+        "운동 중:",
+        enrichedUsers.filter((u) => u.status === "exercising").length
+      );
+      console.log(
+        "대기 중:",
+        enrichedUsers.filter((u) => u.status === "waiting").length
+      );
       console.log(
         "온라인 사용자:",
         onlineUsers.length,
@@ -1016,11 +1029,14 @@ export function AdminDashboard({
                               <p className="text-white font-medium truncate">
                                 {user.first_name}
                               </p>
-                              {user.equipment_name && (
-                                <p className="text-xs text-gray-400 truncate">
-                                  {user.equipment_name}
-                                </p>
-                              )}
+                              {/* 운동 중이거나 대기 중일 때 기구명 표시 */}
+                              {user.equipment_name &&
+                                (user.status === "exercising" ||
+                                  user.status === "waiting") && (
+                                  <p className="text-xs text-gray-400 truncate">
+                                    {user.equipment_name}
+                                  </p>
+                                )}
                             </div>
 
                             {/* 상태 뱃지 */}
