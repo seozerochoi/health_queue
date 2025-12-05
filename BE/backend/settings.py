@@ -63,7 +63,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware', # 수정 FE
     'backend.middleware.MediaCorsMiddleware',  # Custom CORS for media files
-    'backend.middleware.RequestLoggingMiddleware',  # 🔍 [디버깅] 요청/응답 로깅
+    # 'backend.middleware.RequestLoggingMiddleware',  # 🔍 [디버깅] 요청/응답 로깅 - 비활성화
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
