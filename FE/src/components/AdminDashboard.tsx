@@ -66,6 +66,8 @@ interface EquipmentItem {
   status: string;
   operational_state: "NORMAL" | "MAINTENANCE" | "BROKEN";
   image?: string;
+  body_part?: string;
+  subcategory?: string;
 }
 
 interface AdminDashboardProps {
@@ -94,6 +96,10 @@ export function AdminDashboard({
   const [isAddingEquipment, setIsAddingEquipment] = useState(false);
   const [usageStats, setUsageStats] = useState<Usage[]>([]);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
+  type StatsViewType = "equipment" | "body_part";
+  const [statsViewType, setStatsViewType] = useState<StatsViewType>("equipment");
+  const [statsStartDate, setStatsStartDate] = useState("");
+  const [statsEndDate, setStatsEndDate] = useState("");
 
   // 현재 이용률 상태 (폴링용)
   const [currentUtilization, setCurrentUtilization] = useState({
@@ -396,11 +402,14 @@ export function AdminDashboard({
     }
   };
 
-  // 컴포넌트 마운트 시 신고 목록 및 기구 목록 가져오기
+  // 컴포넌트 마운트 시 초기 데이터 로드
   useEffect(() => {
+    const today = todayKST();
+    setStatsStartDate(today);
+    setStatsEndDate(today);
     fetchReports();
     fetchEquipment();
-    fetchUsageStats();
+    fetchUsageStats("equipment", today, today);
     fetchCurrentUtilization();
     // fetchHourlyUtilization(); // 초기 로드 시 제거 - 이용률 카드 클릭 시에만 호출
   }, []);
@@ -620,38 +629,82 @@ export function AdminDashboard({
       day: "2-digit",
     }).format(new Date());
 
-  // 이용 통계 가져오기
-  const fetchUsageStats = async () => {
+  // 이용 통계 가져오기 (기구별/부위별, 기간 최대 31일)
+  const fetchUsageStats = async (
+    viewType?: StatsViewType,
+    startDate?: string,
+    endDate?: string
+  ) => {
     setIsLoadingStats(true);
     try {
       const token = localStorage.getItem("access_token");
-      const today = todayKST(); // YYYY-MM-DD (Asia/Seoul)
-      const response = await fetch(
-        `https://43.201.88.27/api/equipment/daily-stats/?date=${today}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      const type = viewType || statsViewType;
+      const start = startDate || statsStartDate || todayKST();
+      const end = endDate || statsEndDate || start;
+
+      // 날짜 유효성 검사 (문자열 비교로 시간대 문제 방지)
+      const todayStr = todayKST();
+
+      // 미래 날짜 체크
+      if (start > todayStr || end > todayStr) {
+        alert("미래 날짜는 선택할 수 없습니다.");
+        setIsLoadingStats(false);
+        return;
+      }
+
+      // 최대 31일 제한
+      const startD = new Date(start);
+      const endD = new Date(end);
+      const diffDays = Math.floor(
+        (endD.getTime() - startD.getTime()) / (1000 * 60 * 60 * 24)
       );
+      if (diffDays > 30) {
+        alert("기간은 최대 31일까지 조회 가능합니다.");
+        setIsLoadingStats(false);
+        return;
+      }
+
+      const url = type === "equipment"
+        ? `https://43.201.88.27/api/reports/daily-stats/?start_date=${start}&end_date=${end}`
+        : `https://43.201.88.27/api/reports/daily-stats/by-body-part/?start_date=${start}&end_date=${end}`;
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       if (!response.ok) {
         throw new Error("이용 통계 조회 실패");
       }
 
       const data = await response.json();
-      console.log("일일 통계 API 응답:", data);
+      console.log("이용 통계 API 응답:", data);
 
-      // API 응답에서 records 배열 추출 (호환성: 배열 혹은 객체.records)
       const records = Array.isArray(data) ? data : data.records || [];
-      const transformedStats: Usage[] = records.map((stat: any) => ({
-        equipment: stat.equipment_name,
-        totalUsage: stat.usage_count,
-        averageTime: Math.round(stat.average_time_minutes),
-        satisfaction: 0, // 만족도는 현재 미사용
-      }));
 
-      setUsageStats(transformedStats);
+      if (type === "equipment") {
+        const transformed: Usage[] = records
+          .map((stat: any) => ({
+            equipment: stat.equipment_name,
+            totalUsage: stat.usage_count,
+            averageTime: Math.round(stat.average_time_minutes),
+            satisfaction: 0,
+          }))
+          .sort((a, b) => a.equipment.localeCompare(b.equipment, "ko"));
+        setUsageStats(transformed);
+      } else {
+        // 부위별: 백엔드 API에서 이미 집계된 데이터 사용
+        const bodyPartStats: Usage[] = records
+          .map((stat: any) => ({
+            equipment: stat.body_part,
+            totalUsage: stat.usage_count,
+            averageTime: Math.round(stat.average_time_minutes),
+            satisfaction: 0,
+          }))
+          .sort((a, b) => a.equipment.localeCompare(b.equipment, "ko"));
+        setUsageStats(bodyPartStats);
+      }
     } catch (error) {
       console.error("이용 통계 조회 에러:", error);
     } finally {
@@ -1418,27 +1471,93 @@ export function AdminDashboard({
           <TabsContent value="analytics" className="space-y-4">
             <Card className="border-gray-600 bg-card">
               <CardHeader>
-                <CardTitle className="text-white">기구별 이용 통계</CardTitle>
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <CardTitle className="text-white">이용 통계</CardTitle>
+                  <div className="flex border border-gray-600 rounded-md overflow-hidden">
+                    <button
+                      onClick={() => {
+                        setStatsViewType("equipment");
+                        fetchUsageStats("equipment", statsStartDate, statsEndDate);
+                      }}
+                      className={`px-4 py-2 text-sm transition-colors ${
+                        statsViewType === "equipment"
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                      }`}
+                    >
+                      기구별
+                    </button>
+                    <button
+                      onClick={() => {
+                        setStatsViewType("body_part");
+                        fetchUsageStats("body_part", statsStartDate, statsEndDate);
+                      }}
+                      className={`px-4 py-2 text-sm transition-colors ${
+                        statsViewType === "body_part"
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                      }`}
+                    >
+                      부위별
+                    </button>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {usageStats.map((u) => (
-                    <div
-                      key={u.equipment}
-                      className="p-4 border border-blue-900/40 bg-blue-950/50 rounded-lg"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="rounded-md bg-blue-900/40 px-4 py-2 text-white font-medium inline-block">
-                          {u.equipment}
-                        </div>
-                        <div className="text-gray-200 text-sm space-y-1 text-right">
-                          <div>오늘 이용: {u.totalUsage}회</div>
-                          <div>평균 시간: {u.averageTime}분</div>
+                <div className="mb-4 flex gap-3 items-center flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-gray-300 whitespace-nowrap">시작일</Label>
+                    <Input
+                      type="date"
+                      value={statsStartDate}
+                      onChange={(e) => setStatsStartDate(e.target.value)}
+                      className="bg-gray-900 text-white border border-black focus:border-blue-600"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-gray-300 whitespace-nowrap">종료일</Label>
+                    <Input
+                      type="date"
+                      value={statsEndDate}
+                      onChange={(e) => setStatsEndDate(e.target.value)}
+                      className="bg-gray-900 text-white border border-black focus:border-blue-600"
+                    />
+                  </div>
+                  <Button
+                    onClick={() => fetchUsageStats(statsViewType, statsStartDate, statsEndDate)}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    조회
+                  </Button>
+                </div>
+                {isLoadingStats ? (
+                  <div className="text-center text-gray-400 py-8">
+                    통계를 불러오는 중...
+                  </div>
+                ) : usageStats.length === 0 ? (
+                  <div className="text-center text-gray-400 py-8">
+                    통계 데이터가 없습니다.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {usageStats.map((u, idx) => (
+                      <div
+                        key={`${u.equipment}-${idx}`}
+                        className="p-4 border border-blue-900/40 bg-blue-950/50 rounded-lg"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="rounded-md bg-blue-900/40 px-4 py-2 text-white font-medium inline-block">
+                            {u.equipment}
+                          </div>
+                          <div className="text-gray-200 text-sm space-y-1 text-right">
+                            <div>이용: {u.totalUsage}회</div>
+                            <div>평균 시간: {u.averageTime}분</div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

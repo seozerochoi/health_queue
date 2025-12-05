@@ -603,3 +603,109 @@ class EquipmentDailyStatsView(APIView):
             'records': records,
             'aggregate': agg,
         })
+
+
+class BodyPartDailyStatsView(APIView):
+    """부위별 일일 이용 통계 조회 API.
+
+    GET /reports/daily-stats/by-body-part/?date=YYYY-MM-DD
+    GET /reports/daily-stats/by-body-part/?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
+    
+    8개 AI 루틴 카테고리로 집계: 등, 가슴, 복근, 힙, 허벅지, 종아리, 유산소, 어깨
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from django.utils import timezone
+        from datetime import datetime
+        from django.db.models import Sum
+
+        def parse_date(val):
+            try:
+                return datetime.strptime(val, '%Y-%m-%d').date()
+            except Exception:
+                return None
+
+        date_param = request.query_params.get('date')
+        start_param = request.query_params.get('start_date')
+        end_param = request.query_params.get('end_date')
+
+        today = timezone.localdate()
+        if date_param:
+            start_date = end_date = parse_date(date_param) or today
+        else:
+            start_date = parse_date(start_param) or today
+            end_date = parse_date(end_param) or start_date
+
+        if (end_date - start_date).days > 31:
+            return Response({'detail': '최대 31일 범위를 초과했습니다.'}, status=400)
+
+        # 기구별 통계 가져오기
+        stats = EquipmentDailyStats.objects.select_related('equipment').filter(
+            date__gte=start_date,
+            date__lte=end_date
+        )
+
+        # 8개 부위별로 집계
+        body_part_map = {
+            '등': {'usage_count': 0, 'total_minutes': 0},
+            '가슴': {'usage_count': 0, 'total_minutes': 0},
+            '복근': {'usage_count': 0, 'total_minutes': 0},
+            '힙': {'usage_count': 0, 'total_minutes': 0},
+            '허벅지': {'usage_count': 0, 'total_minutes': 0},
+            '종아리': {'usage_count': 0, 'total_minutes': 0},
+            '유산소': {'usage_count': 0, 'total_minutes': 0},
+            '어깨': {'usage_count': 0, 'total_minutes': 0},
+            '기타': {'usage_count': 0, 'total_minutes': 0},
+        }
+
+        for stat in stats:
+            equip = stat.equipment
+            category = '기타'
+
+            if equip.subcategory:
+                sub = equip.subcategory
+                if 'CHEST' in sub:
+                    category = '가슴'
+                elif 'BACK' in sub:
+                    category = '등'
+                elif 'SHOULDER' in sub:
+                    category = '어깨'
+                elif sub == 'LEG_PRESS_MAIN' or sub == 'LEG_EXTENSION':
+                    category = '허벅지'
+                elif sub == 'LEG_CURL':
+                    category = '종아리'
+            elif equip.body_part:
+                bp = equip.body_part
+                if bp == 'UPPER':
+                    category = '가슴'
+                elif bp == 'LOWER':
+                    category = '허벅지'
+                elif bp == 'CORE':
+                    category = '복근'
+                elif bp == 'CARDIO':
+                    category = '유산소'
+
+            body_part_map[category]['usage_count'] += stat.usage_count
+            body_part_map[category]['total_minutes'] += stat.total_usage_minutes
+
+        # 결과 배열 생성 (기타 제외, 사용량 있는 것만)
+        records = []
+        for part, data in body_part_map.items():
+            if part == '기타' and data['usage_count'] == 0:
+                continue
+            avg_time = round(data['total_minutes'] / data['usage_count'], 1) if data['usage_count'] > 0 else 0.0
+            records.append({
+                'body_part': part,
+                'usage_count': data['usage_count'],
+                'total_usage_minutes': data['total_minutes'],
+                'average_time_minutes': avg_time,
+            })
+
+        # 가나다순 정렬
+        records.sort(key=lambda x: x['body_part'])
+
+        return Response({
+            'range': {'start': start_date.isoformat(), 'end': end_date.isoformat()},
+            'records': records,
+        })

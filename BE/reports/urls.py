@@ -8,6 +8,7 @@ from .views import (
     CurrentUtilizationView,
     ActiveUtilizationUsersView,
     EquipmentDailyStatsView,
+    BodyPartDailyStatsView,
 )
 
 router = DefaultRouter()
@@ -20,4 +21,5 @@ urlpatterns = [
     path('utilization/current/', CurrentUtilizationView.as_view(), name='current_utilization'),
     path('utilization/active-users/', ActiveUtilizationUsersView.as_view(), name='active_utilization_users'),
     path('daily-stats/', EquipmentDailyStatsView.as_view(), name='equipment_daily_stats'),
+    path('daily-stats/by-body-part/', BodyPartDailyStatsView.as_view(), name='body_part_daily_stats'),
 ]
