@@ -453,7 +453,12 @@ export function AIRoutineRecommendation({
 
               <div className="flex space-x-4">
                 <Button
-                  onClick={generateRoutine}
+                  onClick={async () => {
+                    // 피드백 전송 후 재생성 (실시간 반영)
+                    await submitFeedback();
+                    setEquipmentRatings({});
+                    generateRoutine();
+                  }}
                   variant="outline"
                   className="flex-1 border-gray-600 text-gray-300 hover:bg-gray-700"
                   disabled={isLoading}
@@ -468,8 +473,8 @@ export function AIRoutineRecommendation({
                   )}
                 </Button>
                 <Button
-                  onClick={() => {
-                    // submitFeedback(); // 백엔드 구현 대기 중 - 500 에러 방지
+                  onClick={async () => {
+                    await submitFeedback();
                     reserveRoutine();
                   }}
                   className="flex-1 bg-blue-500 hover:bg-blue-600"

@@ -61,6 +61,20 @@ class RoutineAIEngine:
         # Experience Replay Buffer (학습 데이터 기억 저장소)
         self.memory = deque(maxlen=2000)
 
+    def save_checkpoint(self, filepath="routine_ai_checkpoint.pth"):
+        """학습된 모델 가중치를 파일로 저장"""
+        torch.save(self.model.state_dict(), filepath)
+        print(f"💾 루틴 모델 저장 완료: {filepath}")
+
+    def load_checkpoint(self, filepath="routine_ai_checkpoint.pth"):
+        """저장된 모델 불러오기"""
+        try:
+            self.model.load_state_dict(torch.load(filepath))
+            self.model.eval()
+            print(f"📂 루틴 모델 불러오기 성공: {filepath}")
+        except FileNotFoundError:
+            print("⚠️ 저장된 루틴 모델이 없습니다. 새로 시작합니다.")
+
     def update_equipments_list(self, new_equipments_list):
         """운영자가 기구를 추가/수정했을 때 리스트 갱신"""
         self.equipments = new_equipments_list
