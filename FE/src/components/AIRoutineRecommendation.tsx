@@ -303,7 +303,15 @@ export function AIRoutineRecommendation({
     return (
       <div className="min-h-screen bg-background p-4">
         <div className="max-w-2xl mx-auto space-y-6">
-          <div className="flex items-center">
+          <div className="flex items-center space-x-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setStep("form")}
+              className="text-white hover:bg-gray-700"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
             <h1 className="text-2xl font-bold text-white">AI 추천 루틴</h1>
           </div>
 
@@ -446,16 +454,23 @@ export function AIRoutineRecommendation({
               <div className="flex space-x-4">
                 <Button
                   onClick={async () => {
-                    // 피드백 전송 후 입력 폼으로 돌아가기
+                    // 피드백 전송 후 재생성 (실시간 반영)
                     await submitFeedback();
                     setEquipmentRatings({});
-                    setStep("form");
+                    generateRoutine();
                   }}
                   variant="outline"
                   className="flex-1 border-gray-600 text-gray-300 hover:bg-gray-700"
                   disabled={isLoading}
                 >
-                  다시 생성하기
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      생성 중...
+                    </>
+                  ) : (
+                    "다시 생성하기"
+                  )}
                 </Button>
                 <Button
                   onClick={async () => {
@@ -465,7 +480,7 @@ export function AIRoutineRecommendation({
                   className="flex-1 bg-blue-500 hover:bg-blue-600"
                   disabled={isLoading}
                 >
-                  이 루틴으로 예약하기
+                  이 루틴으로 저장하기
                 </Button>
               </div>
             </CardContent>
