@@ -98,8 +98,9 @@ export function AdminDashboard({
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   type StatsViewType = "equipment" | "body_part";
   const [statsViewType, setStatsViewType] = useState<StatsViewType>("equipment");
-  const [statsStartDate, setStatsStartDate] = useState("");
-  const [statsEndDate, setStatsEndDate] = useState("");
+  const [statsStartDate, setStatsStartDate] = useState<string>("");
+  const [statsEndDate, setStatsEndDate] = useState<string>("");
+  const [statsLoaded, setStatsLoaded] = useState(false);
 
   // 현재 이용률 상태 (폴링용)
   const [currentUtilization, setCurrentUtilization] = useState({
@@ -174,6 +175,7 @@ export function AdminDashboard({
         }),
         createdAt: new Date(report.created_at), // 정렬용 Date 객체 추가
       }));
+  setStatsLoaded(true);
 
       // 1) pending 우선 2) 각 그룹 내에서 최신순 정렬
       const sortedReports = transformedReports.sort((a, b) => {
@@ -500,8 +502,12 @@ export function AdminDashboard({
         const data = JSON.parse(event.data);
         console.log("🎬 [AdminDashboard] 세션 시작:", data);
 
-        // 통계 탭이 활성화되어 있고 부위별 보기라면 자동으로 새로고침 (진행 중인 세션 포함)
-        if (statsViewType === "body_part" && statsStartDate && statsEndDate) {
+        // 통계가 아직 로드되지 않았으면 오늘 날짜로 자동 로드
+        if (!statsLoaded) {
+          const today = todayKST();
+          console.log("🔄 [AdminDashboard] 통계 초기 자동 로드 (오늘)");
+          fetchUsageStats("body_part", today, today);
+        } else if (statsViewType === "body_part" && statsStartDate && statsEndDate) {
           console.log("🔄 [AdminDashboard] 실시간 통계 자동 새로고침 실행");
           fetchUsageStats("body_part", statsStartDate, statsEndDate);
         }
@@ -660,6 +666,15 @@ export function AdminDashboard({
       month: "2-digit",
       day: "2-digit",
     }).format(new Date());
+  // 초기 날짜 설정
+  useEffect(() => {
+    if (!statsStartDate && !statsEndDate) {
+      const today = todayKST();
+      setStatsStartDate(today);
+      setStatsEndDate(today);
+    }
+  }, []);
+
 
   // 이용 통계 가져오기 (기구별/부위별, 기간 최대 31일)
   const fetchUsageStats = async (
@@ -1587,34 +1602,46 @@ export function AdminDashboard({
                     조회
                   </Button>
                 </div>
-                {isLoadingStats ? (
-                  <div className="text-center text-gray-400 py-8">
-                    통계를 불러오는 중...
-                  </div>
-                ) : usageStats.length === 0 ? (
-                  <div className="text-center text-gray-400 py-8">
-                    통계 데이터가 없습니다.
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {usageStats.map((u, idx) => (
-                      <div
-                        key={`${u.equipment}-${idx}`}
-                        className="p-4 border border-blue-900/40 bg-blue-950/50 rounded-lg"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="rounded-md bg-blue-900/40 px-4 py-2 text-white font-medium inline-block">
-                            {u.equipment}
-                          </div>
-                          <div className="text-gray-200 text-sm space-y-1 text-right">
-                            <div>이용: {u.totalUsage}회</div>
-                            <div>평균 시간: {u.averageTime}분</div>
+                <div className="relative">
+                  {isLoadingStats && usageStats.length === 0 ? (
+                    <div className="text-center text-gray-400 py-8">
+                      통계를 불러오는 중...
+                    </div>
+                  ) : usageStats.length === 0 ? (
+                    <div className="text-center text-gray-400 py-8">
+                      통계 데이터가 없습니다.
+                    </div>
+                  ) : (
+                    <div
+                      className={`space-y-3 transition-opacity duration-200 ${
+                        isLoadingStats ? "opacity-50" : "opacity-100"
+                      }`}
+                    >
+                      {usageStats.map((u, idx) => (
+                        <div
+                          key={`${u.equipment}-${idx}`}
+                          className="p-4 border border-blue-900/40 bg-blue-950/50 rounded-lg"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="rounded-md bg-blue-900/40 px-4 py-2 text-white font-medium inline-block">
+                              {u.equipment}
+                            </div>
+                            <div className="text-gray-200 text-sm space-y-1 text-right">
+                              <div>이용: {u.totalUsage}회</div>
+                              <div>평균 시간: {u.averageTime}분</div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
+
+                  {isLoadingStats && usageStats.length > 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-background/70 backdrop-blur-sm text-gray-300 text-sm">
+                      통계를 불러오는 중...
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

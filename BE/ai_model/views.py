@@ -169,49 +169,6 @@ class RoutineGenerateView(BaseAIView):
         })
 
 # =========================================================
-# 2-1. 일괄 이용 시간 예측 API (기구 목록 표시용)
-# URL: GET /api/ai/times/
-# Response: { "times": { "1": 25.5, "2": 30.0, ... } }
-# =========================================================
-class BatchTimePredictionView(BaseAIView):
-    def get(self, request):
-        time_engine, _ = self.get_ai_engines()
-        if time_engine is None:
-            return Response({"error": "Time AI engine is not available"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-        ai_user = self.convert_to_ai_user(request.user)
-        
-        # 모든 NORMAL 상태 기구 가져오기
-        all_equipment = Equipment.objects.filter(operational_state='NORMAL')
-        
-        times = {}
-        for db_equip in all_equipment:
-            # AI 기구 객체 변환
-            ai_equip = AIEquipment(
-                equip_id=db_equip.id,
-                name=db_equip.name,
-                main_part=0 if db_equip.body_part == 'UPPER' else 1,
-                sub_part=db_equip.subcategory,
-                base_time=db_equip.base_session_time_minutes,
-                equip_type=db_equip.type
-            )
-            
-            if ai_user:
-                try:
-                    recommended_time = time_engine.predict_time(ai_user, ai_equip)
-                except Exception as e:
-                    print(f"⚠️ [BatchTimeAI] Prediction failed for {db_equip.name}: {e}")
-                    recommended_time = float(db_equip.base_session_time_minutes)
-            else:
-                recommended_time = float(db_equip.base_session_time_minutes)
-            
-            times[str(db_equip.id)] = round(recommended_time, 1)
-        
-        print(f"🤖 [BatchTimeAI] User={request.user.username}, Fetched {len(times)} equipment times")
-        return Response({"times": times})
-
-
-# =========================================================
 # 2. 이용 시간 예측 API (NFC 태깅 시)
 # URL: POST /api/ai/time/
 # Body: { "equipment_id": 3 }
