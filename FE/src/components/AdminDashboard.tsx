@@ -668,6 +668,9 @@ export function AdminDashboard({
         ? `https://43.201.88.27/api/reports/daily-stats/?start_date=${start}&end_date=${end}`
         : `https://43.201.88.27/api/reports/daily-stats/by-body-part/?start_date=${start}&end_date=${end}`;
 
+      console.log(`[${type}] 조회 URL:`, url);
+      console.log(`[${type}] 조회 기간: ${start} ~ ${end}`);
+
       const response = await fetch(url, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -675,13 +678,18 @@ export function AdminDashboard({
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`API 오류 (${response.status}):`, errorText);
         throw new Error("이용 통계 조회 실패");
       }
 
       const data = await response.json();
-      console.log("이용 통계 API 응답:", data);
+      console.log(`[${type}] 전체 응답 데이터:`, data);
+      console.log(`[${type}] 응답 타입:`, typeof data, `Array 여부:`, Array.isArray(data));
 
       const records = Array.isArray(data) ? data : data.records || [];
+      console.log(`[${type}] 추출된 records:`, records);
+      console.log(`[${type}] 레코드 개수:`, records.length);
 
       if (type === "equipment") {
         const transformed: Usage[] = records

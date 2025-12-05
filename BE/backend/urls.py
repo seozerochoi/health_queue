@@ -23,6 +23,10 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from workouts.views import HeartbeatView
 
+import logging
+logger = logging.getLogger(__name__)
+logger.info("🔧 [backend/urls.py] 메인 URL 패턴 로딩 시작")
+
 urlpatterns = [
     path('admin/', admin.site.urls),
 
@@ -43,7 +47,12 @@ urlpatterns = [
     path('api/ai/', include('ai_model.urls')),
 ]
 
+logger.info("✅ [backend/urls.py] 메인 URL 패턴 로딩 완료")
+logger.info(f"   main urlpatterns 개수: {len(urlpatterns)}")
+logger.info(f"   reports.urls 경로: api/ + reports/urls.py")
+
 # Serve media files (both development and production)
 # In production, consider using a proper web server like Nginx to serve static/media files
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+

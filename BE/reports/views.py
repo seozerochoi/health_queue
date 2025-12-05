@@ -532,6 +532,11 @@ class EquipmentDailyStatsView(APIView):
         from django.utils import timezone
         from datetime import datetime
 
+        # 🔍 [디버깅] 요청 정보 로깅
+        logger.info(f"📨 [EquipmentDailyStatsView] GET 요청 받음")
+        logger.info(f"   사용자: {request.user}")
+        logger.info(f"   쿼리 파라미터: {dict(request.query_params)}")
+
         def parse_date(val):
             try:
                 return datetime.strptime(val, '%Y-%m-%d').date()
@@ -545,6 +550,9 @@ class EquipmentDailyStatsView(APIView):
         subcategory = request.query_params.get('subcategory')
         muscle_group = request.query_params.get('muscle_group')
 
+        # 🔍 [디버깅] 파싱된 파라미터
+        logger.info(f"   date={date_param}, start={start_param}, end={end_param}")
+
         today = timezone.localdate()
         if date_param:
             start_date = end_date = parse_date(date_param) or today
@@ -552,10 +560,14 @@ class EquipmentDailyStatsView(APIView):
             start_date = parse_date(start_param) or today
             end_date = parse_date(end_param) or start_date
 
+        logger.info(f"   파싱 완료: start_date={start_date}, end_date={end_date}, today={today}")
+
         if (end_date - start_date).days > 31:
+            logger.warning(f"   ❌ 31일 범위 초과: {(end_date - start_date).days}일")
             return Response({'detail': '최대 31일 범위를 초과했습니다.'}, status=400)
 
         qs = EquipmentDailyStats.objects.select_related('equipment').filter(date__gte=start_date, date__lte=end_date)
+        logger.info(f"   📊 초기 쿼리셋 개수: {qs.count()}")
         if equipment_id:
             qs = qs.filter(equipment_id=equipment_id)
         if subcategory:
@@ -584,6 +596,10 @@ class EquipmentDailyStatsView(APIView):
                 'average_time_minutes': round(stat.average_time_minutes,1),
             })
 
+        logger.info(f"   ✅ 기구별 레코드 개수: {len(records)}")
+        for i, r in enumerate(records[:3]):  # 처음 3개만 로깅
+            logger.info(f"      [{i}] {r['equipment_name']}: {r['usage_count']}회, 평균 {r['average_time_minutes']}분")
+
         # 집계 요약
         agg = None
         if start_date != end_date:
@@ -598,6 +614,7 @@ class EquipmentDailyStatsView(APIView):
                 'overall_average_time_minutes': avg_minutes,
             }
 
+        logger.info(f"📤 [EquipmentDailyStatsView] 응답 전송: {len(records)}개 레코드")
         return Response({
             'range': {'start': start_date.isoformat(), 'end': end_date.isoformat()},
             'records': records,
@@ -620,6 +637,11 @@ class BodyPartDailyStatsView(APIView):
         from datetime import datetime
         from django.db.models import Sum
 
+        # 🔍 [디버깅] 요청 정보 로깅
+        logger.info(f"📨 [BodyPartDailyStatsView] GET 요청 받음")
+        logger.info(f"   사용자: {request.user}")
+        logger.info(f"   쿼리 파라미터: {dict(request.query_params)}")
+
         def parse_date(val):
             try:
                 return datetime.strptime(val, '%Y-%m-%d').date()
@@ -637,7 +659,10 @@ class BodyPartDailyStatsView(APIView):
             start_date = parse_date(start_param) or today
             end_date = parse_date(end_param) or start_date
 
+        logger.info(f"   파싱 완료: start_date={start_date}, end_date={end_date}")
+
         if (end_date - start_date).days > 31:
+            logger.warning(f"   ❌ 31일 범위 초과: {(end_date - start_date).days}일")
             return Response({'detail': '최대 31일 범위를 초과했습니다.'}, status=400)
 
         # 기구별 통계 가져오기
@@ -645,6 +670,7 @@ class BodyPartDailyStatsView(APIView):
             date__gte=start_date,
             date__lte=end_date
         )
+        logger.info(f"   📊 조회된 EquipmentDailyStats: {stats.count()}개")
 
         # 8개 부위별로 집계
         body_part_map = {
@@ -659,6 +685,7 @@ class BodyPartDailyStatsView(APIView):
             '기타': {'usage_count': 0, 'total_minutes': 0},
         }
 
+        mapped_count = 0
         for stat in stats:
             equip = stat.equipment
             category = '기타'
@@ -688,6 +715,9 @@ class BodyPartDailyStatsView(APIView):
 
             body_part_map[category]['usage_count'] += stat.usage_count
             body_part_map[category]['total_minutes'] += stat.total_usage_minutes
+            mapped_count += 1
+
+        logger.info(f"   🔄 매핑 완료: {mapped_count}개 레코드를 부위별로 집계")
 
         # 결과 배열 생성 (기타 제외, 사용량 있는 것만)
         records = []
@@ -705,6 +735,11 @@ class BodyPartDailyStatsView(APIView):
         # 가나다순 정렬
         records.sort(key=lambda x: x['body_part'])
 
+        logger.info(f"   ✅ 부위별 레코드 개수: {len(records)}")
+        for i, r in enumerate(records):
+            logger.info(f"      [{i}] {r['body_part']}: {r['usage_count']}회, 평균 {r['average_time_minutes']}분")
+
+        logger.info(f"📤 [BodyPartDailyStatsView] 응답 전송: {len(records)}개 부위별 통계")
         return Response({
             'range': {'start': start_date.isoformat(), 'end': end_date.isoformat()},
             'records': records,
