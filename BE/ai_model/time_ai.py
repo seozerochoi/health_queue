@@ -107,6 +107,30 @@ class FormulaEngine:
         lower_avg = (mus['rl'] + mus['ll']) / 2
         imbalance = upper_avg / lower_avg if lower_avg > 0 else 1.0
         
+        # --- [New Logic] Cardio Handling (유산소 전용 로직) ---
+        if equipment.equip_type == 'CARDIO':
+            # 기본 시간: 20분
+            base_minutes = 20.0
+            
+            # 1. 숙련도 보정 (체력이 좋을수록 오래)
+            # x1 (0.0 ~ 1.0) -> 1.0 ~ 1.5배
+            proficiency_factor = 1.0 + (0.5 * x1)
+            
+            # 2. 목적 보정
+            if user.goal == 0: # Diet
+                # 다이어트면 기본적으로 1.5배 (30분 기준)
+                goal_factor = 1.5
+                # 비만도가 높으면 더 추가 (최대 2.0배까지)
+                if rel_obesity > 1.0:
+                    goal_factor += 0.5 * min(1.0, rel_obesity - 1.0)
+            else: # Bulk-up
+                # 근비대면 유산소는 웜업/쿨다운 정도로 (0.6배)
+                goal_factor = 0.6
+                
+            final_minutes = base_minutes * proficiency_factor * goal_factor
+            
+            # 안전 범위 (10분 ~ 60분)
+            return max(10.0, min(60.0, final_minutes))
         
         # --- [Step 2] 기본 운동 시간 (Base Time) 설정 ---
         # 미국스포츠의학회(ACSM) 기준
@@ -169,13 +193,8 @@ class FormulaEngine:
         final_seconds = base_seconds * situation_coeff * sarcopenia_coeff * balance_coeff
         final_minutes = final_seconds / 60.0
         
-        # 유산소 기구의 경우 기본 시간이 너무 짧게 계산될 수 있으므로(5~6분), 
-        # 유산소 특성을 고려하여 최소 시간 보정 (예: x3 ~ x5)
-        if equipment.equip_type == 'CARDIO':
-            final_minutes *= 5.0 
-
-        # 안전 범위 클램핑 (최소 5분 ~ 최대 60분)
-        return max(5.0, min(60.0, final_minutes))
+        # 안전 범위 클램핑 (최소 3분 ~ 최대 60분)
+        return max(3.0, min(60.0, final_minutes))
 
 
 # ==============================================================================

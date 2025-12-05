@@ -49,7 +49,8 @@ class RoutineAIEngine:
         # Input Feature Dimension: User(12개) + Equipment(Metadata 5개) = 17개
         self.input_dim = 17 
         self.model = PreferenceNetwork(self.input_dim)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
+        # [Update] 학습률(LR) 상향 조정 (0.001 -> 0.01) : 피드백 즉각 반영을 위해
+        self.optimizer = optim.Adam(self.model.parameters(), lr=0.01)
         self.criterion = nn.BCELoss() # 이진 분류 손실함수 (좋다/싫다 유사)
         
         # 시간 예측 AI 엔진 연결 (소요 시간 계산용)
@@ -457,13 +458,15 @@ class RoutineAIEngine:
             main_part = 0 if str(getattr(db_eq, 'body_part', 'UPPER')).upper() == 'UPPER' else 1
             sub_part = getattr(db_eq, 'subcategory', None) or str(getattr(db_eq, 'name', 'GENERAL'))
             base_time = getattr(db_eq, 'base_session_time_minutes', 15) # DB 값 사용
+            equip_type = str(getattr(db_eq, 'type', 'MACHINE')).upper() # [Fix] 타입 전달
             
             return Equipment(
                 getattr(db_eq, 'id', getattr(db_eq, 'equip_id', 0)),
                 getattr(db_eq, 'name', 'Unknown'),
                 main_part,
                 sub_part,
-                base_time=base_time
+                base_time=base_time,
+                equip_type=equip_type # [Fix] 타입 전달
             )
         except Exception:
             # 실패 시 안전한 기본값 반환
@@ -546,28 +549,32 @@ class RoutineAIEngine:
         
         user_tensor = self._get_user_tensor(user)
         
-        # 1. 현재 루틴의 모든 기구에 대해 학습 수행
+        # 1. 현재 루틴의 모든 기구에 대해 [집중 학습] 수행 (Oversampling Effect)
+        # 피드백을 즉시 반영하기 위해 동일 데이터를 5회 반복 학습
+        current_batch = []
         for eq in routine_list:
             eq_tensor = self._get_equip_tensor(eq)
-            
-            # Input Vector
             input_vec = torch.cat([user_tensor, eq_tensor], dim=0)
             target = torch.FloatTensor([target_val])
-            
-            # Forward & Backward
-            self.optimizer.zero_grad()
-            pred = self.model(input_vec)
-            loss = self.criterion(pred, target)
-            loss.backward()
-            self.optimizer.step()
-            
-            total_loss += loss.item()
+            current_batch.append((input_vec, target))
             
             # 메모리 저장 (Experience Replay용)
             self.memory.append((input_vec.detach(), target))
+
+        # 집중 학습 (5 Epochs)
+        for _ in range(5):
+            for input_vec, target in current_batch:
+                self.optimizer.zero_grad()
+                pred = self.model(input_vec)
+                loss = self.criterion(pred, target)
+                loss.backward()
+                self.optimizer.step()
+                total_loss += loss.item()
             
         # 2. Replay Learning (과거 기억 복습 - 배치 학습)
+        # 과거 데이터와 현재 데이터를 섞어서 학습 (Catastrophic Forgetting 방지)
         if len(self.memory) > 32:
+            # 현재 피드백 데이터도 배치에 일부 포함되도록 유도할 수 있음
             batch = random.sample(self.memory, 32)
             batch_loss = 0
             for b_in, b_target in batch:
