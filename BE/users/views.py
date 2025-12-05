@@ -159,6 +159,11 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
         import sys
         data = super().validate(attrs)
         
+        # last_login 업데이트
+        from django.utils import timezone
+        self.user.last_login = timezone.now()
+        self.user.save(update_fields=['last_login'])
+        
         # 응답에 사용자 정보 추가 (id, username, name, role)
         data['id'] = self.user.id
         data['username'] = self.user.username
