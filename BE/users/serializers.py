@@ -12,11 +12,12 @@ logger = logging.getLogger(__name__)
 class UserSerializer(serializers.ModelSerializer):
     role = serializers.SerializerMethodField()
     name = serializers.CharField(source='first_name', read_only=True)
+    last_login = serializers.DateTimeField(read_only=True)
 
     class Meta:
         model = User
         # API를 통해 보여줄 필드들을 지정합니다.
-        fields = ['id', 'username', 'email', 'name', 'role', 'is_staff', 'last_login']
+        fields = ['id', 'username', 'email', 'first_name', 'name', 'role', 'is_staff', 'last_login']
 
     def get_role(self, obj):
         # UserProfile에서 role 가져오기
