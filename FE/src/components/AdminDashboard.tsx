@@ -107,6 +107,7 @@ export function AdminDashboard({
   // 사용자 목록 상태
   type UserStatus = "offline" | "online" | "exercising" | "waiting";
   type UserFilter = "all" | "exercising" | "waiting";
+  type UserSortBy = "name" | "last_login";
 
   interface GymUser {
     id: number;
@@ -125,6 +126,7 @@ export function AdminDashboard({
   const [showUsersPanel, setShowUsersPanel] = useState(false);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [userFilter, setUserFilter] = useState<UserFilter>("all");
+  const [userSortBy, setUserSortBy] = useState<UserSortBy>("name");
 
   // 신고 목록 가져오기
   const fetchReports = async (silent = false) => {
@@ -399,7 +401,7 @@ export function AdminDashboard({
     fetchEquipment();
     fetchUsageStats();
     fetchCurrentUtilization();
-    fetchHourlyUtilization();
+    // fetchHourlyUtilization(); // 초기 로드 시 제거 - 이용률 카드 클릭 시에만 호출
   }, []);
 
   // 현재 이용률 10초마다 폴링
@@ -861,7 +863,13 @@ export function AdminDashboard({
           <Card className="border-gray-600 bg-card">
             <CardContent
               className="p-4 cursor-pointer hover:bg-gray-800/60 transition-colors"
-              onClick={() => setShowUsagePanel((v) => !v)}
+              onClick={() => {
+                setShowUsagePanel((v) => !v);
+                // 패널을 열 때만 API 호출
+                if (!showUsagePanel) {
+                  fetchHourlyUtilization();
+                }
+              }}
             >
               <div className="flex items-center space-x-2">
                 <Clock className="h-8 w-8 text-green-400" />
@@ -893,44 +901,73 @@ export function AdminDashboard({
                   닫기
                 </Button>
               </div>
-              {/* 필터 버튼 */}
-              <div className="flex gap-2 mt-4">
-                <Button
-                  size="sm"
-                  variant={userFilter === "all" ? "default" : "outline"}
-                  className={
-                    userFilter === "all"
-                      ? "bg-blue-600 hover:bg-blue-700"
-                      : "border-gray-600 text-gray-300 hover:bg-gray-700"
-                  }
-                  onClick={() => setUserFilter("all")}
-                >
-                  모든 사용자
-                </Button>
-                <Button
-                  size="sm"
-                  variant={userFilter === "exercising" ? "default" : "outline"}
-                  className={
-                    userFilter === "exercising"
-                      ? "bg-blue-600 hover:bg-blue-700"
-                      : "border-gray-600 text-gray-300 hover:bg-gray-700"
-                  }
-                  onClick={() => setUserFilter("exercising")}
-                >
-                  운동 중
-                </Button>
-                <Button
-                  size="sm"
-                  variant={userFilter === "waiting" ? "default" : "outline"}
-                  className={
-                    userFilter === "waiting"
-                      ? "bg-blue-600 hover:bg-blue-700"
-                      : "border-gray-600 text-gray-300 hover:bg-gray-700"
-                  }
-                  onClick={() => setUserFilter("waiting")}
-                >
-                  대기 중
-                </Button>
+              {/* 필터 및 정렬 옵션 */}
+              <div className="flex items-center justify-between gap-4 mt-4">
+                {/* 필터 버튼 */}
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant={userFilter === "all" ? "default" : "outline"}
+                    className={
+                      userFilter === "all"
+                        ? "bg-blue-600 hover:bg-blue-700"
+                        : "border-gray-600 text-gray-300 hover:bg-gray-700"
+                    }
+                    onClick={() => setUserFilter("all")}
+                  >
+                    모든 사용자
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={
+                      userFilter === "exercising" ? "default" : "outline"
+                    }
+                    className={
+                      userFilter === "exercising"
+                        ? "bg-blue-600 hover:bg-blue-700"
+                        : "border-gray-600 text-gray-300 hover:bg-gray-700"
+                    }
+                    onClick={() => setUserFilter("exercising")}
+                  >
+                    운동 중
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={userFilter === "waiting" ? "default" : "outline"}
+                    className={
+                      userFilter === "waiting"
+                        ? "bg-blue-600 hover:bg-blue-700"
+                        : "border-gray-600 text-gray-300 hover:bg-gray-700"
+                    }
+                    onClick={() => setUserFilter("waiting")}
+                  >
+                    대기 중
+                  </Button>
+                </div>
+
+                {/* 정렬 토글 버튼 */}
+                <div className="flex gap-1 bg-gray-800 border border-gray-600 rounded p-1">
+                  <button
+                    onClick={() => setUserSortBy("name")}
+                    className={`px-3 py-1 text-sm rounded transition-colors ${
+                      userSortBy === "name"
+                        ? "bg-blue-600 text-white"
+                        : "text-gray-400 hover:text-gray-200"
+                    }`}
+                  >
+                    ㄱㄴㄷ순
+                  </button>
+                  <button
+                    onClick={() => setUserSortBy("last_login")}
+                    className={`px-3 py-1 text-sm rounded transition-colors ${
+                      userSortBy === "last_login"
+                        ? "bg-blue-600 text-white"
+                        : "text-gray-400 hover:text-gray-200"
+                    }`}
+                  >
+                    최근 접속순
+                  </button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -940,12 +977,30 @@ export function AdminDashboard({
                 </div>
               ) : (
                 (() => {
+                  // 1. 필터링
                   const filteredUsers = allUsers.filter((user) => {
                     if (userFilter === "all") return true;
                     return user.status === userFilter;
                   });
 
-                  if (filteredUsers.length === 0) {
+                  // 2. 정렬
+                  const sortedUsers = [...filteredUsers].sort((a, b) => {
+                    if (userSortBy === "name") {
+                      // 이름순 (ㄱㄴㄷ)
+                      return a.first_name.localeCompare(b.first_name, "ko");
+                    } else {
+                      // 최근 접속순 (최신이 위로)
+                      const aTime = a.last_login
+                        ? new Date(a.last_login).getTime()
+                        : 0;
+                      const bTime = b.last_login
+                        ? new Date(b.last_login).getTime()
+                        : 0;
+                      return bTime - aTime; // 내림차순
+                    }
+                  });
+
+                  if (sortedUsers.length === 0) {
                     return (
                       <div className="text-center text-gray-400 py-8">
                         {userFilter === "all"
@@ -961,7 +1016,7 @@ export function AdminDashboard({
 
                   return (
                     <div className="grid grid-cols-2 gap-4">
-                      {filteredUsers.map((user) => {
+                      {sortedUsers.map((user) => {
                         // 상태 뱃지 스타일
                         const getStatusBadge = (status: UserStatus) => {
                           switch (status) {
