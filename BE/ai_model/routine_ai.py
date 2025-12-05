@@ -316,6 +316,34 @@ class RoutineAIEngine:
         # 점수 높은 순 정렬 (내가 가장 선호/적합한 기구 순서)
         scored_candidates.sort(key=lambda x: x['score'], reverse=True)
 
+        # [Smart Expansion] 
+        # 단순히 1등 기구의 점수만 보는 것이 아니라, 
+        # '추천할만한(점수 0.4 이상)' 기구가 충분히 확보되었는지 확인합니다.
+        # 확보되지 않았다면 범위를 넓혀서라도 좋은 기구를 찾아옵니다.
+        
+        usable_count = sum(1 for item in scored_candidates if item['score'] >= 0.4)
+        
+        if usable_count < 3: # 최소 3개는 좋은 기구여야 함
+            print(f"⚠️ 쓸만한 기구 부족({usable_count}개) -> 필터링 완화 및 재검색")
+            # 난이도 제한 해제
+            expanded_candidates = filter_candidates(['LOW', 'MID', 'HIGH'])
+            
+            # 기존 후보군에 없는 새로운 기구만 추가
+            existing_ids = {getattr(item['equip'], 'id', 0) for item in scored_candidates}
+            
+            for eq in expanded_candidates:
+                if getattr(eq, 'id', 0) not in existing_ids:
+                    # 점수 계산
+                    eq_tensor = self._get_equip_tensor(eq)
+                    input_vec = torch.cat([user_tensor, eq_tensor], dim=0)
+                    with torch.no_grad():
+                        score = self.model(input_vec).item()
+                    # (Rule-based Boosting은 생략하거나 약하게 적용하여 순수 선호도 반영)
+                    scored_candidates.append({'score': score, 'equip': eq})
+            
+            # 다시 정렬
+            scored_candidates.sort(key=lambda x: x['score'], reverse=True)
+
         # --- [Logic 4] 대체 그룹 추천 (Substitution Logic) with Capacity System ---
         final_selection = []
         used_groups = set()
