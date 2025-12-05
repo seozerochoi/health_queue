@@ -180,13 +180,6 @@ const EquipmentItemInner = ({ eq, onSelect, flashing }: EquipmentItemProps) => {
                 </p>
               </div>
             )}
-
-            {eq.currentUser && (
-              <div className="flex items-center space-x-1 text-sm text-gray-300">
-                <Users className="h-3 w-3" />
-                <span>사용자: {eq.currentUser}</span>
-              </div>
-            )}
           </div>
         </div>
       </CardContent>

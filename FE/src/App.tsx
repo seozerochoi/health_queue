@@ -2389,6 +2389,9 @@ export default function App() {
                       const sessionData = await res.json();
                       console.log("[ToastStart] 세션 시작 성공:", sessionData);
 
+                      // 세션 저장 완료 대기 (DB 동기화)
+                      await new Promise(resolve => setTimeout(resolve, 100));
+
                       // 선택된 기구 설정 (장비 리스트에서 찾기)
                       const equipment = equipmentList.find(
                         (eq) => String(eq.id) === String(equipmentId)
@@ -2397,8 +2400,9 @@ export default function App() {
                       
                       // AI 시간 추천 적용
                       if (finalEquipment) {
+                        console.log("📋 [줄서기→시작] equipmentList에서 가져온 기본 allocatedTime:", finalEquipment.allocatedTime);
                         try {
-                          console.log("🤖 AI 시간 추천 요청 중...");
+                          console.log("🤖 [줄서기→시작] AI 시간 추천 요청 중... equipment_id:", equipmentId);
                           const aiRes = await fetch(`${apiBase}/api/ai/time/`, {
                             method: "POST",
                             headers: {
@@ -2407,16 +2411,20 @@ export default function App() {
                             },
                             body: JSON.stringify({ equipment_id: equipmentId }),
                           });
+                          console.log("🤖 [줄서기→시작] AI API 응답 상태:", aiRes.status);
                           if (aiRes.ok) {
                             const aiData = await aiRes.json();
-                            console.log("🤖 AI 추천 시간 수신:", aiData.recommended_time);
+                            console.log("🤖 [줄서기→시작] AI 추천 시간 수신:", aiData.recommended_time, "분");
                             finalEquipment.allocatedTime = aiData.recommended_time;
+                            console.log("✅ [줄서기→시작] finalEquipment.allocatedTime 업데이트 완료:", finalEquipment.allocatedTime);
                           } else {
-                            console.warn("AI 시간 추천 응답 실패:", aiRes.status);
+                            const errorText = await aiRes.text().catch(() => "");
+                            console.error("❌ [줄서기→시작] AI 시간 추천 응답 실패:", aiRes.status, errorText);
                           }
                         } catch (aiError) {
-                          console.warn("AI 시간 추천 요청 실패 (기본값 사용):", aiError);
+                          console.error("❌ [줄서기→시작] AI 시간 추천 요청 실패 (기본값 사용):", aiError);
                         }
+                        console.log("📌 [줄서기→시작] 최종 setSelectedEquipment allocatedTime:", finalEquipment.allocatedTime);
                         setSelectedEquipment(finalEquipment);
                       }
                       setWorkoutStartTime(new Date());
