@@ -399,6 +399,8 @@ class AIEngine:
         else:
             target_time = recommended_time
 
+        print(f"🧠 [TimeAI] Feedback Received: Score={feedback_score}, RecTime={recommended_time:.1f} -> Target={target_time:.1f}")
+
         # 2. [핵심 추가 3] Safety Clamping (안전 장치)
         # 피드백을 반영하되, 기존 추천 시간의 ±50%를 벗어나지 못하게 하여 데이터 오염(Poisoning) 방지
         min_limit = recommended_time * 0.5
@@ -409,16 +411,33 @@ class AIEngine:
         # AI는 (목표 시간 - 공식 시간)의 차이를 학습해야 함
         formula_time = self.formula_engine.calculate_time(user, equipment)
         target_residual = target_time - formula_time
+        
+        print(f"🎯 [TimeAI] 학습 목표: Formula={formula_time:.1f}, UserTarget={target_time:.1f} -> Residual={target_residual:.1f}")
 
         # 3. [핵심 추가 4] 메모리에 저장 (Experience Replay)
         features = self._extract_features(user, equipment)
         recent_sample = (features, target_residual)
         self.memory.append(recent_sample)
 
-        # 4. [핵심 추가 5] 배치 학습 (Batch Training)
-        # 현재 데이터 하나만 학습하는 것이 아니라, 과거의 기억을 꺼내 함께 복습
-        # [개선] 최신 피드백을 즉시 반영하기 위해 Epoch 수를 늘리고, recent_sample을 명시적으로 전달
-        loss = self._replay_train(epochs=10, recent_sample=recent_sample)
+        # [수정] 강력한 즉시 반영을 위한 2단계 학습
+        
+        # Phase 1: 단기 집중 학습 (Short-term Intensive Training)
+        # 방금 들어온 데이터만 가지고 모델을 과적합(Overfitting) 시켜서 즉각적인 변화를 유도함
+        self.model.train()
+        recent_features = features.unsqueeze(0) # (1, InputDim)
+        recent_target = torch.FloatTensor([[target_residual]]) # (1, 1)
+        
+        print("🔥 [TimeAI] 단기 집중 학습 시작 (Instant Adaptation)...")
+        for _ in range(20): # 20번 반복 학습하여 강제로 주입
+            self.optimizer.zero_grad()
+            pred = self.model(recent_features)
+            loss = self.criterion(pred, recent_target)
+            loss.backward()
+            self.optimizer.step()
+
+        # Phase 2: 경험 재생 (Experience Replay)
+        # 과거 데이터와 섞어서 일반화 성능 유지 (Epochs 10 -> 5로 조정)
+        loss = self._replay_train(epochs=5, recent_sample=recent_sample)
 
         # 5. [핵심 추가 6] 모델 자동 저장 (Auto-Save)
         # 학습된 뇌(가중치)를 파일로 저장하여 서버 재시작 시에도 유지되도록 함

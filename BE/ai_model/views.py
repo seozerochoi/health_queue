@@ -237,8 +237,27 @@ class FeedbackView(BaseAIView):
             if fb_type == 'TIME':
                 # 시간 AI 학습
                 equip_id = request.data.get('equipment_id')
-                used_time = float(request.data.get('used_time')) # 추천받았던 시간
+                used_time = float(request.data.get('used_time', 0))
+                allocated_time = float(request.data.get('allocated_time', 0))
                 
+                # [중요] 테스트 시 짧은 사용 시간으로 인한 학습 오류 방지 로직
+                # 사용자가 "부족하다(1,2)"고 했는데 사용 시간이 1분 미만이면, 
+                # 실제 사용 시간이 아니라 '원래 할당받았던 시간'을 기준으로 학습해야 함.
+                
+                if score <= 2: # 부족함 (1, 2)
+                    # 부족하다고 느꼈다면, 할당된 시간이 기준이 되어야 함
+                    # (단, 할당 시간이 없으면 최소 15분으로 가정)
+                    base_time = allocated_time if allocated_time > 0 else max(used_time, 15.0)
+                elif score >= 4: # 과도함 (4, 5)
+                    # 과도하다고 느꼈다면, 실제 사용 시간(일찍 끝냄)이 기준
+                    base_time = used_time if used_time > 0 else allocated_time
+                else: # 적절함 (3)
+                    # 적절했다면 실제 사용 시간 기준 (단, 너무 짧으면 할당 시간)
+                    base_time = used_time if used_time > 3.0 else allocated_time
+
+                # 안전장치: 최종 base_time이 너무 작으면 보정
+                if base_time < 3.0: base_time = 15.0
+
                 # DB 객체 가져오기 & AI 객체 변환
                 db_eq = get_object_or_404(Equipment, pk=equip_id)
                 ai_eq = AIEquipment(
@@ -249,7 +268,7 @@ class FeedbackView(BaseAIView):
                     base_time=db_eq.base_session_time_minutes
                 ) # 간소화
 
-                target, loss = time_engine.update_with_feedback(ai_user, ai_eq, used_time, score)
+                target, loss = time_engine.update_with_feedback(ai_user, ai_eq, base_time, score)
                 
                 # (옵션) 체크포인트 저장
                 time_engine.save_checkpoint("time_ai.pth")

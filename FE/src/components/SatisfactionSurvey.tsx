@@ -33,14 +33,64 @@ export function SatisfactionSurvey({
   const [timeSufficiency, setTimeSufficiency] = useState<number>(0);
   const [feedback, setFeedback] = useState("");
 
-  const handleSubmit = () => {
-    // 여기서 만족도 데이터를 저장/전송
-    console.log({
-      equipmentId: equipment.id,
-      timeSufficiency,
-      actualUsageTime,
-      feedback,
-    });
+  const handleSubmit = async () => {
+    // API Base URL 결정
+    const apiBase = (() => {
+      try {
+        const vite = (import.meta as any)?.env?.VITE_API_BASE;
+        if (vite) return vite;
+      } catch (e) {
+        /* ignore */
+      }
+      try {
+        if (
+          typeof process !== "undefined" &&
+          process?.env?.REACT_APP_API_BASE
+        )
+          return process.env.REACT_APP_API_BASE;
+      } catch (e) {
+        /* ignore */
+      }
+      return "https://43.201.88.27";
+    })();
+
+    const token = localStorage.getItem("access_token");
+
+    try {
+      console.log("피드백 전송 시도:", {
+        type: "TIME",
+        equipment_id: equipment.id,
+        score: timeSufficiency,
+        used_time: actualUsageTime,
+      });
+
+      const response = await fetch(`${apiBase}/api/ai/feedback/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          type: "TIME",
+          equipment_id: equipment.id,
+          score: timeSufficiency,
+          used_time: actualUsageTime,
+          allocated_time: equipment.allocatedTime || 0, // 할당 시간 추가 전송
+          comment: feedback,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error("피드백 전송 실패:", response.status);
+        const errText = await response.text();
+        console.error("에러 내용:", errText);
+      } else {
+        const resJson = await response.json();
+        console.log("피드백 전송 성공:", resJson);
+      }
+    } catch (error) {
+      console.error("피드백 전송 중 오류:", error);
+    }
 
     onSurveyComplete();
   };
