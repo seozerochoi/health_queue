@@ -127,6 +127,7 @@ export function AdminDashboard({
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [userFilter, setUserFilter] = useState<UserFilter>("all");
   const [userSortBy, setUserSortBy] = useState<UserSortBy>("name");
+  const [userSearchQuery, setUserSearchQuery] = useState("");
 
   // 신고 목록 가져오기
   const fetchReports = async (silent = false) => {
@@ -901,6 +902,16 @@ export function AdminDashboard({
                   닫기
                 </Button>
               </div>
+              {/* 사용자 검색창 */}
+              <div className="mt-4 flex items-center gap-2">
+                <Input
+                  type="text"
+                  placeholder="이름으로 검색..."
+                  value={userSearchQuery}
+                  onChange={e => setUserSearchQuery(e.target.value)}
+                  className="w-64 bg-gray-900 text-white border border-black focus:border-blue-600"
+                />
+              </div>
               {/* 필터 및 정렬 옵션 */}
               <div className="flex items-center justify-between gap-4 mt-4">
                 {/* 필터 버튼 */}
@@ -946,23 +957,23 @@ export function AdminDashboard({
                 </div>
 
                 {/* 정렬 토글 버튼 */}
-                <div className="flex gap-1 bg-gray-800 border border-gray-600 rounded p-1">
+                <div className="flex border border-gray-600 rounded-md overflow-hidden">
                   <button
                     onClick={() => setUserSortBy("name")}
-                    className={`px-3 py-1 text-sm rounded transition-colors ${
+                    className={`px-4 py-2 text-sm transition-colors ${
                       userSortBy === "name"
                         ? "bg-blue-600 text-white"
-                        : "text-gray-400 hover:text-gray-200"
+                        : "bg-gray-800 text-gray-400 hover:bg-gray-700"
                     }`}
                   >
                     ㄱㄴㄷ순
                   </button>
                   <button
                     onClick={() => setUserSortBy("last_login")}
-                    className={`px-3 py-1 text-sm rounded transition-colors ${
+                    className={`px-4 py-2 text-sm transition-colors ${
                       userSortBy === "last_login"
                         ? "bg-blue-600 text-white"
-                        : "text-gray-400 hover:text-gray-200"
+                        : "bg-gray-800 text-gray-400 hover:bg-gray-700"
                     }`}
                   >
                     최근 접속순
@@ -979,8 +990,19 @@ export function AdminDashboard({
                 (() => {
                   // 1. 필터링
                   const filteredUsers = allUsers.filter((user) => {
-                    if (userFilter === "all") return true;
-                    return user.status === userFilter;
+                    // 상태 필터
+                    if (userFilter !== "all" && user.status !== userFilter) {
+                      return false;
+                    }
+                    // 이름 검색 필터
+                    if (
+                      userSearchQuery.trim() &&
+                      !user.first_name.toLowerCase().includes(userSearchQuery.trim().toLowerCase()) &&
+                      !user.username.toLowerCase().includes(userSearchQuery.trim().toLowerCase())
+                    ) {
+                      return false;
+                    }
+                    return true;
                   });
 
                   // 2. 정렬
