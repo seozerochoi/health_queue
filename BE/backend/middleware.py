@@ -36,8 +36,9 @@ class RequestLoggingMiddleware:
         # 요청 정보 로깅 (API 경로에만)
         if request.path.startswith('/api/'):
             logger.info(f"🌐 [REQUEST] {request.method} {request.path}")
-            if request.query_params:
-                logger.info(f"   쿼리: {dict(request.query_params)}")
+            # WSGIRequest는 query_params가 없으므로 GET을 사용
+            if request.GET:
+                logger.info(f"   쿼리: {dict(request.GET)}")
             logger.info(f"   사용자: {request.user}")
 
         response = self.get_response(request)
