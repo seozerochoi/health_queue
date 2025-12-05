@@ -16,7 +16,7 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         # API를 통해 보여줄 필드들을 지정합니다.
-        fields = ['id', 'username', 'email', 'name', 'role', 'is_staff']
+        fields = ['id', 'username', 'email', 'name', 'role', 'is_staff', 'last_login']
 
     def get_role(self, obj):
         # UserProfile에서 role 가져오기
