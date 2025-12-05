@@ -104,19 +104,27 @@ export function AdminDashboard({
     { hour: string; rate: number }[]
   >([]);
 
-  // 현재 이용자 목록 상태
-  interface ActiveUser {
-    session_id: number;
-    user_id: number;
+  // 사용자 목록 상태
+  type UserStatus = "offline" | "online" | "exercising" | "waiting";
+  type UserFilter = "all" | "exercising" | "waiting";
+
+  interface GymUser {
+    id: number;
     username: string;
-    equipment_id: number;
-    equipment_name: string;
-    subcategory: string;
-    start_time: string;
+    first_name: string;
+    status: UserStatus;
+    equipment_id?: number;
+    equipment_name?: string;
+    session_id?: number;
+    start_time?: string;
+    is_waiting?: boolean;
+    last_login?: string;
   }
-  const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
-  const [showActiveUsersPanel, setShowActiveUsersPanel] = useState(false);
-  const [isLoadingActiveUsers, setIsLoadingActiveUsers] = useState(false);
+
+  const [allUsers, setAllUsers] = useState<GymUser[]>([]);
+  const [showUsersPanel, setShowUsersPanel] = useState(false);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [userFilter, setUserFilter] = useState<UserFilter>("all");
 
   // 신고 목록 가져오기
   const fetchReports = async (silent = false) => {
@@ -712,13 +720,15 @@ export function AdminDashboard({
     }
   };
 
-  // 현재 활성 사용자 목록 가져오기
-  const fetchActiveUsers = async () => {
-    setIsLoadingActiveUsers(true);
+  // 사용자 목록 가져오기 (온라인/활성 사용자 + 전체 사용자)
+  const fetchAllUsers = async () => {
+    setIsLoadingUsers(true);
     try {
       const token = localStorage.getItem("access_token");
-      const response = await fetch(
-        "https://43.201.88.27/api/utilization/active-users/",
+
+      // 1. 온라인/활성 사용자 목록 조회 (새 API)
+      const onlineResponse = await fetch(
+        "https://43.201.88.27/api/users/online/",
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -726,18 +736,54 @@ export function AdminDashboard({
         }
       );
 
-      if (!response.ok) {
-        throw new Error("현재 이용자 목록 조회 실패");
+      if (!onlineResponse.ok) {
+        throw new Error("온라인 사용자 목록 조회 실패");
       }
 
-      const data = await response.json();
-      console.log("현재 이용자 목록 API 응답:", data);
+      const onlineData = await onlineResponse.json();
+      const onlineUsers = onlineData.users || [];
 
-      setActiveUsers(data.active_users || []);
+      // 2. 전체 사용자 목록 조회 (모든 사용자 필터용)
+      const allUsersResponse = await fetch("https://43.201.88.27/api/users/", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const allUsersData = allUsersResponse.ok
+        ? await allUsersResponse.json()
+        : [];
+
+      // 3. 온라인 사용자 ID 세트 생성
+      const onlineUserIds = new Set(onlineUsers.map((u: any) => u.id));
+
+      // 4. 전체 사용자 목록에 온라인 사용자 정보 병합
+      const enrichedUsers: GymUser[] = allUsersData.map((user: any) => {
+        const onlineUser = onlineUsers.find((ou: any) => ou.id === user.id);
+
+        return {
+          id: user.id,
+          username: user.username,
+          first_name: user.first_name || user.username,
+          status: onlineUser ? onlineUser.status : "offline",
+          equipment_id: onlineUser?.equipment_id,
+          equipment_name: onlineUser?.equipment_name,
+          last_login: onlineUser?.last_login || user.last_login,
+        };
+      });
+
+      console.log("사용자 목록:", enrichedUsers);
+      console.log(
+        "온라인 사용자:",
+        onlineUsers.length,
+        "/ 전체:",
+        enrichedUsers.length
+      );
+      setAllUsers(enrichedUsers);
     } catch (error) {
-      console.error("현재 이용자 목록 조회 에러:", error);
+      console.error("사용자 목록 조회 에러:", error);
     } finally {
-      setIsLoadingActiveUsers(false);
+      setIsLoadingUsers(false);
     }
   };
 
@@ -754,7 +800,7 @@ export function AdminDashboard({
             <h1 className="text-2xl font-bold text-white">운영자 대시보드</h1>
             {gymName && <p className="text-gray-300">{gymName}</p>}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <Button
               onClick={() => setShowAddEquipmentDialog(true)}
               variant="outline"
@@ -780,9 +826,9 @@ export function AdminDashboard({
           <Card
             className="border-gray-600 bg-card cursor-pointer hover:bg-gray-800/60 transition-colors"
             onClick={() => {
-              setShowActiveUsersPanel((v) => !v);
-              if (!showActiveUsersPanel) {
-                fetchActiveUsers();
+              setShowUsersPanel((v) => !v);
+              if (!showUsersPanel) {
+                fetchAllUsers();
               }
             }}
           >
@@ -817,71 +863,182 @@ export function AdminDashboard({
           </Card>
         </div>
 
-        {showActiveUsersPanel && (
+        {showUsersPanel && (
           <Card className="border-gray-600 bg-card mb-6">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-white flex items-center gap-2">
                   <Users className="h-5 w-5" />
-                  현재 이용 중인 사용자 목록
+                  사용자 목록
                 </CardTitle>
                 <Button
                   size="sm"
                   variant="outline"
                   className="border-gray-600 text-gray-300 hover:bg-gray-700"
-                  onClick={() => setShowActiveUsersPanel(false)}
+                  onClick={() => setShowUsersPanel(false)}
                 >
                   닫기
                 </Button>
               </div>
+              {/* 필터 버튼 */}
+              <div className="flex gap-2 mt-4">
+                <Button
+                  size="sm"
+                  variant={userFilter === "all" ? "default" : "outline"}
+                  className={
+                    userFilter === "all"
+                      ? "bg-blue-600 hover:bg-blue-700"
+                      : "border-gray-600 text-gray-300 hover:bg-gray-700"
+                  }
+                  onClick={() => setUserFilter("all")}
+                >
+                  모든 사용자
+                </Button>
+                <Button
+                  size="sm"
+                  variant={userFilter === "exercising" ? "default" : "outline"}
+                  className={
+                    userFilter === "exercising"
+                      ? "bg-blue-600 hover:bg-blue-700"
+                      : "border-gray-600 text-gray-300 hover:bg-gray-700"
+                  }
+                  onClick={() => setUserFilter("exercising")}
+                >
+                  운동 중
+                </Button>
+                <Button
+                  size="sm"
+                  variant={userFilter === "waiting" ? "default" : "outline"}
+                  className={
+                    userFilter === "waiting"
+                      ? "bg-blue-600 hover:bg-blue-700"
+                      : "border-gray-600 text-gray-300 hover:bg-gray-700"
+                  }
+                  onClick={() => setUserFilter("waiting")}
+                >
+                  대기 중
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              {isLoadingActiveUsers ? (
+              {isLoadingUsers ? (
                 <div className="text-center text-gray-400 py-8">
-                  이용자 목록을 불러오는 중...
-                </div>
-              ) : activeUsers.length === 0 ? (
-                <div className="text-center text-gray-400 py-8">
-                  현재 이용 중인 사용자가 없습니다.
+                  사용자 목록을 불러오는 중...
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {activeUsers.map((user) => (
-                    <div
-                      key={user.session_id}
-                      className="p-4 border border-blue-900/40 bg-blue-950/50 rounded-lg flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="bg-blue-900/60 rounded-full w-10 h-10 flex items-center justify-center">
-                          <Users className="h-5 w-5 text-blue-300" />
-                        </div>
-                        <div>
-                          <p className="font-semibold text-white">
-                            {user.username}
-                          </p>
-                          <p className="text-sm text-gray-300">
-                            {user.equipment_name}
-                          </p>
-                        </div>
+                (() => {
+                  const filteredUsers = allUsers.filter((user) => {
+                    if (userFilter === "all") return true;
+                    return user.status === userFilter;
+                  });
+
+                  if (filteredUsers.length === 0) {
+                    return (
+                      <div className="text-center text-gray-400 py-8">
+                        {userFilter === "all"
+                          ? "등록된 사용자가 없습니다."
+                          : `${
+                              userFilter === "exercising"
+                                ? "운동 중인"
+                                : "대기 중인"
+                            } 사용자가 없습니다.`}
                       </div>
-                      <div className="text-right">
-                        <Badge className="bg-green-900/50 text-green-300 border-green-700">
-                          이용중
-                        </Badge>
-                        <p className="text-xs text-gray-400 mt-1">
-                          {new Date(user.start_time).toLocaleTimeString(
-                            "ko-KR",
-                            {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            }
-                          )}
-                          부터
-                        </p>
-                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-2 gap-4">
+                      {filteredUsers.map((user) => {
+                        // 상태 뱃지 스타일
+                        const getStatusBadge = (status: UserStatus) => {
+                          switch (status) {
+                            case "exercising":
+                              return "bg-green-500/20 text-green-400 border-green-500/50";
+                            case "waiting":
+                              return "bg-yellow-500/20 text-yellow-400 border-yellow-500/50";
+                            case "online":
+                            case "offline":
+                              return "bg-gray-500/20 text-gray-400 border-gray-500/50";
+                          }
+                        };
+
+                        // 최근 접속일시 포맷팅
+                        const formatLastLogin = (lastLogin?: string) => {
+                          if (!lastLogin) return "접속 기록 없음";
+                          const date = new Date(lastLogin);
+                          const now = new Date();
+                          const diffMs = now.getTime() - date.getTime();
+                          const diffMins = Math.floor(diffMs / (1000 * 60));
+                          const diffHours = Math.floor(
+                            diffMs / (1000 * 60 * 60)
+                          );
+                          const diffDays = Math.floor(
+                            diffMs / (1000 * 60 * 60 * 24)
+                          );
+
+                          if (diffMins < 1) return "방금 전";
+                          if (diffMins < 60) return `${diffMins}분 전`;
+                          if (diffHours < 24) return `${diffHours}시간 전`;
+                          if (diffDays < 7) return `${diffDays}일 전`;
+                          return date.toLocaleDateString("ko-KR", {
+                            month: "short",
+                            day: "numeric",
+                          });
+                        };
+
+                        const getStatusText = (
+                          status: UserStatus,
+                          lastLogin?: string
+                        ) => {
+                          switch (status) {
+                            case "exercising":
+                              return "운동 중";
+                            case "waiting":
+                              return "대기 중";
+                            case "online":
+                            case "offline":
+                              return formatLastLogin(lastLogin);
+                          }
+                        };
+
+                        return (
+                          <div
+                            key={user.id}
+                            className="flex items-center gap-3 bg-gray-800/40 border border-gray-700 rounded-lg p-3 hover:bg-gray-800/60 transition-colors"
+                          >
+                            {/* 아이콘 - 빈 파란색 원 */}
+                            <div className="flex-shrink-0">
+                              <div className="w-10 h-10 rounded-full bg-blue-600"></div>
+                            </div>
+
+                            {/* 사용자 정보 */}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white font-medium truncate">
+                                {user.first_name}
+                              </p>
+                              {user.equipment_name && (
+                                <p className="text-xs text-gray-400 truncate">
+                                  {user.equipment_name}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* 상태 뱃지 */}
+                            <div className="flex-shrink-0">
+                              <span
+                                className={`inline-block px-2 py-1 text-xs rounded border ${getStatusBadge(
+                                  user.status
+                                )}`}
+                              >
+                                {getStatusText(user.status, user.last_login)}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  ))}
-                </div>
+                  );
+                })()
               )}
             </CardContent>
           </Card>

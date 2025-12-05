@@ -1,3 +1,5 @@
+# users/urls.py 에서 get_online_users를 import해서 사용해야 함
+
 from django.shortcuts import render
 # users/views.py
 
@@ -22,12 +24,77 @@ import base64
 import json
 import os
 from django.core.files.base import ContentFile
+from django.utils import timezone
+from datetime import timedelta
 try:
     from openai import OpenAI
 except Exception:
     OpenAI = None
 
 logger = logging.getLogger(__name__)
+
+
+# 온라인/활성 사용자 조회 API
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_online_users(request):
+    """
+    활성 사용자 목록 조회
+    - 운동 중인 사용자
+    - 대기 중인 사용자
+    - 기타 사용자 (최근 접속일시 포함)
+    """
+    from workouts.models import Reservation
+    
+    now = timezone.now()
+    
+    # 운동 중인 사용자 ID 목록
+    exercising_user_ids = list(
+        Reservation.objects.filter(status='IN_USE').values_list('user_id', flat=True)
+    )
+    
+    # 대기 중인 사용자 ID 목록
+    waiting_user_ids = list(
+        Reservation.objects.filter(status__in=['WAITING', 'NOTIFIED']).values_list('user_id', flat=True)
+    )
+    
+    # 결과 조합
+    result = []
+    
+    # 운동 중인 사용자
+    for user_id in set(exercising_user_ids):
+        try:
+            user = User.objects.get(id=user_id)
+            reservation = Reservation.objects.filter(user_id=user_id, status='IN_USE').first()
+            result.append({
+                'id': user.id,
+                'username': user.username,
+                'first_name': user.first_name or user.username,
+                'status': 'exercising',
+                'equipment_id': reservation.equipment_id if reservation else None,
+                'equipment_name': reservation.equipment.name if reservation and reservation.equipment else None,
+                'last_login': user.last_login.isoformat() if user.last_login else None,
+            })
+        except User.DoesNotExist:
+            continue
+    
+    # 대기 중인 사용자
+    for user_id in set(waiting_user_ids):
+        if user_id in exercising_user_ids:
+            continue  # 이미 운동 중으로 처리됨
+        try:
+            user = User.objects.get(id=user_id)
+            result.append({
+                'id': user.id,
+                'username': user.username,
+                'first_name': user.first_name or user.username,
+                'status': 'waiting',
+                'last_login': user.last_login.isoformat() if user.last_login else None,
+            })
+        except User.DoesNotExist:
+            continue
+    
+    return Response({'users': result, 'count': len(result)})
 
 class UserViewSet(viewsets.ModelViewSet):
     # 이 줄을 추가하여 '출입증 검사'를 설정합니다.
