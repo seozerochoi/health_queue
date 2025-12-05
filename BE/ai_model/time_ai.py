@@ -399,6 +399,8 @@ class AIEngine:
         else:
             target_time = recommended_time
 
+        print(f"🧠 [TimeAI] Feedback Received: Score={feedback_score}, RecTime={recommended_time:.1f} -> Target={target_time:.1f}")
+
         # 2. [핵심 추가 3] Safety Clamping (안전 장치)
         # 피드백을 반영하되, 기존 추천 시간의 ±50%를 벗어나지 못하게 하여 데이터 오염(Poisoning) 방지
         min_limit = recommended_time * 0.5
