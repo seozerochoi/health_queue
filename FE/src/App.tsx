@@ -2393,8 +2393,31 @@ export default function App() {
                       const equipment = equipmentList.find(
                         (eq) => String(eq.id) === String(equipmentId)
                       );
-                      if (equipment) {
-                        setSelectedEquipment(equipment);
+                      let finalEquipment = equipment ? { ...equipment } : undefined;
+                      
+                      // AI 시간 추천 적용
+                      if (finalEquipment) {
+                        try {
+                          console.log("🤖 AI 시간 추천 요청 중...");
+                          const aiRes = await fetch(`${apiBase}/api/ai/time/`, {
+                            method: "POST",
+                            headers: {
+                              Authorization: `Bearer ${token}`,
+                              "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({ equipment_id: equipmentId }),
+                          });
+                          if (aiRes.ok) {
+                            const aiData = await aiRes.json();
+                            console.log("🤖 AI 추천 시간 수신:", aiData.recommended_time);
+                            finalEquipment.allocatedTime = aiData.recommended_time;
+                          } else {
+                            console.warn("AI 시간 추천 응답 실패:", aiRes.status);
+                          }
+                        } catch (aiError) {
+                          console.warn("AI 시간 추천 요청 실패 (기본값 사용):", aiError);
+                        }
+                        setSelectedEquipment(finalEquipment);
                       }
                       setWorkoutStartTime(new Date());
                       setCurrentView("workout-timer");
