@@ -1539,7 +1539,7 @@ export function AdminDashboard({
                       className="bg-gray-900 text-white border border-black focus:border-blue-600"
                     />
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 ml-3">
                     <Label className="text-gray-300 whitespace-nowrap">종료일</Label>
                     <Input
                       type="date"

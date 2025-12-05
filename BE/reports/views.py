@@ -566,12 +566,20 @@ class EquipmentDailyStatsView(APIView):
             logger.warning(f"   ❌ 31일 범위 초과: {(end_date - start_date).days}일")
             return Response({'detail': '최대 31일 범위를 초과했습니다.'}, status=400)
 
-        qs = EquipmentDailyStats.objects.select_related('equipment').filter(date__gte=start_date, date__lte=end_date)
-        logger.info(f"   📊 초기 쿼리셋 개수: {qs.count()}")
+        # 모든 기구 목록 가져오기 (사용 여부 무관)
+        all_equipments = Equipment.objects.filter(operational_state='NORMAL').order_by('name')
+        logger.info(f"   📊 전체 NORMAL 기구 개수: {all_equipments.count()}")
+        
+        # 통계 데이터 가져오기
+        stats_qs = EquipmentDailyStats.objects.select_related('equipment').filter(date__gte=start_date, date__lte=end_date)
+        logger.info(f"   📊 통계 레코드 개수: {stats_qs.count()}")
+        
         if equipment_id:
-            qs = qs.filter(equipment_id=equipment_id)
+            stats_qs = stats_qs.filter(equipment_id=equipment_id)
+            all_equipments = all_equipments.filter(id=equipment_id)
         if subcategory:
-            qs = qs.filter(equipment__subcategory=subcategory)
+            stats_qs = stats_qs.filter(equipment__subcategory=subcategory)
+            all_equipments = all_equipments.filter(subcategory=subcategory)
         if muscle_group:
             GROUP_MAP = {
                 'CHEST': {'CHEST_PRESS_MAIN','CHEST_PRESS_UPPER','CHEST_FLY'},
@@ -580,20 +588,36 @@ class EquipmentDailyStatsView(APIView):
                 'SHOULDER': {'SHOULDER_PRESS','SHOULDER_SIDE'},
             }
             defined = set().union(*GROUP_MAP.values())
-            GROUP_MAP['OTHER'] = defined  # placeholder (OTHER 분류는 별도 확장 필요)
+            GROUP_MAP['OTHER'] = defined
             members = GROUP_MAP.get(muscle_group.upper())
             if members:
-                qs = qs.filter(equipment__subcategory__in=members)
+                stats_qs = stats_qs.filter(equipment__subcategory__in=members)
+                all_equipments = all_equipments.filter(subcategory__in=members)
 
+        # 통계를 딕셔너리로 변환 (기구별 집계)
+        stats_dict = {}
+        for stat in stats_qs:
+            eq_id = stat.equipment_id
+            if eq_id not in stats_dict:
+                stats_dict[eq_id] = {
+                    'usage_count': 0,
+                    'total_minutes': 0,
+                }
+            stats_dict[eq_id]['usage_count'] += stat.usage_count
+            stats_dict[eq_id]['total_minutes'] += stat.total_usage_minutes
+        
+        # 모든 기구에 대해 레코드 생성 (사용 안한 기구는 0으로)
         records = []
-        for stat in qs.order_by('date'):
+        for equip in all_equipments:
+            eq_stats = stats_dict.get(equip.id, {'usage_count': 0, 'total_minutes': 0})
+            avg_time = round(eq_stats['total_minutes'] / eq_stats['usage_count'], 1) if eq_stats['usage_count'] > 0 else 0.0
             records.append({
-                'equipment_id': stat.equipment_id,
-                'equipment_name': stat.equipment.name,
-                'date': stat.date.isoformat(),
-                'usage_count': stat.usage_count,
-                'total_usage_minutes': stat.total_usage_minutes,
-                'average_time_minutes': round(stat.average_time_minutes,1),
+                'equipment_id': equip.id,
+                'equipment_name': equip.name,
+                'date': today.isoformat(),
+                'usage_count': eq_stats['usage_count'],
+                'total_usage_minutes': eq_stats['total_minutes'],
+                'average_time_minutes': avg_time,
             })
 
         logger.info(f"   ✅ 기구별 레코드 개수: {len(records)}")
@@ -665,12 +689,22 @@ class BodyPartDailyStatsView(APIView):
             logger.warning(f"   ❌ 31일 범위 초과: {(end_date - start_date).days}일")
             return Response({'detail': '최대 31일 범위를 초과했습니다.'}, status=400)
 
-        # 기구별 통계 가져오기
+        # 기구별 통계 가져오기 (완료된 세션)
         stats = EquipmentDailyStats.objects.select_related('equipment').filter(
             date__gte=start_date,
             date__lte=end_date
         )
         logger.info(f"   📊 조회된 EquipmentDailyStats: {stats.count()}개")
+        
+        # 🔴 실시간 반영: 진행 중인 세션도 포함 (end_time IS NULL)
+        from workouts.models import UsageSession
+        from django.db.models import Q
+        active_sessions = UsageSession.objects.select_related('equipment').filter(
+            Q(end_time__isnull=True) | Q(end_time__gte=timezone.now() - timezone.timedelta(hours=1)),
+            start_time__date__gte=start_date,
+            start_time__date__lte=end_date
+        )
+        logger.info(f"   🔴 진행 중/최근 세션: {active_sessions.count()}개")
 
         # 8개 부위별로 집계
         body_part_map = {
@@ -685,37 +719,51 @@ class BodyPartDailyStatsView(APIView):
             '기타': {'usage_count': 0, 'total_minutes': 0},
         }
 
-        mapped_count = 0
-        for stat in stats:
-            equip = stat.equipment
-            category = '기타'
-
+        def map_to_category(equip):
+            """기구를 부위 카테고리로 매핑"""
             if equip.subcategory:
                 sub = equip.subcategory
                 if 'CHEST' in sub:
-                    category = '가슴'
+                    return '가슴'
                 elif 'BACK' in sub:
-                    category = '등'
+                    return '등'
                 elif 'SHOULDER' in sub:
-                    category = '어깨'
+                    return '어깨'
                 elif sub == 'LEG_PRESS_MAIN' or sub == 'LEG_EXTENSION':
-                    category = '허벅지'
+                    return '허벅지'
                 elif sub == 'LEG_CURL':
-                    category = '종아리'
+                    return '종아리'
             elif equip.body_part:
                 bp = equip.body_part
                 if bp == 'UPPER':
-                    category = '가슴'
+                    return '가슴'
                 elif bp == 'LOWER':
-                    category = '허벅지'
+                    return '허벅지'
                 elif bp == 'CORE':
-                    category = '복근'
+                    return '복근'
                 elif bp == 'CARDIO':
-                    category = '유산소'
+                    return '유산소'
+            return '기타'
 
+        mapped_count = 0
+        # 완료된 세션 통계 집계
+        for stat in stats:
+            category = map_to_category(stat.equipment)
             body_part_map[category]['usage_count'] += stat.usage_count
             body_part_map[category]['total_minutes'] += stat.total_usage_minutes
             mapped_count += 1
+        
+        # 🔴 진행 중인 세션 실시간 반영 (평균 시간 추정)
+        now = timezone.now()
+        for session in active_sessions:
+            if session.equipment:
+                category = map_to_category(session.equipment)
+                # 진행 중이면 현재까지의 시간 계산
+                end = session.end_time if session.end_time else now
+                duration_minutes = int((end - session.start_time).total_seconds() / 60)
+                body_part_map[category]['usage_count'] += 1
+                body_part_map[category]['total_minutes'] += duration_minutes
+                logger.info(f"      🔴 [실시간] {session.equipment.name} ({category}): {duration_minutes}분 진행중")
 
         logger.info(f"   🔄 매핑 완료: {mapped_count}개 레코드를 부위별로 집계")
 
