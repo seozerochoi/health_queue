@@ -149,11 +149,59 @@ class RoutineAIEngine:
         # 입력값 정규화 (공백 제거)
         intensity = str(intensity).strip()
 
+        # [Advanced Logic] Total Workload Strategy (Fatigue Capacity System)
+        # 사용자의 체력과 강도에 따라 '운동 용량(Capacity)'을 산정하고,
+        # 기구별 '비용(Cost)'을 계산하여 용량이 찰 때까지 담는 방식.
+        
+        # 1. 사용자 일일 운동 용량 계산 (Daily Capacity)
+        base_capacity = 100
+        # UserProfile에서 inbody_score 가져오기 (없으면 기본값)
+        try:
+            inbody_score = getattr(user.userprofile, 'inbody_score', None)
+        except:
+            inbody_score = None
+
+        if inbody_score:
+            if inbody_score >= 80: base_capacity += 20
+            elif inbody_score >= 70: base_capacity += 10
+            elif inbody_score < 60: base_capacity -= 10
+        
         allowed_difficulties = ['LOW', 'MID', 'HIGH']
-        if intensity == '중':
+        
+        # 강도에 따른 용량 및 시간 배율 설정
+        if intensity == '상':
+            capacity_multiplier = 1.3
+            time_multiplier = 1.2
+            allowed_difficulties = ['LOW', 'MID', 'HIGH']
+        elif intensity == '중':
+            capacity_multiplier = 1.0
+            time_multiplier = 1.0
+            allowed_difficulties = ['LOW', 'MID', 'HIGH']
+        else: # '하'
+            capacity_multiplier = 0.7
+            time_multiplier = 0.8
             allowed_difficulties = ['LOW', 'MID']
-        elif intensity == '하':
-            allowed_difficulties = ['LOW']
+            
+        total_capacity = base_capacity * capacity_multiplier
+        
+        # 2. 기구별 비용 계산 함수 (Equipment Cost)
+        def get_equipment_cost(eq):
+            cost = 10 # 기본 비용
+            e_type = str(getattr(eq, 'type', 'MACHINE')).upper()
+            e_diff = getattr(eq, 'difficulty', 'MID')
+            
+            if e_type == 'FREE_WEIGHT':
+                cost += 5
+            elif e_type == 'MACHINE':
+                cost += 2
+                
+            if e_diff == 'HIGH':
+                cost += 10
+            elif e_diff == 'MID':
+                cost += 5
+            # LOW는 추가 비용 없음
+            
+            return cost
 
         # --- [Logic 2] 후보군 필터링 (Filtering) ---
         def filter_candidates(allowed_diffs):
@@ -216,11 +264,36 @@ class RoutineAIEngine:
                 input_vec = torch.cat([user_tensor, eq_tensor], dim=0)
                 score = self.model(input_vec).item()
                 
-                # [Rule-based Boosting] 초보자에게는 쉬운 기구에 가산점 부여
+                # [Advanced Logic] 사용자 수준별 맞춤형 가산점 로직 (Rule-based Boosting)
+                eq_type = str(getattr(eq, 'type', 'MACHINE')).upper()
+                eq_diff = getattr(eq, 'difficulty', 'MID')
+                eq_sub = str(getattr(eq, 'subcategory', '')).upper()
+                
                 if is_beginner:
-                    if getattr(eq, 'difficulty', 'MID') == 'LOW':
-                        score += 0.2
-                    if str(getattr(eq, 'type', 'MACHINE')).upper() == 'MACHINE':
+                    # [초보자 전략] 안전 제일 + 머신 위주 + 쉬운 프리웨이트 입문
+                    if eq_type == 'MACHINE':
+                        score += 0.25 # 머신 강력 추천
+                        # 대근육 머신은 더 추천 (성장 효율)
+                        if getattr(eq, 'body_part', '') in ['UPPER', 'LOWER']:
+                            score += 0.1
+                    elif eq_type == 'FREE_WEIGHT':
+                        if eq_diff == 'HIGH':
+                            score -= 0.3 # 3대 운동 등 고난이도는 감점 (부상 방지)
+                        elif eq_diff == 'LOW':
+                            score += 0.15 # 덤벨 컬 등 쉬운 프리웨이트는 권장
+                
+                else:
+                    # [숙련자 전략] 고중량 프리웨이트 + 타겟 고립 + 다양성
+                    if eq_type == 'FREE_WEIGHT':
+                        if eq_diff == 'HIGH':
+                            score += 0.3 # 3대 운동 강력 추천
+                        else:
+                            score += 0.1
+                    elif eq_type == 'CABLE':
+                        score += 0.15 # 케이블 운동 선호 (자극 위주)
+                    
+                    # 메인 운동(프레스, 스쿼트 등)에 가산점
+                    if 'MAIN' in eq_sub or 'PRESS' in eq_sub or 'SQUAT' in eq_sub:
                         score += 0.1
 
                 scored_candidates.append({'score': score, 'equip': eq})
@@ -228,17 +301,30 @@ class RoutineAIEngine:
         # 점수 높은 순 정렬 (내가 가장 선호/적합한 기구 순서)
         scored_candidates.sort(key=lambda x: x['score'], reverse=True)
 
-        # --- [Logic 4] 대체 그룹 추천 (Substitution Logic) ---
+        # --- [Logic 4] 대체 그룹 추천 (Substitution Logic) with Capacity System ---
         final_selection = []
         used_groups = set()
+        current_cost = 0
         
-        # 목표 종목 개수 설정
-        target_count = 6 if intensity == '상' else (4 if intensity == '중' else 3)
+        # 최소/최대 개수 안전장치
+        MIN_ITEMS = 3
+        MAX_ITEMS = 8
         
         for item in scored_candidates:
-            if len(final_selection) >= target_count: break
-            
+            # 용량 초과 체크 (단, 최소 개수는 보장)
+            if current_cost >= total_capacity and len(final_selection) >= MIN_ITEMS:
+                break
+            # 최대 개수 초과 체크
+            if len(final_selection) >= MAX_ITEMS:
+                break
+                
             candidate = item['equip']
+            equip_cost = get_equipment_cost(candidate)
+            
+            # 남은 용량이 기구 비용보다 현저히 적으면 스킵 (단, 아직 최소 개수 못 채웠으면 무시)
+            if (total_capacity - current_cost) < (equip_cost * 0.5) and len(final_selection) >= MIN_ITEMS:
+                continue
+
             # DB의 subcategory를 그룹 코드로 사용
             group_code = getattr(candidate, 'subcategory', '')
             if not group_code: group_code = candidate.name # 비어있으면 이름 사용
@@ -255,6 +341,7 @@ class RoutineAIEngine:
             if not is_occupied:
                 final_selection.append(candidate)
                 used_groups.add(group_code)
+                current_cost += equip_cost
             
             elif availability_mode == 'AVAILABLE_ONLY':
                 # 자리가 없으면 같은 subcategory의 다른 '빈' 기구 찾기
@@ -264,6 +351,7 @@ class RoutineAIEngine:
                     print(f"💡 [Smart AI] '{candidate.name}' 대기 중 -> '{substitute.name}' 대체 추천")
                     final_selection.append(substitute)
                     used_groups.add(group_code)
+                    current_cost += equip_cost # 대체 기구 비용 추가
                 else:
                     # 대체제도 없으면... 현재는 Skip (혹은 대기 추천)
                     pass 
@@ -276,7 +364,14 @@ class RoutineAIEngine:
         for eq in final_routine:
             # time_ai는 AIEquipment 형태를 기대하므로 변환 후 예측
             ai_eq = self._to_ai_equipment(eq)
-            rec_time = self.time_ai.predict_time(user, ai_eq)
+            
+            # [Advanced Logic] 강도별 시간 배수 적용
+            base_rec_time = self.time_ai.predict_time(user, ai_eq)
+            rec_time = base_rec_time * time_multiplier
+            
+            # 너무 짧거나 길지 않게 안전 범위 재조정 (최소 3분 ~ 최대 90분)
+            rec_time = max(3.0, min(90.0, rec_time))
+
             occ_key = getattr(eq, 'equip_id', getattr(eq, 'id', None))
             is_active = current_occupancy.get(occ_key, False)
             wait_time = random.randint(5, 15) if is_active else 0
