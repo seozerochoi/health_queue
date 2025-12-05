@@ -665,8 +665,8 @@ export function AdminDashboard({
       }
 
       const url = type === "equipment"
-        ? `https://43.201.88.27/api/reports/daily-stats/?start_date=${start}&end_date=${end}`
-        : `https://43.201.88.27/api/reports/daily-stats/by-body-part/?start_date=${start}&end_date=${end}`;
+        ? `https://43.201.88.27/api/daily-stats/?start_date=${start}&end_date=${end}`
+        : `https://43.201.88.27/api/daily-stats/by-body-part/?start_date=${start}&end_date=${end}`;
 
       console.log(`[${type}] 조회 URL:`, url);
       console.log(`[${type}] 조회 기간: ${start} ~ ${end}`);
