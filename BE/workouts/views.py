@@ -349,6 +349,21 @@ class StartSessionView(APIView):
                     session_type=session_type,
                     last_heartbeat=timezone.now()
                 )
+                
+                # 📢 운영자 대시보드에 세션 시작 알림 전송 (실시간 통계 반영)
+                try:
+                    from equipment.event_bus import publish_operator_notification
+                    publish_operator_notification('session_started', {
+                        'session_id': session.id,
+                        'equipment_id': equipment.id,
+                        'equipment_name': equipment.name,
+                        'gym_id': equipment.gym_id,
+                        'user_id': user.id,
+                        'username': user.username,
+                        'allocated_time': allocated_time,
+                    })
+                except Exception as e:
+                    logger.warning(f"⚠️ [Session] SSE 세션 시작 알림 실패 (무시): {e}")
 
                 # 🔔 큐 상태 반영: 사용 시작 시 본인의 NOTIFIED/WAITING 예약이 소진되므로 대기 인원 업데이트를 즉시 브로드캐스트
                 try:

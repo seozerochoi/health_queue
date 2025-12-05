@@ -478,6 +478,38 @@ export function AdminDashboard({
       }
     });
 
+    // 📊 통계 업데이트 이벤트 (세션 종료 시)
+    eventSource.addEventListener("stats_updated", (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log("📊 [AdminDashboard] 통계 업데이트:", data);
+
+        // 통계 탭이 활성화되어 있으면 자동으로 새로고침
+        if (statsStartDate && statsEndDate) {
+          console.log("🔄 [AdminDashboard] 통계 자동 새로고침 실행");
+          fetchUsageStats(statsViewType, statsStartDate, statsEndDate);
+        }
+      } catch (err) {
+        console.error("통계 업데이트 알림 파싱 오류:", err);
+      }
+    });
+
+    // 🎬 세션 시작 이벤트 (실시간 통계 반영)
+    eventSource.addEventListener("session_started", (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log("🎬 [AdminDashboard] 세션 시작:", data);
+
+        // 통계 탭이 활성화되어 있고 부위별 보기라면 자동으로 새로고침 (진행 중인 세션 포함)
+        if (statsViewType === "body_part" && statsStartDate && statsEndDate) {
+          console.log("🔄 [AdminDashboard] 실시간 통계 자동 새로고침 실행");
+          fetchUsageStats("body_part", statsStartDate, statsEndDate);
+        }
+      } catch (err) {
+        console.error("세션 시작 알림 파싱 오류:", err);
+      }
+    });
+
     eventSource.addEventListener("heartbeat", () => {
       // heartbeat는 조용히 처리
     });
@@ -1539,7 +1571,7 @@ export function AdminDashboard({
                       className="bg-gray-900 text-white border border-black focus:border-blue-600"
                     />
                   </div>
-                  <div className="flex items-center gap-2 ml-3">
+                  <div className="flex items-center gap-2 ml-6">
                     <Label className="text-gray-300 whitespace-nowrap">종료일</Label>
                     <Input
                       type="date"

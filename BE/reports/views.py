@@ -573,6 +573,9 @@ class EquipmentDailyStatsView(APIView):
         # 통계 데이터 가져오기
         stats_qs = EquipmentDailyStats.objects.select_related('equipment').filter(date__gte=start_date, date__lte=end_date)
         logger.info(f"   📊 통계 레코드 개수: {stats_qs.count()}")
+        if stats_qs.exists():
+            logger.info(f"      날짜 범위: {stats_qs.first().date} ~ {stats_qs.last().date}")
+            logger.info(f"      기구 예시: {', '.join([s.equipment.name for s in stats_qs[:3]])}")
         
         if equipment_id:
             stats_qs = stats_qs.filter(equipment_id=equipment_id)
@@ -695,16 +698,21 @@ class BodyPartDailyStatsView(APIView):
             date__lte=end_date
         )
         logger.info(f"   📊 조회된 EquipmentDailyStats: {stats.count()}개")
+        if stats.exists():
+            logger.info(f"      날짜 범위: {stats.first().date} ~ {stats.last().date}")
         
-        # 🔴 실시간 반영: 진행 중인 세션도 포함 (end_time IS NULL)
+        # 🔴 실시간 반영: 진행 중인 세션만 포함 (end_time IS NULL)
+        # ⚠️ 최근 완료된 세션(end_time__gte)은 이미 EquipmentDailyStats에 집계되어 있으므로 제외
         from workouts.models import UsageSession
         from django.db.models import Q
         active_sessions = UsageSession.objects.select_related('equipment').filter(
-            Q(end_time__isnull=True) | Q(end_time__gte=timezone.now() - timezone.timedelta(hours=1)),
+            Q(end_time__isnull=True),
             start_time__date__gte=start_date,
             start_time__date__lte=end_date
         )
-        logger.info(f"   🔴 진행 중/최근 세션: {active_sessions.count()}개")
+        logger.info(f"   🔴 진행 중인 세션: {active_sessions.count()}개")
+        for session in active_sessions:
+            logger.info(f"      세션 ID {session.id}: {session.equipment.name if session.equipment else 'N/A'}, 시작 {session.start_time.date()}")
 
         # 8개 부위별로 집계
         body_part_map = {

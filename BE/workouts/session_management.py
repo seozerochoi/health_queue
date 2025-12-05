@@ -191,6 +191,22 @@ def finalize_session(session: UsageSession, now=None, *, reason: Optional[str] =
             f"📊 [Stats] {session.equipment.name} 통계 업데이트: "
             f"이용 {stats.usage_count}회, 평균 {stats.average_time_minutes:.1f}분"
         )
+        
+        # 📢 운영자 대시보드에 통계 업데이트 알림 전송
+        try:
+            from equipment.event_bus import publish_operator_notification
+            publish_operator_notification('stats_updated', {
+                'equipment_id': session.equipment.id,
+                'equipment_name': session.equipment.name,
+                'gym_id': session.equipment.gym_id,
+                'date': today.isoformat(),
+                'usage_count': stats.usage_count,
+                'total_usage_minutes': stats.total_usage_minutes,
+                'average_time_minutes': stats.average_time_minutes,
+            })
+        except Exception as e:
+            logger.warning(f"⚠️ [Stats] SSE 통계 알림 실패 (무시): {e}")
+            
     except Exception as e:
         logger.exception(f"❌ [Stats] 통계 업데이트 실패: {e}")
         # 통계 업데이트 실패해도 세션 종료는 계속 진행
