@@ -1652,7 +1652,7 @@ export function AdminDashboard({
           open={showAddEquipmentDialog}
           onOpenChange={setShowAddEquipmentDialog}
         >
-          <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-md">
+          <DialogContent className="!bg-gray-900 border-gray-700 text-white max-w-md [&~.fixed.inset-0]:!bg-black/80">
             <DialogHeader>
               <DialogTitle className="text-xl">새 기구 등록</DialogTitle>
             </DialogHeader>
