@@ -677,6 +677,10 @@ export function AdminDashboard({
 
 
   // 이용 통계 가져오기 (기구별/부위별, 기간 최대 31일)
+  // 📊 데이터 출처:
+  //   - 과거 데이터: Management Command로 역 집계된 EquipmentDailyStats
+  //   - 현재 데이터: finalize_session()에서 새로 저장된 EquipmentDailyStats
+  //   → 12/3~12/8 조회 시: 과거(12/3~12/7) + 현재(12/8) 모든 데이터 포함
   const fetchUsageStats = async (
     viewType?: StatsViewType,
     startDate?: string,
@@ -692,14 +696,27 @@ export function AdminDashboard({
       // 날짜 유효성 검사 (문자열 비교로 시간대 문제 방지)
       const todayStr = todayKST();
 
-      // 미래 날짜 체크
-      if (start > todayStr || end > todayStr) {
-        alert("미래 날짜는 선택할 수 없습니다.");
+      // 1️⃣ 미래 날짜 체크 (시작일과 종료일 모두)
+      if (start > todayStr) {
+        alert("시작일은 오늘 이전이어야 합니다.");
+        setIsLoadingStats(false);
+        return;
+      }
+      
+      if (end > todayStr) {
+        alert("종료일은 오늘 이전이어야 합니다.");
         setIsLoadingStats(false);
         return;
       }
 
-      // 최대 31일 제한
+      // 2️⃣ 시작일이 종료일 이후인지 확인
+      if (start > end) {
+        alert("시작일은 종료일 이전이거나 같아야 합니다.");
+        setIsLoadingStats(false);
+        return;
+      }
+
+      // 3️⃣ 최대 31일 제한
       const startD = new Date(start);
       const endD = new Date(end);
       const diffDays = Math.floor(
@@ -714,6 +731,7 @@ export function AdminDashboard({
       const url = type === "equipment"
         ? `https://43.201.88.27/api/daily-stats/?start_date=${start}&end_date=${end}`
         : `https://43.201.88.27/api/daily-stats/by-body-part/?start_date=${start}&end_date=${end}`;
+
 
       console.log(`[${type}] 조회 URL:`, url);
       console.log(`[${type}] 조회 기간: ${start} ~ ${end}`);
@@ -1582,7 +1600,15 @@ export function AdminDashboard({
                     <Input
                       type="date"
                       value={statsStartDate}
-                      onChange={(e) => setStatsStartDate(e.target.value)}
+                      max={todayKST()}
+                      onChange={(e) => {
+                        const newStart = e.target.value;
+                        setStatsStartDate(newStart);
+                        // 시작일이 종료일보다 커지면 종료일도 자동으로 조정
+                        if (statsEndDate && newStart > statsEndDate) {
+                          setStatsEndDate(newStart);
+                        }
+                      }}
                       className="bg-gray-900 text-white border border-black focus:border-blue-600"
                     />
                   </div>
@@ -1591,6 +1617,8 @@ export function AdminDashboard({
                     <Input
                       type="date"
                       value={statsEndDate}
+                      min={statsStartDate}
+                      max={todayKST()}
                       onChange={(e) => setStatsEndDate(e.target.value)}
                       className="bg-gray-900 text-white border border-black focus:border-blue-600"
                     />
