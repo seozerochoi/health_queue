@@ -677,10 +677,6 @@ export function AdminDashboard({
 
 
   // 이용 통계 가져오기 (기구별/부위별, 기간 최대 31일)
-  // 📊 데이터 출처:
-  //   - 과거 데이터: Management Command로 역 집계된 EquipmentDailyStats
-  //   - 현재 데이터: finalize_session()에서 새로 저장된 EquipmentDailyStats
-  //   → 12/3~12/8 조회 시: 과거(12/3~12/7) + 현재(12/8) 모든 데이터 포함
   const fetchUsageStats = async (
     viewType?: StatsViewType,
     startDate?: string,
