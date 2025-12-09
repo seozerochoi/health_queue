@@ -221,7 +221,8 @@ class AIEngine:
         # 입력 Feature Dimension 정의 (총 14개 Feature 사용)
         # Raw(7) + Equip(2) + Derived(5) = 14
         self.input_dim = 14 
-        self.model = AdaptiveNetwork(self.input_dim)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = AdaptiveNetwork(self.input_dim).to(self.device)
         
         # [개선] 학습률(Learning Rate)을 0.01로 높여 피드백 반영 속도를 높임
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.01)
