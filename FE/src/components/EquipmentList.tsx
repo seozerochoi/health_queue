@@ -32,6 +32,7 @@ interface Equipment {
   currentUser?: string;
   timeRemaining?: number;
   estimatedWaitTime?: number; // 🆕 예상 대기 시간 (분)
+  aiRecommendedTime?: number; // 🆕 AI 추천 시간 (분)
   image: string;
   allocatedTime: number;
   operational_state?: "NORMAL" | "MAINTENANCE" | "BROKEN";
@@ -135,7 +136,9 @@ const EquipmentItemInner = ({ eq, onSelect, flashing }: EquipmentItemProps) => {
 
             <div className="flex items-center space-x-1 text-sm text-gray-300">
               <Clock className="h-3 w-3" />
-              <span>AI 추천 시간: {eq.allocatedTime}분</span>
+              <span>
+                AI 추천 시간: {eq.aiRecommendedTime ?? eq.allocatedTime}분
+              </span>
             </div>
 
             {!isUnavailable &&
@@ -368,6 +371,8 @@ export function EquipmentList({
         timeRemaining: eq.time_remaining ?? eq.timeRemaining ?? undefined,
         estimatedWaitTime:
           eq.estimated_wait_time ?? eq.estimatedWaitTime ?? undefined, // 🆕 추가
+        aiRecommendedTime:
+          eq.ai_recommended_time ?? eq.aiRecommendedTime ?? undefined, // 🆕 AI 추천 시간
         operational_state: eq.operational_state || "NORMAL",
       };
     };

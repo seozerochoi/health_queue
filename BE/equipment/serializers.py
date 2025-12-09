@@ -4,6 +4,8 @@ from rest_framework import serializers
 from .models import Equipment
 from workouts.models import UsageSession, Reservation
 from django.utils import timezone
+from django.apps import apps
+from ai_model.time_ai import User as AIUser, InBodyData, Equipment as AIEquipment, AIEngine
 
 class EquipmentSerializer(serializers.ModelSerializer):
     # gym 필드를 ID 대신 헬스장 이름으로 보여주도록 설정합니다.
@@ -12,11 +14,93 @@ class EquipmentSerializer(serializers.ModelSerializer):
     current_user = serializers.SerializerMethodField()
     time_remaining = serializers.SerializerMethodField()
     estimated_wait_time = serializers.SerializerMethodField()
+    ai_recommended_time = serializers.SerializerMethodField()
 
     class Meta:
         model = Equipment
         # 모델의 모든 필드를 API에 포함시킵니다.
         fields = '__all__'
+
+    def get_ai_recommended_time(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return None
+        
+        try:
+            profile = request.user.userprofile
+        except:
+            return None
+
+        # Helper to safely get float
+        def n(v):
+            try:
+                return float(v) if v is not None else 0.0
+            except:
+                return 0.0
+
+        inbody = InBodyData(
+            score=n(profile.inbody_score),
+            weight=n(profile.weight_kg),
+            muscle_mass=n(profile.skeletal_muscle_mass_kg),
+            fat_mass=n(profile.body_fat_mass_kg),
+            height=n(profile.height_cm),
+            fat_rate=n(profile.body_fat_percentage),
+            r_arm=n(profile.segment_right_arm_percent),
+            l_arm=n(profile.segment_left_arm_percent),
+            trunk=n(profile.segment_trunk_percent),
+            r_leg=n(profile.segment_right_leg_percent),
+            l_leg=n(profile.segment_left_leg_percent)
+        )
+
+        gender_raw = (profile.gender or '').strip()
+        gender_num = 0 if gender_raw.lower().startswith('m') or gender_raw in ['0', 0] else 1
+        
+        goal_raw = (profile.exercise_goal or '').upper()
+        goal_num = 0 if goal_raw == 'DIET' else 1
+
+        ai_user = AIUser(
+            user_id=request.user.id,
+            name=request.user.username,
+            gender=gender_num,
+            goal=goal_num,
+            inbody_data=inbody
+        )
+
+        # Map Equipment
+        # main_part: 0: Upper, 1: Lower
+        # obj.body_part is 'UPPER', 'LOWER', 'CORE', 'WHOLE'
+        main_part = 1 if obj.body_part == 'LOWER' else 0 
+        
+        ai_equip = AIEquipment(
+            equip_id=obj.id,
+            name=obj.name,
+            main_part=main_part,
+            sub_part=obj.subcategory or "General",
+            base_time=obj.base_session_time_minutes,
+            equip_type=obj.type
+        )
+
+        # Get Engine
+        try:
+            app_config = apps.get_app_config('ai_model')
+            time_engine = getattr(app_config, 'time_ai_engine', None)
+            
+            if not time_engine:
+                # Fallback if not initialized
+                time_engine = AIEngine()
+                try:
+                    time_engine.load_checkpoint("time_ai_checkpoint.pth")
+                except:
+                    pass
+                if not getattr(time_engine, 'is_trained', False):
+                    time_engine.pretrain_with_formula()
+                app_config.time_ai_engine = time_engine
+            
+            predicted_time = time_engine.predict_time(ai_user, ai_equip)
+            return round(predicted_time, 1)
+        except Exception as e:
+            # print(f"AI Prediction Error: {e}")
+            return None
 
     def get_waiting_count(self, obj):
         """대기 중인 사용자 수 반환"""

@@ -380,31 +380,52 @@ class AIEngine:
         """
         [Core Learning Logic] 
         사용자의 피드백을 기반으로 모델을 학습시킵니다.
-        **Experience Replay와 Safety Clamping이 적용됨**
+        **개선된 로직: 단순 비율(%)이 아닌 운동 생리학적 '세트(Set)' 단위 보정 적용**
         
         Args:
             feedback_score (int): 1(매우부족) ~ 3(적절) ~ 5(매우과도)
         """
-        # 1. Target Time 재설정: 사용자의 의도를 파악
-        if feedback_score == 3:   # 적절함
-            target_time = recommended_time 
-        elif feedback_score == 4: # 약간 많음 -> 10% 감소
-            target_time = recommended_time * 0.9
-        elif feedback_score == 5: # 매우 많음 -> 30% 감소
-            target_time = recommended_time * 0.7
-        elif feedback_score == 2: # 약간 부족 -> 15% 증가
-            target_time = recommended_time * 1.15
-        elif feedback_score == 1: # 매우 부족 -> 40% 증가
-            target_time = recommended_time * 1.4
+        # 1. 기구 타입에 따른 '단위 시간(Unit Time)' 설정
+        # - 웨이트: 1세트(수행+휴식) ≈ 3.0분
+        # - 유산소: 1블록 ≈ 5.0분
+        if equipment.equip_type == 'CARDIO':
+            unit_time = 5.0
         else:
-            target_time = recommended_time
+            unit_time = 3.0
 
-        print(f"🧠 [TimeAI] Feedback Received: Score={feedback_score}, RecTime={recommended_time:.1f} -> Target={target_time:.1f}")
+        # 2. 피드백 점수에 따른 시간 보정 (Delta Calculation)
+        if feedback_score == 3:   # 적절함
+            delta = 0.0
+        elif feedback_score == 4: # 약간 과도 -> 1단위 감소
+            delta = -unit_time * 1.0
+        elif feedback_score == 5: # 매우 과도 -> 2단위 감소
+            delta = -unit_time * 2.0
+        elif feedback_score == 2: # 약간 부족 -> 1단위 증가
+            delta = unit_time * 1.0
+        elif feedback_score == 1: # 매우 부족 -> 2단위 증가 (유산소는 3단위)
+            # 매우 부족할 때 유산소는 시간을 더 넉넉히 줌 (+15분)
+            scale = 3.0 if equipment.equip_type == 'CARDIO' else 2.0
+            delta = unit_time * scale
+        else:
+            delta = 0.0
 
-        # 2. [핵심 추가 3] Safety Clamping (안전 장치)
-        # 피드백을 반영하되, 기존 추천 시간의 ±50%를 벗어나지 못하게 하여 데이터 오염(Poisoning) 방지
-        min_limit = recommended_time * 0.5
-        max_limit = recommended_time * 1.5
+        # 3. 숙련도에 따른 가중치 적용 (Proficiency Weighting)
+        # 숙련자(InBody 점수 높음)일수록 자신의 한계를 잘 알기에 피드백을 더 신뢰(증폭)함
+        proficiency_bonus = 1.0
+        if user.inbody.score >= 80:
+            proficiency_bonus = 1.2 # 숙련자는 변화폭을 20% 더 크게
+        
+        final_delta = delta * proficiency_bonus
+        target_time = recommended_time + final_delta
+
+        print(f"🧠 [TimeAI] Feedback Analysis: Score={feedback_score}, Type={equipment.equip_type}")
+        print(f"   └─ Unit={unit_time}m, Delta={final_delta:.1f}m (Proficiency={proficiency_bonus})")
+        print(f"   └─ Rec={recommended_time:.1f}m -> Target={target_time:.1f}m")
+
+        # 4. [Safety Clamping] 안전 장치
+        # 피드백을 반영하되, 최소 3분 / 최대 120분, 그리고 기존 시간의 0.5~2.0배 범위 유지
+        min_limit = max(3.0, recommended_time * 0.5)
+        max_limit = min(120.0, recommended_time * 2.0)
         target_time = max(min_limit, min(max_limit, target_time))
 
         # [Hybrid AI Update]
