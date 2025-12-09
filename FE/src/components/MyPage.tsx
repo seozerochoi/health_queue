@@ -1415,98 +1415,52 @@ export function MyPage({
                     </div>
                   </div>
                 </div>
-                {serverImageUrl && (
-                  <div className="rounded-md bg-emerald-900/20 border border-emerald-700 p-3 text-emerald-200">
-                    <div className="text-sm">
-                      서버에 이미지가 저장되었습니다.
-                      {recordMeta?.created_at && (
-                        <span className="ml-2 opacity-80">
-                          ({new Date(recordMeta.created_at).toLocaleString()})
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-2">
-                      <a
-                        className="underline"
-                        href={serverImageUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        이미지 열기
-                      </a>
-                    </div>
-                  </div>
-                )}
-                <div>
-                  <Label>OCR 원문 (편집 가능)</Label>
-                  <div className="mt-2 space-y-2">
-                    {rawLines.length === 0 && (
-                      <div className="text-sm">원문이 없습니다.</div>
-                    )}
-                    {rawLines.map((line, i) => (
-                      <div key={i} className="flex gap-2">
-                        <Input
-                          value={line}
-                          onChange={(e) => {
-                            const copy = [...rawLines];
-                            copy[i] = e.target.value;
-                            setRawLines(copy);
-                          }}
-                        />
-                      </div>
-                    ))}
-                    {rawLines.length > 0 && (
-                      <div className="mt-2 flex gap-2 justify-end">
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            const p = parseFromLines(rawLines);
-                            setParsedResult(p);
-                            alert("편집 내용이 반영되었습니다.");
-                          }}
-                        >
-                          편집 반영
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
                 <div className="flex justify-end gap-3">
                   <Button
                     variant="outline"
                     onClick={() => {
+                      // 모든 상태 초기화하여 재업로드 가능하게
                       setPreviewSrc(null);
                       setParsedResult(null);
+                      setLastBlob(null);
+                      setServerImageUrl(null);
+                      setRecordMeta(null);
+                      setAnalyzeError(null);
+                      setRawLines([]);
                     }}
                   >
-                    미리보기 삭제
+                    사진 재등록
                   </Button>
                   <Button
                     onClick={applyParsedToProfile}
                     disabled={saving || !parsedResult}
+                    className="bg-blue-500 hover:bg-blue-600"
                   >
-                    프로필에 적용
+                    {saving ? "저장 중..." : "프로필에 적용"}
                   </Button>
                 </div>
               </div>
             )}
 
-            <div className="flex justify-end">
-              <Button
-                onClick={saveProfile}
-                disabled={saving}
-                className="bg-blue-500 hover:bg-blue-600"
-              >
-                {saving ? "저장 중..." : "저장"}
-              </Button>
-            </div>
+            {/* 인바디 업로드가 없을 때만 저장 버튼 표시 */}
+            {!previewSrc && (
+              <div className="flex justify-end">
+                <Button
+                  onClick={saveProfile}
+                  disabled={saving}
+                  className="bg-blue-500 hover:bg-blue-600"
+                >
+                  {saving ? "저장 중..." : "저장"}
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {/* 운동 로그 달력 모달 */}
         {showActivityModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 p-4">
-            <div className="w-full max-w-2xl bg-card rounded-lg p-6 max-h-[90vh] overflow-y-auto">
+            <div className="w-auto bg-card rounded-lg p-6 max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold text-foreground">
                   운동 기록 
@@ -1565,11 +1519,11 @@ export function MyPage({
                   </div>
 
                   {/* 활동 날짜 그리드 */}
-                  <div className="grid grid-cols-7 gap-1">
+                  <div className="inline-grid grid-cols-7 gap-1">
                     {["일", "월", "화", "수", "목", "금", "토"].map((day) => (
                       <div
                         key={day}
-                        className="text-center text-xs text-muted-foreground py-2 font-semibold"
+                        className="text-center text-xs text-muted-foreground py-1 font-semibold w-10"
                       >
                         {day}
                       </div>
@@ -1596,7 +1550,7 @@ export function MyPage({
                       // 빈 셀 추가
                       for (let i = 0; i < firstDayOfWeek; i++) {
                         cells.push(
-                          <div key={`empty-${i}`} className="aspect-square"></div>
+                          <div key={`empty-${i}`} className="w-10 h-10"></div>
                         );
                       }
                       
@@ -1640,7 +1594,7 @@ export function MyPage({
                             key={dateStr}
                             onClick={() => setSelectedActivityDate(dateStr)}
                             title={tooltip}
-                            className={`aspect-square rounded text-xs font-semibold transition-all hover:scale-110 ${bgColor} ${activity ? textColor : "text-gray-600"} ${
+                            className={`w-10 h-10 rounded text-xs font-semibold transition-all hover:scale-110 flex items-center justify-center ${bgColor} ${activity ? textColor : "text-gray-600"} ${
                               selectedActivityDate === dateStr ? "ring-2 ring-blue-400" : ""
                             }`}
                             style={bgStyle}
