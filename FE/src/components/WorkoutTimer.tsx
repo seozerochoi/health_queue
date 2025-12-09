@@ -204,7 +204,7 @@ export function WorkoutTimer({
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const secs = Math.floor(seconds % 60);
     return `${mins.toString().padStart(2, "0")}:${secs
       .toString()
       .padStart(2, "0")}`;
@@ -630,7 +630,7 @@ export function WorkoutTimer({
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
                   <p className="text-2xl font-bold text-white">
-                    {equipment.allocatedTime}
+                    {equipment.allocatedTime.toFixed(1)}
                   </p>
                   <p className="text-sm text-gray-300">할당 시간(분)</p>
                 </div>

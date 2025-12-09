@@ -89,7 +89,7 @@ export function EquipmentReservation({
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
@@ -350,7 +350,7 @@ export function EquipmentReservation({
                 )}
                 {equipment.status === "in-use" && (
                   <Badge className="bg-yellow-100 text-yellow-700">
-                    사용 중 ({equipment.timeRemaining}분 남음)
+                    사용 중 ({(equipment.timeRemaining ?? 0).toFixed(1)}분 남음)
                   </Badge>
                 )}
                 {equipment.status === "waiting" && (

@@ -88,13 +88,14 @@ const EquipmentItemInner = ({ eq, onSelect, flashing }: EquipmentItemProps) => {
       case "in-use":
         return (
           <Badge className="bg-yellow-100 text-yellow-700">
-            사용 중 (대기 약 {eq.estimatedWaitTime ?? eq.timeRemaining}분)
+            사용 중 (대기 약{" "}
+            {(eq.estimatedWaitTime ?? eq.timeRemaining ?? 0).toFixed(1)}분)
           </Badge>
         );
       case "waiting":
         // 🆕 예상 대기 시간 표시
         const waitText = eq.estimatedWaitTime
-          ? `약 ${eq.estimatedWaitTime}분 대기`
+          ? `약 ${eq.estimatedWaitTime.toFixed(1)}분 대기`
           : `${eq.waitingCount}명 대기중`;
         return <Badge className="bg-red-100 text-red-700">{waitText}</Badge>;
       default:
