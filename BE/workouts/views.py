@@ -643,3 +643,120 @@ class EndSessionBeaconView(APIView):
             return Response({'message': 'no active session'}, status=status.HTTP_200_OK)
 
         return Response({'message': 'session ended (beacon)'}, status=status.HTTP_200_OK)
+
+
+class UserActivityLogView(APIView):
+    """사용자의 운동 기록을 조회하는 API
+    
+    쿼리 파라미터:
+    - start_date: YYYY-MM-DD (선택, 기본: 90일 전)
+    - end_date: YYYY-MM-DD (선택, 기본: 오늘)
+    - equipment_id: 특정 기구만 필터링 (선택)
+    
+    응답:
+    {
+        "activity": {
+            "2024-12-09": {  # 날짜별 활동
+                "total_sessions": 2,  # 총 운동 세션 수
+                "total_minutes": 60,  # 총 운동 시간 (분)
+                "equipment": [
+                    {
+                        "id": 1,
+                        "name": "Leg Press",
+                        "sessions": [
+                            {
+                                "session_id": 1,
+                                "start_time": "2024-12-09T10:00:00Z",
+                                "end_time": "2024-12-09T10:30:00Z",
+                                "duration_minutes": 30
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        "total_sessions": 10,
+        "activity_dates": ["2024-12-09", "2024-12-08", ...]  # 활동이 있는 날짜 목록
+    }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from datetime import datetime, timedelta
+        
+        user = request.user
+        
+        # 쿼리 파라미터 파싱
+        start_date_str = request.query_params.get('start_date')
+        end_date_str = request.query_params.get('end_date')
+        equipment_id = request.query_params.get('equipment_id')
+        
+        # 기본값: 90일 전부터 오늘까지
+        end_date = datetime.now().replace(hour=23, minute=59, second=59).date() if end_date_str is None else datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        start_date = (end_date - timedelta(days=90)).replace(day=1) if start_date_str is None else datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        
+        # 사용자의 운동 세션 조회
+        sessions_query = UsageSession.objects.filter(
+            user=user,
+            end_time__isnull=False,  # 완료된 세션만
+            start_time__date__gte=start_date,
+            start_time__date__lte=end_date,
+        ).select_related('equipment').order_by('-start_time')
+        
+        # 기구 필터링
+        if equipment_id:
+            try:
+                sessions_query = sessions_query.filter(equipment_id=int(equipment_id))
+            except (ValueError, TypeError):
+                return Response({'error': 'Invalid equipment_id'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        sessions = list(sessions_query)
+        
+        # 날짜별로 그룹화
+        activity_dict = {}
+        activity_dates = set()
+        
+        for session in sessions:
+            session_date = session.start_time.astimezone(timezone.utc).date()
+            activity_dates.add(str(session_date))
+            
+            if str(session_date) not in activity_dict:
+                activity_dict[str(session_date)] = {
+                    'total_sessions': 0,
+                    'total_minutes': 0,
+                    'equipment': {}
+                }
+            
+            # 세션 시간 계산
+            duration = (session.end_time - session.start_time).total_seconds() / 60
+            activity_dict[str(session_date)]['total_sessions'] += 1
+            activity_dict[str(session_date)]['total_minutes'] += duration
+            
+            # 기구별 그룹화
+            equip_id = str(session.equipment.id)
+            if equip_id not in activity_dict[str(session_date)]['equipment']:
+                activity_dict[str(session_date)]['equipment'][equip_id] = {
+                    'id': session.equipment.id,
+                    'name': session.equipment.name,
+                    'category': session.equipment.category if hasattr(session.equipment, 'category') else 'Unknown',
+                    'sessions': []
+                }
+            
+            activity_dict[str(session_date)]['equipment'][equip_id]['sessions'].append({
+                'session_id': session.id,
+                'start_time': session.start_time.isoformat(),
+                'end_time': session.end_time.isoformat(),
+                'duration_minutes': round(duration, 2),
+                'session_type': session.session_type,
+            })
+        
+        # equipment 딕셔너리를 리스트로 변환
+        for date_str in activity_dict:
+            activity_dict[date_str]['equipment'] = list(activity_dict[date_str]['equipment'].values())
+            activity_dict[date_str]['total_minutes'] = round(activity_dict[date_str]['total_minutes'], 2)
+        
+        return Response({
+            'activity': activity_dict,
+            'total_sessions': len(sessions),
+            'activity_dates': sorted(list(activity_dates), reverse=True),  # 최신 순
+        }, status=status.HTTP_200_OK)

@@ -12,6 +12,7 @@ from .views import (
     LeaveQueueView,
     HeartbeatBeaconView,
     EndSessionBeaconView,
+    UserActivityLogView,
 )
 
 router = DefaultRouter()
@@ -26,6 +27,7 @@ urlpatterns = [
     path('workouts/end_beacon/', EndSessionBeaconView.as_view(), name='end-session-beacon'),
     path('workouts/join-queue/', JoinQueueView.as_view(), name='join-queue'),
     path('workouts/leave-queue/', LeaveQueueView.as_view(), name='leave-queue'),
+    path('workouts/activity-log/', UserActivityLogView.as_view(), name='activity-log'),
     # 기존 router.urls는 그대로 둡니다.
     path('', include(router.urls)),
 ]

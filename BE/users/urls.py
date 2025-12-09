@@ -3,7 +3,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import UserViewSet, current_user_profile, get_online_users
-from .views import InbodyAnalyzeView, RegisterView, get_current_user, MyTokenObtainPairView, InbodyRecordListView, InbodyRecordLatestView
+from .views import InbodyAnalyzeView, RegisterView, get_current_user, MyTokenObtainPairView, InbodyRecordListView, InbodyRecordLatestView, AITrainerMotivationView
 
 # API URL을 자동으로 생성해주는 라우터를 생성합니다.
 router = DefaultRouter()
@@ -23,5 +23,6 @@ urlpatterns = [
     path('inbody/analyze/', InbodyAnalyzeView.as_view(), name='inbody_analyze'),
     path('inbody/records/', InbodyRecordListView.as_view(), name='inbody_records'),
     path('inbody/records/latest/', InbodyRecordLatestView.as_view(), name='inbody_record_latest'),
+    path('users/motivation/', AITrainerMotivationView.as_view(), name='ai_motivation'),
     path('', include(router.urls)),
 ]

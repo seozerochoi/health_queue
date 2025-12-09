@@ -22,6 +22,60 @@ interface MyPageProps {
   userGym?: string;
 }
 
+interface ActivityDayData {
+  total_sessions: number;
+  total_minutes: number;
+  equipment: Array<{
+    id: number;
+    name: string;
+    category: string;
+    sessions: Array<{
+      session_id: number;
+      start_time: string;
+      end_time: string;
+      duration_minutes: number;
+      session_type: string;
+    }>;
+  }>;
+}
+
+interface ActivityLogData {
+  [date: string]: ActivityDayData;
+}
+
+interface AIMotivation {
+  message: string;
+  analysis: {
+    weight_change: {
+      before: number;
+      after: number;
+      change: number;
+      change_percent: number;
+    } | null;
+    muscle_change: {
+      before: number;
+      after: number;
+      change: number;
+      change_percent: number;
+    } | null;
+    fat_change: {
+      before: number;
+      after: number;
+      change: number;
+      change_percent: number;
+    } | null;
+    fat_percent_change: {
+      before: number;
+      after: number;
+      change: number;
+      change_percent: number;
+    } | null;
+    comparison_period: string;
+    parts_improvement: string[];
+    parts_decline: string[];
+  } | null;
+}
+
 export function MyPage({
   onBack,
   onLogout,
@@ -37,7 +91,20 @@ export function MyPage({
 
   // 폼 상태
   const [exerciseGoal, setExerciseGoal] = useState<string>("");
-  // 단순화: 운동 목적만 유지
+  
+  // AI 트레이너 응원 메시지
+  const [motivation, setMotivation] = useState<AIMotivation | null>(null);
+  const [motivationLoading, setMotivationLoading] = useState(false);
+  
+  // 운동 로그 달력
+  const [activityLog, setActivityLog] = useState<ActivityLogData>({});
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [selectedActivityDate, setSelectedActivityDate] = useState<string | null>(null);
+  const [showActivityModal, setShowActivityModal] = useState(false);
+  
+  // 신체 데이터 편집
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileData, setProfileData] = useState<any>(null);
 
   // 공통: 토큰 만료 시 자동 갱신 후 재시도하는 fetch 래퍼
   const fetchWithAuth = async (
@@ -88,6 +155,71 @@ export function MyPage({
       }
     }
     return res;
+  };
+
+  // AI 트레이너 응원 메시지 조회
+  const loadMotivation = async () => {
+    try {
+      setMotivationLoading(true);
+      const res = await fetchWithAuth(
+        "https://43.201.88.27/api/users/motivation/",
+        { method: "GET" }
+      );
+      if (!res.ok) {
+        console.warn("Failed to load motivation:", res.status);
+        return;
+      }
+      const data = await res.json();
+      setMotivation(data);
+    } catch (e) {
+      console.error("Failed to load motivation:", e);
+    } finally {
+      setMotivationLoading(false);
+    }
+  };
+
+  // 운동 로그 조회
+  const loadActivityLog = async () => {
+    try {
+      setActivityLoading(true);
+      const res = await fetchWithAuth(
+        "https://43.201.88.27/api/workouts/activity-log/",
+        { method: "GET" }
+      );
+      if (!res.ok) {
+        console.warn("Failed to load activity log:", res.status);
+        return;
+      }
+      const data = await res.json();
+      setActivityLog(data.activity || {});
+    } catch (e) {
+      console.error("Failed to load activity log:", e);
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
+  // 신체 프로필 데이터 저장
+  const saveProfileData = async () => {
+    if (!profileData) return;
+    try {
+      setSaving(true);
+      const res = await fetchWithAuth(
+        "https://43.201.88.27/api/users/profile/",
+        {
+          method: "PATCH",
+          body: JSON.stringify(profileData),
+        }
+      );
+      if (!res.ok) {
+        alert("프로필 저장 실패: " + res.status);
+        return;
+      }
+      alert("신체 데이터가 저장되었습니다.");
+      setIsEditingProfile(false);
+    } finally {
+      setSaving(false);
+    }
   };
 
   // 인바디 캡쳐 / 크롭(자르기) / 업로드
@@ -374,33 +506,37 @@ export function MyPage({
         if (!res.ok) return;
         const data = await res.json();
         setExerciseGoal(data.exercise_goal || "");
+        setProfileData(data);
       } finally {
         setLoading(false);
       }
     };
     loadProfile();
-    const loadLatestInbody = async () => {
-      try {
-        const res = await fetchWithAuth(
-          "https://43.201.88.27/api/inbody/records/latest/",
-          { method: "GET" }
-        );
-        if (res.status === 204) return; // no content
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data?.image_url) {
-          setLatestRecord({
-            image_url: data.image_url,
-            parsed: data.parsed || {},
-            created_at: data.created_at,
-          });
-        }
-      } catch (e) {
-        console.warn("Failed to load latest inbody record", e);
-      }
-    };
     loadLatestInbody();
+    loadMotivation();
+    // 모달이 열릴 때만 로드하도록 변경
   }, []);
+  
+  const loadLatestInbody = async () => {
+    try {
+      const res = await fetchWithAuth(
+        "https://43.201.88.27/api/inbody/records/latest/",
+        { method: "GET" }
+      );
+      if (res.status === 204) return; // no content
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.image_url) {
+        setLatestRecord({
+          image_url: data.image_url,
+          parsed: data.parsed || {},
+          created_at: data.created_at,
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to load latest inbody record", e);
+    }
+  };
 
   const applyParsedToProfileFrom = async (parsed: any) => {
     if (!parsed) return;
@@ -497,117 +633,361 @@ export function MyPage({
         {/* 프로필 카드 */}
         <Card className="bg-card border-border">
           <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-full bg-blue-500 flex items-center justify-center text-white text-2xl font-bold">
-                {userNickname
-                  ? userNickname[0].toUpperCase()
-                  : userName
-                  ? userName[0].toUpperCase()
-                  : "U"}
-              </div>
-              <div className="flex-1">
-                <div className="text-xl font-semibold text-foreground">
-                  {userNickname || userName || "사용자"}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4 flex-1">
+                <div className="w-16 h-16 rounded-full bg-blue-500 flex items-center justify-center text-white text-2xl font-bold">
+                  {userNickname
+                    ? userNickname[0].toUpperCase()
+                    : userName
+                    ? userName[0].toUpperCase()
+                    : "U"}
                 </div>
-                <div className="text-sm text-muted-foreground">스마트짐</div>
+                <div className="flex-1">
+                  <div className="text-xl font-semibold text-foreground">
+                    {userNickname || userName || "사용자"}
+                  </div>
+                  <div className="text-sm text-muted-foreground">스마트짐</div>
+                </div>
               </div>
+              <Button
+                size="sm"
+                onClick={async () => {
+                  setShowActivityModal(true);
+                  // 모달 열 때 바로 데이터 로드
+                  if (Object.keys(activityLog).length === 0) {
+                    await loadActivityLog();
+                  }
+                }}
+                className="whitespace-nowrap bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                운동 기록 조회
+              </Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* 단순화된 폼: 운동 목적만 */}
+        {/* AI 트레이너 응원 메시지 */}
+        {motivation && motivation.message && (
+          <Card className="bg-gradient-to-r from-blue-900/40 to-purple-900/40 border-blue-700/50">
+            <CardContent className="p-6">
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="text-2xl">💪</div>
+                  <div className="flex-1">
+                    <p className="text-foreground font-medium text-lg">
+                      {motivation.message}
+                    </p>
+                  </div>
+                </div>
+                {motivation.analysis && (
+                  <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-muted-foreground">
+                    {motivation.analysis.weight_change && (
+                      <div className="bg-black/20 p-2 rounded">
+                        <div className="font-semibold">체중</div>
+                        <div className={motivation.analysis.weight_change.change < 0 ? "text-green-400" : "text-orange-400"}>
+                          {motivation.analysis.weight_change.change > 0 ? "+" : ""}{motivation.analysis.weight_change.change}kg
+                        </div>
+                      </div>
+                    )}
+                    {motivation.analysis.muscle_change && (
+                      <div className="bg-black/20 p-2 rounded">
+                        <div className="font-semibold">근육량</div>
+                        <div className={motivation.analysis.muscle_change.change > 0 ? "text-green-400" : "text-orange-400"}>
+                          {motivation.analysis.muscle_change.change > 0 ? "+" : ""}{motivation.analysis.muscle_change.change}kg
+                        </div>
+                      </div>
+                    )}
+                    {motivation.analysis.fat_change && (
+                      <div className="bg-black/20 p-2 rounded">
+                        <div className="font-semibold">체지방</div>
+                        <div className={motivation.analysis.fat_change.change < 0 ? "text-green-400" : "text-orange-400"}>
+                          {motivation.analysis.fat_change.change > 0 ? "+" : ""}{motivation.analysis.fat_change.change}kg
+                        </div>
+                      </div>
+                    )}
+                    {motivation.analysis.fat_percent_change && (
+                      <div className="bg-black/20 p-2 rounded">
+                        <div className="font-semibold">체지방률</div>
+                        <div className={motivation.analysis.fat_percent_change.change < 0 ? "text-green-400" : "text-orange-400"}>
+                          {motivation.analysis.fat_percent_change.change > 0 ? "+" : ""}{motivation.analysis.fat_percent_change.change}%
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 신체 데이터 표시 및 수정 */}
         <Card className="bg-card border-border">
           <CardContent className="p-6 space-y-6">
-            {/* 최근 인바디 기록 */}
-            {latestRecord && (
+            {/* 현재 신체 프로필 정보 */}
+            {profileData && !isEditingProfile && (
               <div className="space-y-2">
-                <Label className="text-foreground">최근 인바디 기록</Label>
-                <div className="rounded-lg border border-gray-700 p-3">
-                  <div className="flex flex-col md:flex-row gap-4">
-                    <img
-                      src={latestRecord.image_url}
-                      crossOrigin="anonymous"
-                      className="w-full md:w-1/3 max-h-64 object-contain rounded"
-                    />
-                    <div className="flex-1 grid grid-cols-2 gap-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <Label className="text-foreground">나의 신체 프로필</Label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsEditingProfile(true)}
+                  >
+                    수정하기
+                  </Button>
+                </div>
+                <div className="rounded-lg border border-gray-700 p-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                    {profileData.gender && (
                       <div>
-                        성별:{" "}
-                        {latestRecord.parsed?.gender === "Male"
-                          ? "남성"
-                          : latestRecord.parsed?.gender === "Female"
-                          ? "여성"
-                          : "-"}
+                        <div className="text-muted-foreground">성별</div>
+                        <div className="font-semibold text-foreground">
+                          {profileData.gender === "Male"
+                            ? "남성"
+                            : profileData.gender === "Female"
+                            ? "여성"
+                            : profileData.gender}
+                        </div>
                       </div>
-                      <div>나이: {latestRecord.parsed?.age ?? "-"}세</div>
+                    )}
+                    {profileData.age && (
                       <div>
-                        InBody 점수: {latestRecord.parsed?.inbody_score ?? "-"}
+                        <div className="text-muted-foreground">나이</div>
+                        <div className="font-semibold text-foreground">
+                          {profileData.age}세
+                        </div>
                       </div>
-                      <div>키(cm): {latestRecord.parsed?.height_cm ?? "-"}</div>
+                    )}
+                    {profileData.height_cm && (
                       <div>
-                        체중(kg): {latestRecord.parsed?.weight_kg ?? "-"}
+                        <div className="text-muted-foreground">키</div>
+                        <div className="font-semibold text-foreground">
+                          {profileData.height_cm}cm
+                        </div>
                       </div>
+                    )}
+                    {profileData.weight_kg && (
                       <div>
-                        골격근량(kg):{" "}
-                        {latestRecord.parsed?.skeletal_muscle_mass_kg ?? "-"}
+                        <div className="text-muted-foreground">체중</div>
+                        <div className="font-semibold text-foreground">
+                          {profileData.weight_kg}kg
+                        </div>
                       </div>
+                    )}
+                    {profileData.inbody_score && (
                       <div>
-                        체지방량(kg):{" "}
-                        {latestRecord.parsed?.body_fat_mass_kg ?? "-"}
+                        <div className="text-muted-foreground">InBody 점수</div>
+                        <div className="font-semibold text-foreground">
+                          {profileData.inbody_score}
+                        </div>
                       </div>
+                    )}
+                    {profileData.bmi && (
                       <div>
-                        체지방(%):{" "}
-                        {latestRecord.parsed?.body_fat_percentage ?? "-"}
+                        <div className="text-muted-foreground">BMI</div>
+                        <div className="font-semibold text-foreground">
+                          {profileData.bmi}
+                        </div>
                       </div>
-                      <div>BMI: {latestRecord.parsed?.bmi ?? "-"}</div>
-                      {/* 세그멘탈 근육량 (있을 경우만 표시) */}
-                      {(latestRecord.parsed?.segment_right_arm_kg ||
-                        latestRecord.parsed?.segment_left_arm_kg ||
-                        latestRecord.parsed?.segment_trunk_kg ||
-                        latestRecord.parsed?.segment_right_leg_kg ||
-                        latestRecord.parsed?.segment_left_leg_kg) && (
-                        <>
-                          <div className="col-span-2 font-semibold mt-2">
-                            부위별 근육량
-                          </div>
-                          <div>
-                            우측 팔:{" "}
-                            {latestRecord.parsed?.segment_right_arm_kg ?? "-"}kg
-                          </div>
-                          <div>
-                            좌측 팔:{" "}
-                            {latestRecord.parsed?.segment_left_arm_kg ?? "-"}kg
-                          </div>
-                          <div>
-                            몸통: {latestRecord.parsed?.segment_trunk_kg ?? "-"}
-                            kg
-                          </div>
-                          <div>
-                            우측 다리:{" "}
-                            {latestRecord.parsed?.segment_right_leg_kg ?? "-"}kg
-                          </div>
-                          <div>
-                            좌측 다리:{" "}
-                            {latestRecord.parsed?.segment_left_leg_kg ?? "-"}kg
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div className="mt-2 flex justify-end">
-                    <Button
-                      size="sm"
-                      onClick={() =>
-                        applyParsedToProfileFrom(latestRecord.parsed)
-                      }
-                      disabled={saving}
-                    >
-                      프로필에 적용
-                    </Button>
+                    )}
+                    {profileData.skeletal_muscle_mass_kg && (
+                      <div>
+                        <div className="text-muted-foreground">골격근량</div>
+                        <div className="font-semibold text-foreground">
+                          {profileData.skeletal_muscle_mass_kg}kg
+                        </div>
+                      </div>
+                    )}
+                    {profileData.body_fat_mass_kg && (
+                      <div>
+                        <div className="text-muted-foreground">체지방량</div>
+                        <div className="font-semibold text-foreground">
+                          {profileData.body_fat_mass_kg}kg
+                        </div>
+                      </div>
+                    )}
+                    {profileData.body_fat_percentage && (
+                      <div>
+                        <div className="text-muted-foreground">체지방률</div>
+                        <div className="font-semibold text-foreground">
+                          {profileData.body_fat_percentage}%
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             )}
-            {/* 운동 목적 */}
+
+            {/* 신체 데이터 수정 모드 */}
+            {isEditingProfile && profileData && (
+              <div className="space-y-4">
+                <Label className="text-foreground font-semibold">신체 데이터 수정</Label>
+                
+                <div className="flex items-center gap-3">
+                  <label className="text-sm text-foreground w-24">성별</label>
+                  <Select
+                    value={profileData?.gender || ""}
+                    onValueChange={(value) => {
+                      setProfileData({
+                        ...profileData,
+                        gender: value || null,
+                      });
+                    }}
+                  >
+                    <SelectTrigger className="flex-1 border-gray-600 bg-input-background text-white">
+                      <SelectValue placeholder="성별 선택" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Male">남성</SelectItem>
+                      <SelectItem value="Female">여성</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <label className="text-sm text-foreground w-24">나이(세)</label>
+                  <Input
+                    type="number"
+                    value={profileData?.age ?? ""}
+                    onChange={(e) => {
+                      setProfileData({
+                        ...profileData,
+                        age: e.target.value ? Number(e.target.value) : null,
+                      });
+                    }}
+                    className="flex-1"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <label className="text-sm text-foreground w-24">키(cm)</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={profileData?.height_cm ?? ""}
+                    onChange={(e) => {
+                      setProfileData({
+                        ...profileData,
+                        height_cm: e.target.value ? Number(e.target.value) : null,
+                      });
+                    }}
+                    className="flex-1"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <label className="text-sm text-foreground w-24">체중(kg)</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={profileData?.weight_kg ?? ""}
+                    onChange={(e) => {
+                      setProfileData({
+                        ...profileData,
+                        weight_kg: e.target.value ? Number(e.target.value) : null,
+                      });
+                    }}
+                    className="flex-1"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <label className="text-sm text-foreground w-24">InBody 점수</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={profileData?.inbody_score ?? ""}
+                    onChange={(e) => {
+                      setProfileData({
+                        ...profileData,
+                        inbody_score: e.target.value ? Number(e.target.value) : null,
+                      });
+                    }}
+                    className="flex-1"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <label className="text-sm text-foreground w-24">BMI</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={profileData?.bmi ?? ""}
+                    onChange={(e) => {
+                      setProfileData({
+                        ...profileData,
+                        bmi: e.target.value ? Number(e.target.value) : null,
+                      });
+                    }}
+                    className="flex-1"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <label className="text-sm text-foreground w-24">골격근량(kg)</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={profileData?.skeletal_muscle_mass_kg ?? ""}
+                    onChange={(e) => {
+                      setProfileData({
+                        ...profileData,
+                        skeletal_muscle_mass_kg: e.target.value ? Number(e.target.value) : null,
+                      });
+                    }}
+                    className="flex-1"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <label className="text-sm text-foreground w-24">체지방량(kg)</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={profileData?.body_fat_mass_kg ?? ""}
+                    onChange={(e) => {
+                      setProfileData({
+                        ...profileData,
+                        body_fat_mass_kg: e.target.value ? Number(e.target.value) : null,
+                      });
+                    }}
+                    className="flex-1"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <label className="text-sm text-foreground w-24">체지방률(%)</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={profileData?.body_fat_percentage ?? ""}
+                    onChange={(e) => {
+                      setProfileData({
+                        ...profileData,
+                        body_fat_percentage: e.target.value ? Number(e.target.value) : null,
+                      });
+                    }}
+                    className="flex-1"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 mt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsEditingProfile(false)}
+                  >
+                    취소
+                  </Button>
+                  <Button
+                    onClick={saveProfileData}
+                    disabled={saving}
+                  >
+                    {saving ? "저장 중..." : "저장"}
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
               <Label className="text-foreground">운동 목적</Label>
               <Select value={exerciseGoal} onValueChange={setExerciseGoal}>
@@ -1116,6 +1496,179 @@ export function MyPage({
             </div>
           </CardContent>
         </Card>
+
+        {/* 운동 로그 달력 모달 */}
+        {showActivityModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 p-4">
+            <div className="w-full max-w-2xl bg-card rounded-lg p-6 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-foreground">
+                  운동 기록 
+                  {Object.keys(activityLog).length > 0 && (
+                    <span className="text-sm text-muted-foreground ml-2">
+                      ({Object.keys(activityLog).sort().reverse()[0]?.substring(0, 7)})
+                    </span>
+                  )}
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowActivityModal(false);
+                    setSelectedActivityDate(null);
+                  }}
+                  className="text-muted-foreground hover:text-foreground text-lg"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {activityLoading ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  로딩 중...
+                </div>
+              ) : Object.keys(activityLog).length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  운동 기록이 없습니다.
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* 활동 강도 범례 */}
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-muted-foreground">활동 강도:</span>
+                    <div className="flex gap-2">
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 bg-gray-700 rounded"></div>
+                        <span className="text-muted-foreground">0</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 bg-blue-900 rounded"></div>
+                        <span className="text-muted-foreground">약함</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 bg-blue-600 rounded"></div>
+                        <span className="text-muted-foreground">보통</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 bg-blue-400 rounded"></div>
+                        <span className="text-muted-foreground">강함</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 활동 날짜 그리드 */}
+                  <div className="grid grid-cols-7 gap-1">
+                    {["일", "월", "화", "수", "목", "금", "토"].map((day) => (
+                      <div
+                        key={day}
+                        className="text-center text-xs text-muted-foreground py-2 font-semibold"
+                      >
+                        {day}
+                      </div>
+                    ))}
+                    {/* 날짜 셀 생성 */}
+                    {(() => {
+                      const dates = Object.keys(activityLog).sort().reverse();
+                      if (dates.length === 0) {
+                        return <div className="col-span-7 text-center py-4 text-muted-foreground">데이터가 없습니다</div>;
+                      }
+                      
+                      // 최근 기록을 기준으로 현재 달 결정
+                      const latestDateStr = dates[0];
+                      const [yearStr, monthStr] = latestDateStr.split('-');
+                      const year = parseInt(yearStr);
+                      const month = parseInt(monthStr);
+                      
+                      const startDate = new Date(year, month - 1, 1);
+                      const endDate = new Date(year, month, 0);
+                      
+                      const cells = [];
+                      const firstDayOfWeek = startDate.getDay();
+                      
+                      // 빈 셀 추가
+                      for (let i = 0; i < firstDayOfWeek; i++) {
+                        cells.push(
+                          <div key={`empty-${i}`} className="aspect-square"></div>
+                        );
+                      }
+                      
+                      // 날짜 셀 추가
+                      for (let day = 1; day <= endDate.getDate(); day++) {
+                        const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                        const activity = activityLog[dateStr];
+                        const intensity = activity
+                          ? Math.min(3, Math.ceil((activity.total_sessions || 0) / 2))
+                          : 0;
+                        
+                        const bgColor =
+                          intensity === 0
+                            ? "bg-gray-700"
+                            : intensity === 1
+                            ? "bg-blue-900"
+                            : intensity === 2
+                            ? "bg-blue-600"
+                            : "bg-blue-400";
+                        
+                        cells.push(
+                          <button
+                            key={dateStr}
+                            onClick={() => setSelectedActivityDate(dateStr)}
+                            className={`aspect-square rounded text-xs font-semibold transition-opacity ${
+                              activity 
+                                ? `${bgColor} text-white hover:opacity-80` 
+                                : "bg-gray-800 text-gray-600 hover:opacity-60"
+                            } ${
+                              selectedActivityDate === dateStr ? "ring-2 ring-blue-500" : ""
+                            }`}
+                          >
+                            {day}
+                          </button>
+                        );
+                      }
+                      
+                      return cells;
+                    })()}
+                  </div>
+
+                  {/* 선택된 날짜의 상세 운동 기록 */}
+                  {selectedActivityDate && activityLog[selectedActivityDate] && (
+                    <div className="border-t border-gray-700 pt-4 space-y-3">
+                      <h3 className="font-semibold text-foreground">
+                        {selectedActivityDate} 운동 기록
+                      </h3>
+                      <div className="space-y-2">
+                        {activityLog[selectedActivityDate].equipment.map((equip, idx) => (
+                          <div
+                            key={idx}
+                            className="bg-gray-900/50 rounded p-3 space-y-2"
+                          >
+                            <div className="font-semibold text-blue-400">
+                              {equip.name}
+                            </div>
+                            {equip.sessions.map((session, sidx) => (
+                              <div
+                                key={sidx}
+                                className="text-xs text-muted-foreground ml-2 space-y-1"
+                              >
+                                <div>
+                                  시간: {new Date(session.start_time).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })} ~ {new Date(session.end_time).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })}
+                                </div>
+                                <div>
+                                  소요 시간: {Math.round(session.duration_minutes)}분
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="text-sm text-foreground font-semibold bg-blue-900/20 rounded p-2">
+                        총 {activityLog[selectedActivityDate].total_sessions}개 운동, {Math.round(activityLog[selectedActivityDate].total_minutes)}분
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

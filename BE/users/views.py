@@ -858,3 +858,215 @@ class InbodyRecordLatestView(APIView):
             return Response({}, status=status.HTTP_204_NO_CONTENT)
         serializer = InbodyRecordSerializer(rec, context={'request': request})
         return Response(serializer.data)
+
+
+class AITrainerMotivationView(APIView):
+    """
+    AI 트레이너의 응원 메시지 생성 API
+    과거 인바디 기록을 비교 분석하여 신체 변화를 감지하고 동기부여 메시지 생성
+    
+    응답:
+    {
+        "message": "오늘도 화이팅! 지난 3개월 동안 당신의 근육량이 2kg 증가했네요...",
+        "analysis": {
+            "weight_change": {"before": 75.0, "after": 74.5, "change": -0.5, "change_percent": -0.67},
+            "muscle_change": {"before": 30.0, "after": 32.0, "change": 2.0, "change_percent": 6.67},
+            "fat_change": {"before": 20.0, "after": 18.0, "change": -2.0, "change_percent": -10.0},
+            "comparison_period": "3개월",
+            "parts_improvement": ["우측 팔", "우측 다리"]
+        }
+    }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        
+        try:
+            # 사용자의 프로필 조회
+            profile = UserProfile.objects.get(user=user)
+        except UserProfile.DoesNotExist:
+            return Response(
+                {'message': '프로필이 아직 설정되지 않았습니다.', 'analysis': None},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # 인바디 기록 조회 (최소 2개 필요)
+        records = InbodyRecord.objects.filter(user=user).order_by('-created_at')[:2]
+        
+        if len(records) < 2:
+            # 최신 기록 1개만 있는 경우, 현재 프로필 데이터와 비교
+            if len(records) == 1:
+                latest = records[0].parsed or {}
+            else:
+                # 기록이 없는 경우
+                return Response(
+                    {'message': '비교할 인바디 기록이 충분하지 않습니다. 정기적으로 인바디를 업로드해주세요!', 'analysis': None},
+                    status=status.HTTP_200_OK
+                )
+        else:
+            latest = records[0].parsed or {}
+            previous = records[1].parsed or {}
+        
+        # 현재 프로필 데이터 사용 (최신 인바디 정보)
+        current_data = {
+            'weight_kg': profile.weight_kg,
+            'skeletal_muscle_mass_kg': profile.skeletal_muscle_mass_kg,
+            'body_fat_mass_kg': profile.body_fat_mass_kg,
+            'body_fat_percentage': profile.body_fat_percentage,
+            'segment_right_arm_percent': profile.segment_right_arm_percent,
+            'segment_left_arm_percent': profile.segment_left_arm_percent,
+            'segment_trunk_percent': profile.segment_trunk_percent,
+            'segment_right_leg_percent': profile.segment_right_leg_percent,
+            'segment_left_leg_percent': profile.segment_left_leg_percent,
+        }
+        
+        # 이전 데이터 (첫 번째 또는 두 번째 기록)
+        if len(records) == 1:
+            # 현재 프로필과 기록 비교
+            previous_data = latest
+        else:
+            # 두 기록 비교
+            previous_data = {
+                'weight_kg': previous.get('weight_kg'),
+                'skeletal_muscle_mass_kg': previous.get('skeletal_muscle_mass_kg'),
+                'body_fat_mass_kg': previous.get('body_fat_mass_kg'),
+                'body_fat_percentage': previous.get('body_fat_percentage'),
+                'segment_right_arm_percent': previous.get('segment_right_arm_percent'),
+                'segment_left_arm_percent': previous.get('segment_left_arm_percent'),
+                'segment_trunk_percent': previous.get('segment_trunk_percent'),
+                'segment_right_leg_percent': previous.get('segment_right_leg_percent'),
+                'segment_left_leg_percent': previous.get('segment_left_leg_percent'),
+            }
+        
+        # 변화 분석
+        analysis = self._analyze_changes(current_data, previous_data, records)
+        
+        # AI 응원 메시지 생성
+        message = self._generate_motivation_message(analysis, profile)
+        
+        return Response({
+            'message': message,
+            'analysis': analysis
+        }, status=status.HTTP_200_OK)
+    
+    def _analyze_changes(self, current, previous, records):
+        """신체 데이터 변화 분석"""
+        def calculate_change(current_val, previous_val):
+            if previous_val is None or current_val is None:
+                return None
+            if previous_val == 0:
+                return 0
+            change = current_val - previous_val
+            percent = (change / abs(previous_val)) * 100 if previous_val != 0 else 0
+            return {
+                'before': round(previous_val, 2),
+                'after': round(current_val, 2),
+                'change': round(change, 2),
+                'change_percent': round(percent, 2)
+            }
+        
+        # 기본 지표 변화
+        weight_change = calculate_change(current['weight_kg'], previous['weight_kg'])
+        muscle_change = calculate_change(current['skeletal_muscle_mass_kg'], previous['skeletal_muscle_mass_kg'])
+        fat_change = calculate_change(current['body_fat_mass_kg'], previous['body_fat_mass_kg'])
+        fat_percent_change = calculate_change(current['body_fat_percentage'], previous['body_fat_percentage'])
+        
+        # 부위별 근육량 변화
+        parts_improvement = []
+        parts_decline = []
+        
+        parts_map = {
+            'segment_right_arm_percent': '우측 팔',
+            'segment_left_arm_percent': '좌측 팔',
+            'segment_trunk_percent': '몸통',
+            'segment_right_leg_percent': '우측 다리',
+            'segment_left_leg_percent': '좌측 다리',
+        }
+        
+        for key, label in parts_map.items():
+            part_change = calculate_change(current[key], previous[key])
+            if part_change and part_change['change'] > 0:
+                parts_improvement.append(label)
+            elif part_change and part_change['change'] < 0:
+                parts_decline.append(label)
+        
+        # 비교 기간 계산
+        if len(records) >= 2:
+            latest_date = records[0].created_at.date()
+            previous_date = records[1].created_at.date()
+            days_diff = (latest_date - previous_date).days
+            if days_diff >= 30:
+                comparison_period = f"{days_diff // 30}개월"
+            else:
+                comparison_period = f"{days_diff}일"
+        else:
+            comparison_period = "최근"
+        
+        return {
+            'weight_change': weight_change,
+            'muscle_change': muscle_change,
+            'fat_change': fat_change,
+            'fat_percent_change': fat_percent_change,
+            'comparison_period': comparison_period,
+            'parts_improvement': parts_improvement,
+            'parts_decline': parts_decline,
+        }
+    
+    def _generate_motivation_message(self, analysis, profile):
+        """AI 응원 메시지 생성"""
+        import random
+        
+        messages = []
+        
+        # 헤더 메시지
+        greetings = [
+            "오늘도 화이팅! ",
+            "매일 한 걸음씩 나아가고 있네요! ",
+            "당신의 노력이 빛나고 있습니다! ",
+        ]
+        messages.append(random.choice(greetings))
+        
+        # 지난 기간 설명
+        period = analysis.get('comparison_period', '최근')
+        messages.append(f"지난 {period} 동안의 성과를 살펴보면, ")
+        
+        # 주요 변화 분석
+        positive_changes = []
+        
+        # 근육량 증가
+        if analysis['muscle_change'] and analysis['muscle_change']['change'] > 0:
+            positive_changes.append(f"근육량이 {analysis['muscle_change']['change']}kg 증가했고, ")
+        
+        # 체지방 감소
+        if analysis['fat_change'] and analysis['fat_change']['change'] < 0:
+            positive_changes.append(f"체지방이 {abs(analysis['fat_change']['change'])}kg 감소했으며, ")
+        
+        # 체지방률 감소
+        if analysis['fat_percent_change'] and analysis['fat_percent_change']['change'] < 0:
+            positive_changes.append(f"체지방률이 {abs(analysis['fat_percent_change']['change'])}% 개선되었어요! ")
+        
+        # 부위별 개선
+        if analysis['parts_improvement']:
+            parts_str = ', '.join(analysis['parts_improvement'])
+            positive_changes.append(f"특히 {parts_str}이(가) 발달했습니다! ")
+        
+        # 변화가 없거나 감소한 경우
+        if not positive_changes:
+            if analysis['weight_change'] and analysis['weight_change']['change'] > 0:
+                messages.append(f"체중이 변화했습니다. 계속해서 운동을 이어가세요. 분명히 결과가 나타날 거예요! ")
+            else:
+                messages.append("현재 상태를 유지하고 있습니다. 꾸준한 운동으로 더 나은 결과를 만들어보세요! ")
+        else:
+            messages.extend(positive_changes)
+        
+        # 맺음말
+        closings = [
+            "당신의 노력이 분명히 보입니다. 계속 화이팅!",
+            "이 정도면 충분히 잘하고 있어요. 더 나은 내일을 위해 오늘도 운동해봅시다!",
+            "당신이라면 할 수 있습니다! 더 멋진 몸을 만들어봐요!",
+            "매일 작은 변화가 모여 큰 결과를 만듭니다. 계속 화이팅!",
+        ]
+        messages.append(random.choice(closings))
+        
+        return ''.join(messages)
