@@ -265,69 +265,66 @@ class StartSessionView(APIView):
             if other_in_queue and not reservation:
                 return Response({'error': '대기열이 있습니다. 알림 받은 사용자만 시작할 수 있습니다.'}, status=status.HTTP_409_CONFLICT)
 
-        allocated_time = 15
-        session_type = ''
+        # 1. AI 추천 시간 계산 (예약 여부와 관계없이 수행)
+        allocated_time = 15.0
+        session_type = 'BASE'
 
+        try:
+            from ai_model.prediction_utils import get_ai_recommendation
+
+            user_profile = UserProfile.objects.get(user=user)
+
+            now = timezone.now()
+            recent_sessions = UsageSession.objects.filter(
+                user=user,
+                start_time__gte=now - datetime.timedelta(hours=24),
+                end_time__isnull=False,
+            )
+
+            total_duration_minutes = 0
+            upper_duration_minutes = 0
+            lower_duration_minutes = 0
+
+            for session in recent_sessions:
+                duration = (session.end_time - session.start_time).total_seconds() / 60
+                total_duration_minutes += duration
+                if session.equipment.body_part == 'UPPER':
+                    upper_duration_minutes += duration
+                elif session.equipment.body_part == 'LOWER':
+                    lower_duration_minutes += duration
+
+            upper_ratio = (upper_duration_minutes / total_duration_minutes) if total_duration_minutes > 0 else 0
+            lower_ratio = (lower_duration_minutes / total_duration_minutes) if total_duration_minutes > 0 else 0
+
+            ratios = {'upper_ratio': upper_ratio, 'lower_ratio': lower_ratio}
+
+            allocated_time = get_ai_recommendation(
+                user_profile,
+                equipment.id,
+                ratios,
+            )
+            session_type = 'AI_RECOMMENDED'
+        except UserProfile.DoesNotExist:
+            logger.warning(
+                "UserProfile missing for %s, falling back to base time",
+                user.username,
+            )
+        except Exception as e:
+            logger.exception(
+                "AI recommendation failed for user %s equipment %s",
+                user.username,
+                equipment.pk,
+            )
+
+        # 2. 예약 처리
         if reservation:
             # ✅ 사용 권한 검증 통과: NOTIFIED 사용자. 예약은 queue에서 완전 제거.
-            allocated_time = 15
-            session_type = 'BASE'
             res_id = reservation.id
             reservation.delete()
             logger.info(f"[StartSession] NOTIFIED 예약 삭제 완료 reservation_id={res_id}")
-        else:
-            try:
-                from ai_model.prediction_utils import get_ai_recommendation
 
-                user_profile = UserProfile.objects.get(user=user)
-
-                now = timezone.now()
-                recent_sessions = UsageSession.objects.filter(
-                    user=user,
-                    start_time__gte=now - datetime.timedelta(hours=24),
-                    end_time__isnull=False,
-                )
-
-                total_duration_minutes = 0
-                upper_duration_minutes = 0
-                lower_duration_minutes = 0
-
-                for session in recent_sessions:
-                    duration = (session.end_time - session.start_time).total_seconds() / 60
-                    total_duration_minutes += duration
-                    if session.equipment.body_part == 'UPPER':
-                        upper_duration_minutes += duration
-                    elif session.equipment.body_part == 'LOWER':
-                        lower_duration_minutes += duration
-
-                upper_ratio = (upper_duration_minutes / total_duration_minutes) if total_duration_minutes > 0 else 0
-                lower_ratio = (lower_duration_minutes / total_duration_minutes) if total_duration_minutes > 0 else 0
-
-                ratios = {'upper_ratio': upper_ratio, 'lower_ratio': lower_ratio}
-
-                allocated_time = get_ai_recommendation(
-                    user_profile,
-                    equipment.id, # [FIX] ai_model_id 대신 PK 전달 (prediction_utils에서 PK로 조회함)
-                    ratios,
-                )
-                session_type = 'AI_RECOMMENDED'
-            except UserProfile.DoesNotExist:
-                logger.warning(
-                    "UserProfile missing for %s, falling back to base time",
-                    user.username,
-                )
-                allocated_time = 15
-                session_type = 'BASE'
-            except Exception as e:
-                logger.exception(
-                    "AI recommendation failed for user %s equipment %s",
-                    user.username,
-                    equipment.pk,
-                )
-                allocated_time = 15
-                session_type = 'BASE'
-
-        allocated_time = max(1, int(round(allocated_time)))
+        # 3. 시간 보정 (최소 1분) - 반올림 제거하여 정밀도 유지
+        allocated_time = max(1.0, allocated_time)
 
         try:
             with transaction.atomic():
