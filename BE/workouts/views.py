@@ -307,7 +307,7 @@ class StartSessionView(APIView):
 
                 allocated_time = get_ai_recommendation(
                     user_profile,
-                    equipment.ai_model_id,
+                    equipment.id, # [FIX] ai_model_id 대신 PK 전달 (prediction_utils에서 PK로 조회함)
                     ratios,
                 )
                 session_type = 'AI_RECOMMENDED'
