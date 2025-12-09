@@ -993,11 +993,22 @@ export default function App() {
 
   const handleReservationComplete = (newReservations: Reservation[]) => {
     // AI 루틴에서 생성된 예약을 추가하고 즉시 예약 현황 화면으로 이동
-    setReservations((prev) => [...prev, ...newReservations]);
-    // AI 추천 예약인 경우 AI 탭으로 설정
-    if (newReservations.length > 0 && newReservations[0].isAiRecommended) {
+    
+    // 새로운 예약이 AI 추천 예약인지 확인
+    const isNewAi = newReservations.length > 0 && newReservations[0].isAiRecommended;
+
+    if (isNewAi) {
+      // AI 추천 예약인 경우, 기존 AI 예약은 제거하고 새로운 예약으로 교체 (일반 예약은 유지)
+      setReservations((prev) => {
+        const nonAiReservations = prev.filter(r => !r.isAiRecommended);
+        return [...nonAiReservations, ...newReservations];
+      });
       setReservationTab("ai");
+    } else {
+      // 일반 예약인 경우 기존 방식대로 추가
+      setReservations((prev) => [...prev, ...newReservations]);
     }
+
     setCurrentView("reservation-status");
   };
 
