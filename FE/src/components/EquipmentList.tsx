@@ -88,7 +88,7 @@ const EquipmentItemInner = ({ eq, onSelect, flashing }: EquipmentItemProps) => {
       case "in-use":
         return (
           <Badge className="bg-yellow-100 text-yellow-700">
-            사용 중 ({eq.timeRemaining}분 남음)
+            사용 중 ({eq.estimatedWaitTime ?? eq.timeRemaining}분 남음)
           </Badge>
         );
       case "waiting":
