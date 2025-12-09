@@ -1460,15 +1460,13 @@ export function MyPage({
         {/* 운동 로그 달력 모달 */}
         {showActivityModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 p-4">
-            <div className="w-auto bg-card rounded-lg p-6 max-h-[90vh] overflow-y-auto">
+            <div
+              className="w-[600px] border border-gray-600 rounded-lg p-6 max-h-[90vh] overflow-y-auto shadow-2xl"
+              style={{ backgroundColor: "rgba(0, 0, 0, 1)" }}
+            >
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-foreground">
-                  운동 기록 
-                  {Object.keys(activityLog).length > 0 && (
-                    <span className="text-sm text-muted-foreground ml-2">
-                      ({Object.keys(activityLog).sort().reverse()[0]?.substring(0, 7)})
-                    </span>
-                  )}
+                <h2 className="text-xl font-bold text-white">
+                  운동 기록 (2025년 12월)
                 </h2>
                 <button
                   onClick={() => {
@@ -1519,131 +1517,172 @@ export function MyPage({
                   </div>
 
                   {/* 활동 날짜 그리드 */}
-                  <div className="inline-grid grid-cols-7 gap-1">
-                    {["일", "월", "화", "수", "목", "금", "토"].map((day) => (
-                      <div
-                        key={day}
-                        className="text-center text-xs text-muted-foreground py-1 font-semibold w-10"
-                      >
-                        {day}
-                      </div>
-                    ))}
-                    {/* 날짜 셀 생성 */}
-                    {(() => {
-                      const dates = Object.keys(activityLog).sort().reverse();
-                      if (dates.length === 0) {
-                        return <div className="col-span-7 text-center py-4 text-muted-foreground">데이터가 없습니다</div>;
-                      }
-                      
-                      // 최근 기록을 기준으로 현재 달 결정
-                      const latestDateStr = dates[0];
-                      const [yearStr, monthStr] = latestDateStr.split('-');
-                      const year = parseInt(yearStr);
-                      const month = parseInt(monthStr);
-                      
-                      const startDate = new Date(year, month - 1, 1);
-                      const endDate = new Date(year, month, 0);
-                      
-                      const cells = [];
-                      const firstDayOfWeek = startDate.getDay();
-                      
-                      // 빈 셀 추가
-                      for (let i = 0; i < firstDayOfWeek; i++) {
-                        cells.push(
-                          <div key={`empty-${i}`} className="w-10 h-10"></div>
-                        );
-                      }
-                      
-                      // 날짜 셀 추가
-                      for (let day = 1; day <= endDate.getDate(); day++) {
-                        const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-                        const activity = activityLog[dateStr];
-                        const totalMinutes = activity?.total_minutes || 0;
+                  <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {/* 요일 헤더 - 1행 */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 40px)', gap: '4px', justifyContent: 'center' }}>
+                      {["일", "월", "화", "수", "목", "금", "토"].map((day, idx) => (
+                        <div
+                          key={day}
+                          style={{
+                            textAlign: 'center',
+                            fontSize: '12px',
+                            fontWeight: 'bold',
+                            height: '24px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: idx === 0 ? '#f87171' : idx === 6 ? '#60a5fa' : '#9ca3af'
+                          }}
+                        >
+                          {day}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* 달력 날짜 그리드 - 2행부터 6행까지 */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 40px)', gap: '4px', justifyContent: 'center' }}>
+                      {(() => {
+                        // 현재 날짜 기준 (2025년 12월)
+                        const now = new Date();
+                        const year = now.getFullYear();
+                        const month = now.getMonth(); // 0-11 (12월 = 11)
                         
-                        // 운동 시간에 따른 색상 결정
-                        let bgColor = "bg-gray-700"; // 0분
-                        let bgStyle = {};
-                        let textColor = "text-gray-600";
-                        let tooltip = "0분";
+                        // 이번 달 1일이 무슨 요일인지 (0=일요일, 6=토요일)
+                        const firstDay = new Date(year, month, 1).getDay();
                         
-                        if (totalMinutes > 0 && totalMinutes < 30) {
-                          // 1-30분: 하늘색 (가벼운 파랑, 테두리)
-                          bgColor = "border border-blue-300";
-                          bgStyle = {backgroundColor: '#caf0f8'};
-                          textColor = "text-blue-300";
-                          tooltip = `${Math.round(totalMinutes)}분`;
-                        } else if (totalMinutes >= 30 && totalMinutes < 60) {
-                          // 30분-1시간: 밝은 파랑
-                          bgColor = "bg-blue-400";
-                          textColor = "text-white";
-                          tooltip = `${Math.round(totalMinutes)}분`;
-                        } else if (totalMinutes >= 60 && totalMinutes < 120) {
-                          // 1-2시간: 중간 파랑
-                          bgColor = "bg-blue-600";
-                          textColor = "text-white";
-                          tooltip = `${Math.round(totalMinutes)}분`;
-                        } else if (totalMinutes >= 120) {
-                          // 2시간 이상: 진파랑
-                          bgColor = "bg-blue-900";
-                          textColor = "text-white";
-                          tooltip = `${Math.round(totalMinutes)}분`;
+                        // 이번 달 마지막 날짜
+                        const lastDate = new Date(year, month + 1, 0).getDate();
+                        
+                        const calendar = [];
+                        
+                        // 6주 × 7일 = 42칸 생성
+                        for (let i = 0; i < 42; i++) {
+                          const dayNumber = i - firstDay + 1;
+                          
+                          if (dayNumber < 1 || dayNumber > lastDate) {
+                            // 빈 칸 (이전달/다음달)
+                            calendar.push(
+                              <div key={`empty-${i}`} style={{ width: '40px', height: '40px' }}></div>
+                            );
+                          } else {
+                            // 실제 날짜 칸
+                            const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(dayNumber).padStart(2, "0")}`;
+                            const activity = activityLog[dateStr];
+                            const totalMinutes = activity?.total_minutes || 0;
+                            
+                            // 운동 시간에 따른 색상 결정
+                            let bgColor = "#1f2937"; // gray-800
+                            let textColor = "#6b7280"; // gray-500
+                            
+                            if (totalMinutes > 0 && totalMinutes < 30) {
+                              bgColor = "#bfdbfe"; // blue-200
+                              textColor = "#111827"; // gray-900
+                            } else if (totalMinutes >= 30 && totalMinutes < 60) {
+                              bgColor = "#60a5fa"; // blue-400
+                              textColor = "#ffffff";
+                            } else if (totalMinutes >= 60 && totalMinutes < 120) {
+                              bgColor = "#2563eb"; // blue-600
+                              textColor = "#ffffff";
+                            } else if (totalMinutes >= 120) {
+                              bgColor = "#1e3a8a"; // blue-900
+                              textColor = "#ffffff";
+                            }
+                            
+                            calendar.push(
+                              <button
+                                key={dateStr}
+                                onClick={() => {
+                                  if (!activity) return;
+                                  // 같은 날짜 다시 클릭하면 토글 (닫기)
+                                  if (selectedActivityDate === dateStr) {
+                                    setSelectedActivityDate(null);
+                                  } else {
+                                    setSelectedActivityDate(dateStr);
+                                  }
+                                }}
+                                style={{
+                                  width: '40px',
+                                  height: '40px',
+                                  borderRadius: '4px',
+                                  backgroundColor: bgColor,
+                                  color: textColor,
+                                  fontSize: '12px',
+                                  fontWeight: '600',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: activity ? 'pointer' : 'default',
+                                  border: selectedActivityDate === dateStr ? '2px solid #facc15' : 'none',
+                                  transition: 'opacity 0.2s'
+                                }}
+                                onMouseEnter={(e) => activity && (e.currentTarget.style.opacity = '0.8')}
+                                onMouseLeave={(e) => activity && (e.currentTarget.style.opacity = '1')}
+                                title={activity ? `${dayNumber}일: ${Math.round(totalMinutes)}분 운동` : `${dayNumber}일`}
+                              >
+                                {dayNumber}
+                              </button>
+                            );
+                          }
                         }
                         
-                        cells.push(
-                          <button
-                            key={dateStr}
-                            onClick={() => setSelectedActivityDate(dateStr)}
-                            title={tooltip}
-                            className={`w-10 h-10 rounded text-xs font-semibold transition-all hover:scale-110 flex items-center justify-center ${bgColor} ${activity ? textColor : "text-gray-600"} ${
-                              selectedActivityDate === dateStr ? "ring-2 ring-blue-400" : ""
-                            }`}
-                            style={bgStyle}
-                          >
-                            {day}
-                          </button>
-                        );
-                      }
-                      
-                      return cells;
-                    })()}
+                        return calendar;
+                      })()}
+                    </div>
                   </div>
 
                   {/* 선택된 날짜의 상세 운동 기록 */}
-                  {selectedActivityDate && activityLog[selectedActivityDate] && (
-                    <div className="border-t border-gray-700 pt-4 space-y-3">
-                      <h3 className="font-semibold text-foreground">
-                        {selectedActivityDate} 운동 기록
-                      </h3>
-                      <div className="space-y-2">
-                        {activityLog[selectedActivityDate].equipment.map((equip, idx) => (
-                          <div
-                            key={idx}
-                            className="bg-gray-900/50 rounded p-3 space-y-2"
-                          >
-                            <div className="font-semibold text-blue-400">
-                              {equip.name}
-                            </div>
-                            {equip.sessions.map((session, sidx) => (
-                              <div
-                                key={sidx}
-                                className="text-xs text-muted-foreground ml-2 space-y-1"
-                              >
+                  {selectedActivityDate && activityLog[selectedActivityDate] && (() => {
+                    const selectedLog = activityLog[selectedActivityDate];
+                    const allSessions: Array<{ equipmentName: string; session: any }> = [];
+
+                    selectedLog.equipment.forEach((equip) => {
+                      equip.sessions.forEach((session) => {
+                        allSessions.push({ equipmentName: equip.name, session });
+                      });
+                    });
+
+                    allSessions.sort(
+                      (a, b) =>
+                        new Date(a.session.start_time).getTime() - new Date(b.session.start_time).getTime()
+                    );
+
+                    const needsScroll = allSessions.length >= 5;
+
+                    return (
+                      <div className="border-t border-gray-700 pt-2 space-y-2">
+                        <h3 className="text-sm font-semibold text-foreground">
+                          {selectedActivityDate} 운동 기록
+                        </h3>
+                        {/* 5개 이상일 때만 스크롤, 최대 높이 200px */}
+                        <div 
+                          className="pr-2"
+                          style={{
+                            maxHeight: needsScroll ? '200px' : 'none',
+                            overflowY: needsScroll ? 'auto' : 'visible',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '4px'
+                          }}
+                        >
+                          {allSessions.map((item, idx) => (
+                            <div key={idx} className="bg-gray-900/50 rounded px-2 py-1.5">
+                              <div className="text-[10px] font-semibold text-blue-400">
+                                {item.equipmentName}
+                              </div>
+                              <div className="text-[9px] text-muted-foreground ml-1 space-y-0.5">
                                 <div>
-                                  시간: {new Date(session.start_time).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })} ~ {new Date(session.end_time).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })}
-                                </div>
-                                <div>
-                                  소요 시간: {Math.round(session.duration_minutes)}분
+                                  {new Date(item.session.start_time).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })} ~ {new Date(item.session.end_time).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })} ({Math.round(item.session.duration_minutes)}분)
                                 </div>
                               </div>
-                            ))}
-                          </div>
-                        ))}
+                            </div>
+                          ))}
+                        </div>
+                        <div className="text-xs text-foreground font-semibold bg-blue-900/20 rounded px-2 py-1">
+                          총 {selectedLog.total_sessions}개 운동, {Math.round(selectedLog.total_minutes)}분
+                        </div>
                       </div>
-                      <div className="text-sm text-foreground font-semibold bg-blue-900/20 rounded p-2">
-                        총 {activityLog[selectedActivityDate].total_sessions}개 운동, {Math.round(activityLog[selectedActivityDate].total_minutes)}분
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               )}
             </div>
