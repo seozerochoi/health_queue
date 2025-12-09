@@ -344,7 +344,8 @@ class AIEngine:
             )
             d_user = User(0, "dummy", random.choice([0,1]), random.choice([0,1]), d_inbody)
             # [수정] 가상 기구 생성 시 랜덤한 기본 시간(10~30분) 부여하여 다양성 학습
-            d_equip = Equipment(0, "dummy_eq", random.choice([0,1]), "General", base_time=random.randint(10, 30))
+            # [Fix] base_time 제거 (Equipment 클래스 변경 반영)
+            d_equip = Equipment(0, "dummy_eq", random.choice([0,1]), "General")
             
             # 수학 공식 엔진을 통해 정답(Label) 생성
             # Hybrid 방식이므로 AI의 목표값은 0 (공식 그대로 사용)
