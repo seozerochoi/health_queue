@@ -97,10 +97,13 @@ export function AdminDashboard({
   const [usageStats, setUsageStats] = useState<Usage[]>([]);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   type StatsViewType = "equipment" | "body_part";
-  const [statsViewType, setStatsViewType] = useState<StatsViewType>("equipment");
+  const [statsViewType, setStatsViewType] =
+    useState<StatsViewType>("equipment");
   const [statsStartDate, setStatsStartDate] = useState<string>("");
   const [statsEndDate, setStatsEndDate] = useState<string>("");
   const [statsLoaded, setStatsLoaded] = useState(false);
+  type StatsSortBy = "usage_count" | "average_time";
+  const [statsSortBy, setStatsSortBy] = useState<StatsSortBy>("usage_count");
 
   // 현재 이용률 상태 (폴링용)
   const [currentUtilization, setCurrentUtilization] = useState({
@@ -175,7 +178,7 @@ export function AdminDashboard({
         }),
         createdAt: new Date(report.created_at), // 정렬용 Date 객체 추가
       }));
-  setStatsLoaded(true);
+      setStatsLoaded(true);
 
       // 1) pending 우선 2) 각 그룹 내에서 최신순 정렬
       const sortedReports = transformedReports.sort((a, b) => {
@@ -507,7 +510,11 @@ export function AdminDashboard({
           const today = todayKST();
           console.log("🔄 [AdminDashboard] 통계 초기 자동 로드 (오늘)");
           fetchUsageStats("body_part", today, today);
-        } else if (statsViewType === "body_part" && statsStartDate && statsEndDate) {
+        } else if (
+          statsViewType === "body_part" &&
+          statsStartDate &&
+          statsEndDate
+        ) {
           console.log("🔄 [AdminDashboard] 실시간 통계 자동 새로고침 실행");
           fetchUsageStats("body_part", statsStartDate, statsEndDate);
         }
@@ -675,7 +682,6 @@ export function AdminDashboard({
     }
   }, []);
 
-
   // 이용 통계 가져오기 (기구별/부위별, 기간 최대 31일)
   const fetchUsageStats = async (
     viewType?: StatsViewType,
@@ -698,7 +704,7 @@ export function AdminDashboard({
         setIsLoadingStats(false);
         return;
       }
-      
+
       if (end > todayStr) {
         alert("종료일은 오늘 이전이어야 합니다.");
         setIsLoadingStats(false);
@@ -724,10 +730,10 @@ export function AdminDashboard({
         return;
       }
 
-      const url = type === "equipment"
-        ? `https://43.201.88.27/api/daily-stats/?start_date=${start}&end_date=${end}`
-        : `https://43.201.88.27/api/daily-stats/by-body-part/?start_date=${start}&end_date=${end}`;
-
+      const url =
+        type === "equipment"
+          ? `https://43.201.88.27/api/daily-stats/?start_date=${start}&end_date=${end}`
+          : `https://43.201.88.27/api/daily-stats/by-body-part/?start_date=${start}&end_date=${end}`;
 
       console.log(`[${type}] 조회 URL:`, url);
       console.log(`[${type}] 조회 기간: ${start} ~ ${end}`);
@@ -746,7 +752,12 @@ export function AdminDashboard({
 
       const data = await response.json();
       console.log(`[${type}] 전체 응답 데이터:`, data);
-      console.log(`[${type}] 응답 타입:`, typeof data, `Array 여부:`, Array.isArray(data));
+      console.log(
+        `[${type}] 응답 타입:`,
+        typeof data,
+        `Array 여부:`,
+        Array.isArray(data)
+      );
 
       const records = Array.isArray(data) ? data : data.records || [];
       console.log(`[${type}] 추출된 records:`, records);
@@ -1047,7 +1058,7 @@ export function AdminDashboard({
                   type="text"
                   placeholder="이름으로 검색..."
                   value={userSearchQuery}
-                  onChange={e => setUserSearchQuery(e.target.value)}
+                  onChange={(e) => setUserSearchQuery(e.target.value)}
                   className="w-64 bg-gray-900 text-white border border-black focus:border-blue-600"
                 />
               </div>
@@ -1136,8 +1147,12 @@ export function AdminDashboard({
                     // 이름 검색 필터
                     if (
                       userSearchQuery.trim() &&
-                      !user.first_name.toLowerCase().includes(userSearchQuery.trim().toLowerCase()) &&
-                      !user.username.toLowerCase().includes(userSearchQuery.trim().toLowerCase())
+                      !user.first_name
+                        .toLowerCase()
+                        .includes(userSearchQuery.trim().toLowerCase()) &&
+                      !user.username
+                        .toLowerCase()
+                        .includes(userSearchQuery.trim().toLowerCase())
                     ) {
                       return false;
                     }
@@ -1566,7 +1581,11 @@ export function AdminDashboard({
                     <button
                       onClick={() => {
                         setStatsViewType("equipment");
-                        fetchUsageStats("equipment", statsStartDate, statsEndDate);
+                        fetchUsageStats(
+                          "equipment",
+                          statsStartDate,
+                          statsEndDate
+                        );
                       }}
                       className={`px-4 py-2 text-sm transition-colors ${
                         statsViewType === "equipment"
@@ -1579,7 +1598,11 @@ export function AdminDashboard({
                     <button
                       onClick={() => {
                         setStatsViewType("body_part");
-                        fetchUsageStats("body_part", statsStartDate, statsEndDate);
+                        fetchUsageStats(
+                          "body_part",
+                          statsStartDate,
+                          statsEndDate
+                        );
                       }}
                       className={`px-4 py-2 text-sm transition-colors ${
                         statsViewType === "body_part"
@@ -1593,41 +1616,77 @@ export function AdminDashboard({
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="mb-4 flex gap-3 items-center flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-gray-300 whitespace-nowrap">시작일</Label>
-                    <Input
-                      type="date"
-                      value={statsStartDate}
-                      max={todayKST()}
-                      onChange={(e) => {
-                        const newStart = e.target.value;
-                        setStatsStartDate(newStart);
-                        // 시작일이 종료일보다 커지면 종료일도 자동으로 조정
-                        if (statsEndDate && newStart > statsEndDate) {
-                          setStatsEndDate(newStart);
-                        }
-                      }}
-                      className="bg-gray-900 text-white border border-black focus:border-blue-600"
-                    />
+                <div className="mb-4 flex gap-3 items-center justify-between flex-wrap">
+                  <div className="flex gap-3 items-center">
+                    <div className="flex items-center gap-2">
+                      <Label className="text-gray-300 whitespace-nowrap">
+                        시작일
+                      </Label>
+                      <Input
+                        type="date"
+                        value={statsStartDate}
+                        max={todayKST()}
+                        onChange={(e) => {
+                          const newStart = e.target.value;
+                          setStatsStartDate(newStart);
+                          // 시작일이 종료일보다 커지면 종료일도 자동으로 조정
+                          if (statsEndDate && newStart > statsEndDate) {
+                            setStatsEndDate(newStart);
+                          }
+                        }}
+                        className="bg-gray-900 text-white border border-black focus:border-blue-600"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label className="text-gray-300 whitespace-nowrap">
+                        종료일
+                      </Label>
+                      <Input
+                        type="date"
+                        value={statsEndDate}
+                        min={statsStartDate}
+                        max={todayKST()}
+                        onChange={(e) => setStatsEndDate(e.target.value)}
+                        className="bg-gray-900 text-white border border-black focus:border-blue-600"
+                      />
+                    </div>
+                    <Button
+                      onClick={() =>
+                        fetchUsageStats(
+                          statsViewType,
+                          statsStartDate,
+                          statsEndDate
+                        )
+                      }
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      조회
+                    </Button>
                   </div>
-                  <div className="flex items-center gap-2 ml-6">
-                    <Label className="text-gray-300 whitespace-nowrap">종료일</Label>
-                    <Input
-                      type="date"
-                      value={statsEndDate}
-                      min={statsStartDate}
-                      max={todayKST()}
-                      onChange={(e) => setStatsEndDate(e.target.value)}
-                      className="bg-gray-900 text-white border border-black focus:border-blue-600"
-                    />
+
+                  {/* 정렬 토글 버튼 */}
+                  <div className="flex border border-gray-600 rounded-md overflow-hidden">
+                    <button
+                      onClick={() => setStatsSortBy("usage_count")}
+                      className={`px-4 py-2 text-sm transition-colors whitespace-nowrap ${
+                        statsSortBy === "usage_count"
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                      }`}
+                    >
+                      이용 횟수순
+                    </button>
+                    <button
+                      onClick={() => setStatsSortBy("average_time")}
+                      className={`px-4 py-2 text-sm transition-colors whitespace-nowrap ${
+                        statsSortBy === "average_time"
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                      }`}
+                    >
+                      평균 시간순
+                    </button>
                   </div>
-                  <Button
-                    onClick={() => fetchUsageStats(statsViewType, statsStartDate, statsEndDate)}
-                    className="bg-blue-600 hover:bg-blue-700 ml-2"
-                  >
-                    조회
-                  </Button>
                 </div>
                 <div className="relative">
                   {isLoadingStats && usageStats.length === 0 ? (
@@ -1644,22 +1703,41 @@ export function AdminDashboard({
                         isLoadingStats ? "opacity-50" : "opacity-100"
                       }`}
                     >
-                      {usageStats.map((u, idx) => (
-                        <div
-                          key={`${u.equipment}-${idx}`}
-                          className="p-4 border border-blue-900/40 bg-blue-950/50 rounded-lg"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="rounded-md bg-blue-900/40 px-4 py-2 text-white font-medium inline-block">
-                              {u.equipment}
-                            </div>
-                            <div className="text-gray-200 text-sm space-y-1 text-right">
-                              <div>이용: {u.totalUsage}회</div>
-                              <div>평균 시간: {u.averageTime}분</div>
+                      {/* 정렬 적용 */}
+                      {[...usageStats]
+                        .sort((a, b) => {
+                          if (statsSortBy === "usage_count") {
+                            // 1차: 이용 횟수순 (내림차순)
+                            if (b.totalUsage !== a.totalUsage) {
+                              return b.totalUsage - a.totalUsage;
+                            }
+                            // 2차: 평균 시간순 (내림차순)
+                            return b.averageTime - a.averageTime;
+                          } else {
+                            // 1차: 평균 시간순 (내림차순)
+                            if (b.averageTime !== a.averageTime) {
+                              return b.averageTime - a.averageTime;
+                            }
+                            // 2차: 이용 횟수순 (내림차순)
+                            return b.totalUsage - a.totalUsage;
+                          }
+                        })
+                        .map((u, idx) => (
+                          <div
+                            key={`${u.equipment}-${idx}`}
+                            className="p-4 border border-blue-900/40 bg-blue-950/50 rounded-lg"
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="rounded-md bg-blue-900/40 px-4 py-2 text-white font-medium inline-block">
+                                {u.equipment}
+                              </div>
+                              <div className="text-gray-200 text-sm space-y-1 text-right">
+                                <div>이용: {u.totalUsage}회</div>
+                                <div>평균 시간: {u.averageTime}분</div>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
                     </div>
                   )}
 
