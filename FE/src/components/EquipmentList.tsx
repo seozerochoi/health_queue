@@ -825,7 +825,7 @@ export function EquipmentList({
                 ? "waiting"
                 : "available",
             image: imageUrl,
-            allocatedTime: 30,
+            allocatedTime: 15, // 기본값 15분
             waitingCount: eq.waiting_count ?? 0,
             currentUser: eq.current_user ?? undefined,
             timeRemaining: eq.time_remaining ?? undefined,
@@ -833,38 +833,6 @@ export function EquipmentList({
         });
 
         setLocalEquipment(formattedEquipment);
-
-        // 🤖 AI 추천 시간 가져오기
-        try {
-          console.log("🤖 AI 추천 시간 가져오는 중...");
-          const aiRes = await fetch(`${base}/api/ai/times/`, {
-            headers: {
-              Authorization: `Bearer ${access}`,
-              "Content-Type": "application/json",
-            },
-          });
-          
-          if (aiRes.ok) {
-            const aiData = await aiRes.json();
-            console.log("🤖 AI 추천 시간 수신:", aiData);
-            
-            // AI 추천 시간으로 기구 목록 업데이트
-            setLocalEquipment((prev) =>
-              prev.map((eq) => {
-                const aiTime = aiData.times?.[eq.id];
-                if (aiTime !== undefined) {
-                  return { ...eq, allocatedTime: aiTime };
-                }
-                return eq;
-              })
-            );
-            console.log("✅ AI 추천 시간 적용 완료");
-          } else {
-            console.warn("⚠️ AI 추천 시간 가져오기 실패 (기본값 사용):", aiRes.status);
-          }
-        } catch (aiError) {
-          console.warn("⚠️ AI 추천 시간 요청 실패 (기본값 사용):", aiError);
-        }
 
         // 초기 로딩 시 모든 기구 상태 출력
         console.log("======= 초기 기구 목록 로딩 =======");
