@@ -279,6 +279,10 @@ class RoutineAIEngine:
                 input_vec = torch.cat([user_tensor, eq_tensor], dim=0)
                 score = self.model(input_vec).item()
                 
+                # [Exploration] 점수에 약간의 무작위성 추가 (다양성 확보)
+                # 학습 초기나 점수가 비슷할 때 매번 다른 결과가 나오도록 유도
+                score += random.uniform(-0.05, 0.05)
+
                 # [Advanced Logic] 사용자 수준별 맞춤형 가산점 로직 (Rule-based Boosting)
                 eq_type = str(getattr(eq, 'type', 'MACHINE')).upper()
                 eq_diff = getattr(eq, 'difficulty', 'MID')

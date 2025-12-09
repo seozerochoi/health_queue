@@ -123,6 +123,12 @@ class RoutineGenerateView(BaseAIView):
         intensity = request.data.get('intensity', '중')
         mode = request.data.get('mode', 'ALL') # 'AVAILABLE_ONLY'
 
+        # [Sync] 다른 워커에서 학습된 최신 가중치 로드
+        try:
+            routine_engine.load_checkpoint("routine_ai_checkpoint.pth")
+        except Exception:
+            pass
+
         # 2. 유저 변환
         ai_user = self.convert_to_ai_user(request.user)
         if not ai_user:
@@ -291,7 +297,7 @@ class FeedbackView(BaseAIView):
                 loss = routine_engine.learn_from_feedback(ai_user, routine_objs, score)
                 
                 # (옵션) 체크포인트 저장
-                routine_engine.save_checkpoint("routine_ai.pth")
+                routine_engine.save_checkpoint("routine_ai_checkpoint.pth")
 
                 return Response({"msg": "루틴 AI 학습 완료", "loss": loss})
 

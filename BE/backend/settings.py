@@ -153,9 +153,11 @@ DATABASES = {
 # 연결 풀을 사용하면 연결을 재사용하여 응답 속도 향상
 # ✅ 10분간 연결 유지 (gunicorn timeout과 일치)
 DATABASES['default']['CONN_MAX_AGE'] = 600  # 연결 유지 시간 (600초 = 10분)
-DATABASES['default']['OPTIONS'] = {
-    'connect_timeout': 10,  # 연결 타임아웃 (초)
-}
+
+if 'postgresql' in DATABASES['default']['ENGINE']:
+    DATABASES['default']['OPTIONS'] = {
+        'connect_timeout': 10,  # 연결 타임아웃 (초)
+    }
 
 # PostgreSQL 사용 시 추가 최적화
 if DATABASES['default'].get('ENGINE', '').endswith('postgresql'):
