@@ -379,7 +379,7 @@ class AIEngine:
         # 2. AI 보정값 예측 (Residual Learning)
         self.model.eval()
         with torch.no_grad():
-            inputs = self._extract_features(user, equipment).unsqueeze(0)
+            inputs = self._extract_features(user, equipment).unsqueeze(0).to(self.device)
             adjustment = self.model(inputs).item()
         
         # 3. 최종 시간 산출
@@ -457,8 +457,8 @@ class AIEngine:
         # Phase 1: 단기 집중 학습 (Short-term Intensive Training)
         # 방금 들어온 데이터만 가지고 모델을 과적합(Overfitting) 시켜서 즉각적인 변화를 유도함
         self.model.train()
-        recent_features = features.unsqueeze(0) # (1, InputDim)
-        recent_target = torch.FloatTensor([[target_residual]]) # (1, 1)
+        recent_features = features.unsqueeze(0).to(self.device) # (1, InputDim)
+        recent_target = torch.FloatTensor([[target_residual]]).to(self.device) # (1, 1)
         
         print("🔥 [TimeAI] 단기 집중 학습 시작 (Instant Adaptation)...")
         for _ in range(20): # 20번 반복 학습하여 강제로 주입
@@ -511,8 +511,8 @@ class AIEngine:
                 batch = random.sample(self.memory, self.batch_size)
             
             # Tensor 변환
-            batch_features = torch.stack([item[0] for item in batch])
-            batch_targets = torch.FloatTensor([[item[1]] for item in batch])
+            batch_features = torch.stack([item[0] for item in batch]).to(self.device)
+            batch_targets = torch.FloatTensor([[item[1]] for item in batch]).to(self.device)
 
             # 역전파 학습 (Backpropagation)
             self.optimizer.zero_grad()

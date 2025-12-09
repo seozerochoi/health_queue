@@ -346,7 +346,8 @@ class AllTimePredictionView(BaseAIView):
                 # 예측 실행
                 pred_time = time_engine.predict_time(ai_user, ai_equip)
                 times[db_equip.id] = round(pred_time, 1)
-            except Exception:
+            except Exception as e:
+                print(f"⚠️ [AllTimePrediction] Failed for {db_equip.name}: {e}")
                 times[db_equip.id] = 15.0 # 개별 실패 시 기본값
                 
         return Response({"times": times})
