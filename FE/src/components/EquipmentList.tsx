@@ -948,7 +948,23 @@ export function EquipmentList({
   const filteredEquipment =
     selectedCategory === "all"
       ? equipment
-      : equipment.filter((eq) => eq.type === selectedCategory);
+      : equipment.filter((eq) => {
+          if (selectedCategory === "cardio") {
+            return eq.type === "cardio";
+          }
+          if (selectedCategory === "strength") {
+            // 근력 운동 기구 타입들을 명시적으로 포함
+            const strengthTypes = [
+              "free_weight",
+              "machine",
+              "plate_loaded",
+              "cable",
+              "smith_machine",
+            ];
+            return strengthTypes.includes(eq.type);
+          }
+          return eq.type === selectedCategory;
+        });
 
   return (
     <div className="min-h-screen bg-background p-4 pb-20">
