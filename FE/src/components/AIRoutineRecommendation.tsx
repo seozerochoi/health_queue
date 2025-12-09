@@ -382,7 +382,11 @@ export function AIRoutineRecommendation({
                           </h4>
                           <div className="flex items-center space-x-2 text-sm text-gray-300">
                             <Clock className="h-3 w-3" />
-                            <span>{Math.round(step.time)}분</span>
+                            <span>
+                              {Math.floor(step.time)}분{" "}
+                              {Math.round((step.time % 1) * 60) > 0 &&
+                                `${Math.round((step.time % 1) * 60)}초`}
+                            </span>
                           </div>
                         </div>
                       </div>

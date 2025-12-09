@@ -464,17 +464,19 @@ class RoutineAIEngine:
         name = str(equipment.name).upper() # 예외 처리를 위해 이름도 확인
 
         # 매핑 로직 (UI 입력 -> DB 데이터 키워드)
+        # [Fix] 모든 부위에 대해 구체적인 키워드 적용 (중복 매칭 방지)
+        # 단순 동작명(PRESS, CURL, EXTENSION, ROW, FLY) 대신 부위가 결합된 명칭 사용
         keyword_map = {
-            '가슴': ['CHEST', 'BENCH', 'FLY', 'PEC'],
-            '등': ['BACK', 'LAT', 'ROW', 'PULL'],
-            '하체': ['LEG', 'SQUAT', 'CALF', 'HIP', 'EXTENSION', 'CURL'],
-            '허벅지': ['LEG', 'SQUAT', 'EXTENSION', 'CURL', 'PRESS'],
-            '힙': ['HIP', 'GLUTE', 'ABDUCTOR', 'SQUAT'],
+            '가슴': ['CHEST', 'BENCH', 'PEC', 'PUSH_UP'], # PRESS, FLY 제거 (중복 위험)
+            '등': ['BACK', 'LAT', 'PULL_UP', 'CHIN_UP', 'DEADLIFT', 'SEATED_ROW'], # ROW, PULL 제거
+            '하체': ['LEG', 'SQUAT', 'CALF', 'HIP', 'LUNGE'],
+            '허벅지': ['LEG_PRESS', 'SQUAT', 'LEG_EXTENSION', 'LEG_CURL', 'LUNGE'],
+            '힙': ['HIP', 'GLUTE', 'ABDUCTOR', 'ADDUCTOR', 'SQUAT'],
             '종아리': ['CALF'],
-            '어깨': ['SHOULDER', 'OHP', 'DELT'],
-            '팔': ['ARM', 'CURL', 'TRICEP', 'BICEP'],
-            '복근': ['CORE', 'ABS', 'CRUNCH'],
-            '유산소': ['CARDIO', 'RUNNING', 'CYCLE']
+            '어깨': ['SHOULDER', 'OHP', 'DELT', 'MILITARY', 'LATERAL'], # PRESS, RAISE 제거
+            '팔': ['ARM', 'TRICEP', 'BICEP', 'DIP', 'PUSHDOWN'], # CURL, EXTENSION 제거
+            '복근': ['ABS', 'CORE', 'CRUNCH', 'SIT_UP', 'PLANK', 'LEG_RAISE'],
+            '유산소': ['CARDIO', 'RUNNING', 'CYCLE', 'TREADMILL', 'ELLIPTICAL', 'STEPPER']
         }
         
         for user_target in target_parts:
@@ -498,7 +500,11 @@ class RoutineAIEngine:
     def _to_ai_equipment(self, db_eq):
         """DB Equipment -> time_ai.Equipment 변환"""
         try:
-            main_part = 0 if str(getattr(db_eq, 'body_part', 'UPPER')).upper() == 'UPPER' else 1
+            # [Fix] CORE는 상체(Trunk)로 분류되어야 함 (serializers.py와 로직 통일)
+            # serializers.py: main_part = 1 if obj.body_part == 'LOWER' else 0
+            b_part = str(getattr(db_eq, 'body_part', 'UPPER')).upper()
+            main_part = 1 if b_part == 'LOWER' else 0
+            
             sub_part = getattr(db_eq, 'subcategory', None) or str(getattr(db_eq, 'name', 'GENERAL'))
             equip_type = str(getattr(db_eq, 'type', 'MACHINE')).upper() # [Fix] 타입 전달
             

@@ -137,7 +137,13 @@ const EquipmentItemInner = ({ eq, onSelect, flashing }: EquipmentItemProps) => {
             <div className="flex items-center space-x-1 text-sm text-gray-300">
               <Clock className="h-3 w-3" />
               <span>
-                AI 추천 시간: {eq.aiRecommendedTime ?? eq.allocatedTime}분
+                AI 추천 시간:{" "}
+                {(() => {
+                  const time = eq.aiRecommendedTime ?? eq.allocatedTime;
+                  const min = Math.floor(time);
+                  const sec = Math.round((time % 1) * 60);
+                  return sec > 0 ? `${min}분 ${sec}초` : `${min}분`;
+                })()}
               </span>
             </div>
 
