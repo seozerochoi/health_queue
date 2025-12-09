@@ -41,29 +41,46 @@ def get_ai_recommendation(user_profile, ai_model_id, ratios):
         
         # UserProfile -> AI User 변환
         # (주의: UserProfile 필드가 time_ai.py의 요구사항과 일치해야 함)
-        # 여기서는 안전하게 기본값 처리하며 변환
         
-        # InBody 데이터가 없으면 기본값 사용
-        score = getattr(user_profile, 'inbody_score', 70)
-        weight = getattr(user_profile, 'weight', 70)
-        muscle = getattr(user_profile, 'skeletal_muscle_mass', 30)
-        fat = getattr(user_profile, 'body_fat_mass', 15)
-        height = getattr(user_profile, 'height', 175)
-        fat_rate = getattr(user_profile, 'body_fat_percentage', 20)
+        # Helper to safely get float
+        def n(v, default=0.0):
+            try:
+                return float(v) if v is not None else default
+            except:
+                return default
+
+        # InBody 데이터 매핑 (UserProfile 필드명 사용)
+        score = n(getattr(user_profile, 'inbody_score', 70), 70.0)
+        weight = n(getattr(user_profile, 'weight_kg', 70), 70.0)
+        muscle = n(getattr(user_profile, 'skeletal_muscle_mass_kg', 30), 30.0)
+        fat = n(getattr(user_profile, 'body_fat_mass_kg', 15), 15.0)
+        height = n(getattr(user_profile, 'height_cm', 175), 175.0)
+        fat_rate = n(getattr(user_profile, 'body_fat_percentage', 20), 20.0)
         
-        # 부위별 근육량 (없으면 표준값 가정)
+        # 부위별 근육량 (없으면 표준값 100% 가정)
+        r_arm = n(getattr(user_profile, 'segment_right_arm_percent', 100), 100.0)
+        l_arm = n(getattr(user_profile, 'segment_left_arm_percent', 100), 100.0)
+        trunk = n(getattr(user_profile, 'segment_trunk_percent', 100), 100.0)
+        r_leg = n(getattr(user_profile, 'segment_right_leg_percent', 100), 100.0)
+        l_leg = n(getattr(user_profile, 'segment_left_leg_percent', 100), 100.0)
+
         inbody = InBodyData(
-            score=float(score) if score else 70.0,
-            weight=float(weight) if weight else 70.0,
-            muscle_mass=float(muscle) if muscle else 30.0,
-            fat_mass=float(fat) if fat else 15.0,
-            height=float(height) if height else 175.0,
-            fat_rate=float(fat_rate) if fat_rate else 20.0,
-            r_arm=100.0, l_arm=100.0, trunk=100.0, r_leg=100.0, l_leg=100.0
+            score=score,
+            weight=weight,
+            muscle_mass=muscle,
+            fat_mass=fat,
+            height=height,
+            fat_rate=fat_rate,
+            r_arm=r_arm, l_arm=l_arm, trunk=trunk, r_leg=r_leg, l_leg=l_leg
         )
         
-        gender = 0 if user_profile.gender == 'M' else 1
-        goal = 1 if user_profile.goal == 'BULKUP' else 0
+        # 성별 처리 (0: Male, 1: Female)
+        gender_raw = str(getattr(user_profile, 'gender', 'M')).upper()
+        gender = 1 if gender_raw.startswith('F') or gender_raw == 'WOMAN' else 0
+        
+        # 목표 처리 (0: Diet, 1: Bulk-up)
+        goal_raw = str(getattr(user_profile, 'exercise_goal', 'DIET')).upper()
+        goal = 1 if goal_raw == 'MUSCLE_GAIN' or goal_raw == 'BULKUP' else 0
         
         ai_user = AIUser(
             user_id=user_profile.user.id,
@@ -74,17 +91,22 @@ def get_ai_recommendation(user_profile, ai_model_id, ratios):
         )
         
         # AI Equipment 변환
+        # main_part: 0: Upper, 1: Lower (time_ai.py 기준)
+        # DB body_part: UPPER, LOWER, CORE, CARDIO, ETC
+        main_part = 1 if db_equip.body_part == 'LOWER' else 0
+        
         ai_equip = AIEquipment(
             equip_id=db_equip.id,
             name=db_equip.name,
-            main_part=0 if db_equip.body_part == 'UPPER' else 1,
-            sub_part=db_equip.subcategory,
+            main_part=main_part,
+            sub_part=db_equip.subcategory or "General",
             base_time=db_equip.base_session_time_minutes,
             equip_type=db_equip.type
         )
         
         # 예측 실행
         recommended_time = time_engine.predict_time(ai_user, ai_equip)
+        logger.info(f"🤖 AI Prediction: User={ai_user.name}, Equip={ai_equip.name} -> {recommended_time:.1f} min")
         return recommended_time
 
     except Exception as e:

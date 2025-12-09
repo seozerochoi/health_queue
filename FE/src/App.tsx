@@ -560,30 +560,12 @@ export default function App() {
         const sessionData = await response.json();
         console.log("세션 시작 성공:", sessionData);
 
-        // [AI 시간 추천] 일반 시작에도 AI 추천 적용
+        // [AI 시간 추천] 서버에서 이미 AI 추천 시간을 계산하여 세션에 저장했으므로
+        // 별도의 AI API 호출 없이 응답받은 allocated_duration_minutes를 사용합니다.
         let finalEquipment = { ...equipment };
-        try {
-          console.log("🤖 AI 시간 추천 요청 중...");
-          const aiResponse = await fetch(`${apiBase}/api/ai/time/`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              equipment_id: equipment.id,
-            }),
-          });
-
-          if (aiResponse.ok) {
-            const aiData = await aiResponse.json();
-            console.log("🤖 AI 추천 시간 수신:", aiData.recommended_time);
-            finalEquipment.allocatedTime = aiData.recommended_time;
-          } else {
-            console.warn("AI 시간 추천 응답 실패:", aiResponse.status);
-          }
-        } catch (aiError) {
-          console.warn("AI 시간 추천 요청 실패 (기본값 사용):", aiError);
+        if (sessionData.allocated_duration_minutes) {
+            console.log("🤖 서버 AI 추천 시간 적용:", sessionData.allocated_duration_minutes);
+            finalEquipment.allocatedTime = sessionData.allocated_duration_minutes;
         }
 
         setSelectedEquipment(finalEquipment);
@@ -812,30 +794,10 @@ export default function App() {
       if (foundEquipment) {
         let finalEquipment = { ...foundEquipment };
 
-        // [AI 시간 추천] AI에게 적정 운동 시간 물어보기
-        try {
-          console.log("🤖 AI 시간 추천 요청 중...");
-          const aiResponse = await fetch(`${apiBase}/api/ai/time/`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              equipment_id: foundEquipment.id,
-            }),
-          });
-
-          if (aiResponse.ok) {
-            const aiData = await aiResponse.json();
-            console.log("🤖 AI 추천 시간 수신:", aiData.recommended_time);
-            // AI가 추천한 시간으로 덮어쓰기
-            finalEquipment.allocatedTime = aiData.recommended_time;
-          } else {
-            console.warn("AI 시간 추천 응답 실패:", aiResponse.status);
-          }
-        } catch (aiError) {
-          console.warn("AI 시간 추천 요청 실패 (기본값 사용):", aiError);
+        // [AI 시간 추천] 서버 응답값 사용 (별도 API 호출 제거)
+        if (data.allocated_duration_minutes) {
+            console.log("🤖 서버 AI 추천 시간 적용 (NFC):", data.allocated_duration_minutes);
+            finalEquipment.allocatedTime = data.allocated_duration_minutes;
         }
 
         setSelectedEquipment(finalEquipment);
@@ -1142,28 +1104,20 @@ export default function App() {
       // 선택된 기구 설정 및 운동 타이머 화면으로 이동
       const eq = equipmentList.find((e) => Number(e.id) === equipmentId);
       let finalEquipment = eq ? { ...eq } : undefined;
-      // AI 시간 추천 적용
+      
+      // [AI 시간 추천] 서버 응답값 사용 (즉시 시작)
       if (finalEquipment) {
-        try {
-          const aiRes = await fetch(`${apiBase}/api/ai/time/`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ equipment_id: equipmentId }),
-          });
-          if (aiRes.ok) {
-            const aiData = await aiRes.json();
-            finalEquipment.allocatedTime = aiData.recommended_time;
-          } else {
-            console.warn("AI 시간 추천 응답 실패:", aiRes.status);
-          }
-        } catch (aiError) {
-          console.warn("AI 시간 추천 요청 실패 (기본값 사용):", aiError);
+        // res.json()을 위에서 호출하지 않았으므로 여기서 호출해야 함
+        // 하지만 res.ok 체크 후 바로 넘어왔으므로 response body를 읽어야 함
+        // 위 코드에서 res.json()을 호출하지 않았으므로 여기서 읽습니다.
+        const sessionData = await res.json();
+        if (sessionData.allocated_duration_minutes) {
+             console.log("🤖 서버 AI 추천 시간 적용 (즉시 시작):", sessionData.allocated_duration_minutes);
+             finalEquipment.allocatedTime = sessionData.allocated_duration_minutes;
         }
-        setSelectedEquipment(finalEquipment);
       }
+      
+      setSelectedEquipment(finalEquipment);
       setWorkoutStartTime(new Date());
       setCurrentView("workout-timer");
       // 장비 상태 동기화
@@ -2409,35 +2363,13 @@ export default function App() {
                       );
                       let finalEquipment = equipment ? { ...equipment } : undefined;
                       
-                      // AI 시간 추천 적용
-                      if (finalEquipment) {
-                        console.log("📋 [줄서기→시작] equipmentList에서 가져온 기본 allocatedTime:", finalEquipment.allocatedTime);
-                        try {
-                          console.log("🤖 [줄서기→시작] AI 시간 추천 요청 중... equipment_id:", equipmentId);
-                          const aiRes = await fetch(`${apiBase}/api/ai/time/`, {
-                            method: "POST",
-                            headers: {
-                              Authorization: `Bearer ${token}`,
-                              "Content-Type": "application/json",
-                            },
-                            body: JSON.stringify({ equipment_id: equipmentId }),
-                          });
-                          console.log("🤖 [줄서기→시작] AI API 응답 상태:", aiRes.status);
-                          if (aiRes.ok) {
-                            const aiData = await aiRes.json();
-                            console.log("🤖 [줄서기→시작] AI 추천 시간 수신:", aiData.recommended_time, "분");
-                            finalEquipment.allocatedTime = aiData.recommended_time;
-                            console.log("✅ [줄서기→시작] finalEquipment.allocatedTime 업데이트 완료:", finalEquipment.allocatedTime);
-                          } else {
-                            const errorText = await aiRes.text().catch(() => "");
-                            console.error("❌ [줄서기→시작] AI 시간 추천 응답 실패:", aiRes.status, errorText);
-                          }
-                        } catch (aiError) {
-                          console.error("❌ [줄서기→시작] AI 시간 추천 요청 실패 (기본값 사용):", aiError);
-                        }
-                        console.log("📌 [줄서기→시작] 최종 setSelectedEquipment allocatedTime:", finalEquipment.allocatedTime);
-                        setSelectedEquipment(finalEquipment);
+                      // [AI 시간 추천] 서버 응답값 사용
+                      if (finalEquipment && sessionData.allocated_duration_minutes) {
+                        console.log("🤖 서버 AI 추천 시간 적용 (알림 시작):", sessionData.allocated_duration_minutes);
+                        finalEquipment.allocatedTime = sessionData.allocated_duration_minutes;
                       }
+                      
+                      setSelectedEquipment(finalEquipment);
                       setWorkoutStartTime(new Date());
                       setCurrentView("workout-timer");
 
