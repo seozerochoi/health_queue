@@ -45,7 +45,9 @@ class EquipmentViewSet(viewsets.ModelViewSet):
         if self.action == 'list':
             from workouts.models import Reservation
             qs = qs.prefetch_related(
-                'reservation_set'  # Prefetch all reservations
+                'reservation_set',  # Prefetch all reservations
+                'reservation_set__user',
+                'reservation_set__user__userprofile'
             )
         
         return qs
