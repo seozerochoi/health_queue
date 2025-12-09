@@ -10,7 +10,7 @@ class UsageSession(models.Model):
     start_time = models.DateTimeField(auto_now_add=True)
     end_time = models.DateTimeField(null=True, blank=True)
     last_heartbeat = models.DateTimeField(null=True, blank=True, db_index=True)
-    allocated_duration_minutes = models.IntegerField()
+    allocated_duration_minutes = models.FloatField()
     
     SESSION_TYPE_CHOICES = [
         ('BASE', 'Base'),

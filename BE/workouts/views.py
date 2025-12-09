@@ -327,7 +327,8 @@ class StartSessionView(APIView):
                 allocated_time = 15
                 session_type = 'BASE'
 
-        allocated_time = max(1, int(round(allocated_time)))
+        # [Fix] 소수점 시간 지원 (최소 1분, 소수점 1자리까지)
+        allocated_time = max(1.0, round(float(allocated_time), 1))
 
         try:
             with transaction.atomic():
