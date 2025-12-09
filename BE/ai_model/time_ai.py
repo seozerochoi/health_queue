@@ -236,12 +236,12 @@ class AIEngine:
         # [핵심 추가 2] Mini-batch Size
         # 피드백 반영 시 32개의 데이터를 묶어서 학습
         self.batch_size = 32
-    def save_checkpoint(self, filepath="ai_checkpoint.pth"):
+    def save_checkpoint(self, filepath="time_ai_checkpoint.pth"):
         """학습된 모델 가중치를 파일로 저장"""
         torch.save(self.model.state_dict(), filepath)
         print(f"💾 모델 저장 완료: {filepath}")
 
-    def load_checkpoint(self, filepath="ai_checkpoint.pth"):
+    def load_checkpoint(self, filepath="time_ai_checkpoint.pth"):
         """저장된 모델 불러오기"""
         try:
             self.model.load_state_dict(torch.load(filepath))
@@ -475,7 +475,7 @@ class AIEngine:
         # 5. [핵심 추가 6] 모델 자동 저장 (Auto-Save)
         # 학습된 뇌(가중치)를 파일로 저장하여 서버 재시작 시에도 유지되도록 함
         try:
-            self.save_checkpoint("time_ai_checkpoint.pth")
+            self.save_checkpoint()
         except Exception as e:
             print(f"⚠️ 모델 자동 저장 실패: {e}")
 
