@@ -67,7 +67,7 @@ class ReservationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reservation
         fields = (
-            'id', 'user', 'equipment', 'equipment_id', 'equipment_image', 'equipment_allocated_time',
+            'id', 'user', 'equipment', 'equipment_id', 'equipment_image',
             'created_at', 'status', 'notified_at', 'waiting_position', 'waiting_count'
         )
 
