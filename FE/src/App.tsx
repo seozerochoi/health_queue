@@ -2284,7 +2284,7 @@ export default function App() {
           return (
             <div
               key={n.reservationId}
-              className="bg-blue-900/90 text-white rounded-lg p-3 shadow-lg w-80"
+              className="bg-gray-800 text-white rounded-lg p-3 shadow-lg w-80"
             >
               <div className="flex justify-between items-start">
                 <div>
