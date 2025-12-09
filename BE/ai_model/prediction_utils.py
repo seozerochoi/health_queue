@@ -100,7 +100,6 @@ def get_ai_recommendation(user_profile, ai_model_id, ratios):
             name=db_equip.name,
             main_part=main_part,
             sub_part=db_equip.subcategory or "General",
-            base_time=db_equip.base_session_time_minutes,
             equip_type=db_equip.type
         )
         

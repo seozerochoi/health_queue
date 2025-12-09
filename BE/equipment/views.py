@@ -519,7 +519,6 @@ def equipment_stream(request):
                 'status': getattr(eq, 'status', None),
                 'operational_state': getattr(eq, 'operational_state', None),
                 'image_url': getattr(eq, 'image_url', '') or getattr(eq, 'image', ''),
-                'base_session_time_minutes': getattr(eq, 'base_session_time_minutes', None),
                 'waiting_count': eq.waiting_count,
             })
 

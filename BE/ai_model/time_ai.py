@@ -49,13 +49,12 @@ class Equipment:
     """
     운동 기구 정보를 관리하는 클래스입니다.
     """
-    def __init__(self, equip_id, name, main_part, sub_part, base_time=15, equip_type='MACHINE'):
+    def __init__(self, equip_id, name, main_part, sub_part, equip_type='MACHINE'):
         self.equip_id = equip_id
         self.name = name
         self.main_part = main_part # 0: Upper(상체), 1: Lower(하체)
         # 세부 타겟 부위 (예: "Chest", "Back", "Legs" 등)
         self.sub_part = sub_part
-        self.base_time = base_time # 기구별 기본 세팅 시간 (분) - 참고용
         self.equip_type = equip_type # 'CARDIO', 'MACHINE', 'FREE_WEIGHT' 등
 
 # ==============================================================================
@@ -219,9 +218,9 @@ class AdaptiveNetwork(nn.Module):
 
 class AIEngine:
     def __init__(self):
-        # 입력 Feature Dimension 정의 (총 14개 Feature 사용)
-        # Raw(7) + Equip(2) + Derived(5) = 14
-        self.input_dim = 14 
+        # 입력 Feature Dimension 정의 (총 13개 Feature 사용)
+        # Raw(7) + Equip(1) + Derived(5) = 13
+        self.input_dim = 13 
         self.model = AdaptiveNetwork(self.input_dim)
         
         # [개선] 학습률(Learning Rate)을 0.01로 높여 피드백 반영 속도를 높임
@@ -294,7 +293,6 @@ class AIEngine:
             
             # Equipment Info
             equipment.main_part, # 0:Upper, 1:Lower
-            equipment.base_time, # DB Base Time
             
             # [New] Derived Features (PDF Logic) - AI의 '통찰력'을 높여주는 핵심 힌트
             x1,               # 숙련도

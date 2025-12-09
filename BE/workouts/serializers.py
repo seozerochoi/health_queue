@@ -37,7 +37,6 @@ class ReservationSerializer(serializers.ModelSerializer):
     # Extra equipment metadata for FE convenience
     equipment_id = serializers.SerializerMethodField()
     equipment_image = serializers.SerializerMethodField()
-    equipment_allocated_time = serializers.SerializerMethodField()
 
     # Queue-related fields
     waiting_position = serializers.SerializerMethodField()
@@ -49,9 +48,6 @@ class ReservationSerializer(serializers.ModelSerializer):
     def get_equipment_image(self, obj):
         # equipment may have image_url field
         return getattr(obj.equipment, 'image_url', None)
-
-    def get_equipment_allocated_time(self, obj):
-        return getattr(obj.equipment, 'base_session_time_minutes', None)
 
     def get_waiting_count(self, obj):
         # ⚡ OPTIMIZATION: Use getattr with cached value if available from annotate()

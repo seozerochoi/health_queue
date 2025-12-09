@@ -76,7 +76,6 @@ class EquipmentSerializer(serializers.ModelSerializer):
             name=obj.name,
             main_part=main_part,
             sub_part=obj.subcategory or "General",
-            base_time=obj.base_session_time_minutes,
             equip_type=obj.type
         )
 
@@ -228,12 +227,11 @@ class EquipmentSerializer(serializers.ModelSerializer):
             name=obj.name,
             main_part=main_part,
             sub_part=obj.subcategory or "General",
-            base_time=obj.base_session_time_minutes,
             equip_type=obj.type
         )
 
         for res in reservations:
-            user_time = obj.base_session_time_minutes # Default fallback
+            user_time = 15.0 # Default fallback
             
             if time_engine:
                 try:

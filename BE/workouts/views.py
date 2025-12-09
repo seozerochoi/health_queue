@@ -265,12 +265,12 @@ class StartSessionView(APIView):
             if other_in_queue and not reservation:
                 return Response({'error': '대기열이 있습니다. 알림 받은 사용자만 시작할 수 있습니다.'}, status=status.HTTP_409_CONFLICT)
 
-        allocated_time = equipment.base_session_time_minutes
+        allocated_time = 15
         session_type = ''
 
         if reservation:
             # ✅ 사용 권한 검증 통과: NOTIFIED 사용자. 예약은 queue에서 완전 제거.
-            allocated_time = equipment.base_session_time_minutes
+            allocated_time = 15
             session_type = 'BASE'
             res_id = reservation.id
             reservation.delete()
@@ -316,7 +316,7 @@ class StartSessionView(APIView):
                     "UserProfile missing for %s, falling back to base time",
                     user.username,
                 )
-                allocated_time = equipment.base_session_time_minutes
+                allocated_time = 15
                 session_type = 'BASE'
             except Exception as e:
                 logger.exception(
@@ -324,7 +324,7 @@ class StartSessionView(APIView):
                     user.username,
                     equipment.pk,
                 )
-                allocated_time = equipment.base_session_time_minutes
+                allocated_time = 15
                 session_type = 'BASE'
 
         allocated_time = max(1, int(round(allocated_time)))

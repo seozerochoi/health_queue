@@ -41,7 +41,6 @@ class Equipment(models.Model):
         default='NORMAL',
         help_text='운영자가 설정하는 기구의 운영 상태 (정상 / 점검중 / 고장)'
     )
-    base_session_time_minutes = models.IntegerField(default=15)
     image_url = models.URLField(max_length=500, blank=True, null=True, help_text="운동기구 이미지 URL")
 
     BODY_PART_CHOICES = [
