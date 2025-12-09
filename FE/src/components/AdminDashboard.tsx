@@ -1391,52 +1391,55 @@ export function AdminDashboard({
                           </div>
                           {report.status === "pending" && (
                             <div className="flex items-center gap-2">
-                              <Select
-                                value={
-                                  equipmentList.find(
-                                    (e) => e.name === report.equipment
-                                  )?.operational_state
-                                }
-                                onValueChange={(value) => {
-                                  const equipment = equipmentList.find(
-                                    (e) => e.name === report.equipment
-                                  );
-                                  if (equipment) {
-                                    handleChangeEquipmentStatus(
-                                      equipment.id,
-                                      value as
-                                        | "NORMAL"
-                                        | "MAINTENANCE"
-                                        | "BROKEN",
-                                      report.equipment
-                                    );
+                              {/* 🔴 기구 고장 신고만 상태 변경 드롭다운 표시 */}
+                              {report.type === "malfunction" && (
+                                <Select
+                                  value={
+                                    equipmentList.find(
+                                      (e) => e.name === report.equipment
+                                    )?.operational_state
                                   }
-                                }}
-                              >
-                                <SelectTrigger className="w-[120px] h-9 bg-gray-700 border-gray-600 text-gray-300">
-                                  <SelectValue placeholder="상태 변경" />
-                                </SelectTrigger>
-                                <SelectContent className="bg-gray-800 border-gray-600">
-                                  <SelectItem
-                                    value="NORMAL"
-                                    className="text-green-400"
-                                  >
-                                    정상
-                                  </SelectItem>
-                                  <SelectItem
-                                    value="MAINTENANCE"
-                                    className="text-yellow-400"
-                                  >
-                                    점검중
-                                  </SelectItem>
-                                  <SelectItem
-                                    value="BROKEN"
-                                    className="text-red-400"
-                                  >
-                                    고장
-                                  </SelectItem>
-                                </SelectContent>
-                              </Select>
+                                  onValueChange={(value) => {
+                                    const equipment = equipmentList.find(
+                                      (e) => e.name === report.equipment
+                                    );
+                                    if (equipment) {
+                                      handleChangeEquipmentStatus(
+                                        equipment.id,
+                                        value as
+                                          | "NORMAL"
+                                          | "MAINTENANCE"
+                                          | "BROKEN",
+                                        report.equipment
+                                      );
+                                    }
+                                  }}
+                                >
+                                  <SelectTrigger className="w-[120px] h-9 bg-gray-700 border-gray-600 text-gray-300">
+                                    <SelectValue placeholder="상태 변경" />
+                                  </SelectTrigger>
+                                  <SelectContent className="bg-gray-800 border-gray-600">
+                                    <SelectItem
+                                      value="NORMAL"
+                                      className="text-green-400"
+                                    >
+                                      정상
+                                    </SelectItem>
+                                    <SelectItem
+                                      value="MAINTENANCE"
+                                      className="text-yellow-400"
+                                    >
+                                      점검중
+                                    </SelectItem>
+                                    <SelectItem
+                                      value="BROKEN"
+                                      className="text-red-400"
+                                    >
+                                      고장
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              )}
                               <Button
                                 size="sm"
                                 className="bg-blue-500 hover:bg-blue-600 text-sm px-3 py-1.5 whitespace-nowrap flex-shrink-0 h-9"
