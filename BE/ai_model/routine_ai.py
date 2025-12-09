@@ -102,11 +102,10 @@ class RoutineAIEngine:
             ai_eq = self._to_ai_equipment(db_eq)
             full_features = self.time_ai._extract_features(user, ai_eq)
             
-        # [Update] time_ai._extract_features가 13차원(User 12 + Equip 1)을 반환하므로
-        # User Feature(0~6, 8~12)만 추출하여 12차원으로 구성
-        # Indices: 0-6(Raw User), 7(Equip), 8-12(Derived User)
-        # [Fix] Index 8(x1)도 User Feature이므로 포함해야 함 (기존 9: 에서 8: 로 수정)
-        user_features = torch.cat((full_features[:7], full_features[8:]))
+        # [Update] time_ai._extract_features가 14차원(User 12 + Equip 2)을 반환하므로
+        # User Feature(0~6, 9~13)만 추출하여 12차원으로 구성
+        # Indices: 0-6(Raw User), 7(Equip Main), 8(Equip Cardio), 9-13(Derived User)
+        user_features = torch.cat((full_features[:7], full_features[9:]))
         return user_features
 
     def _get_equip_tensor(self, equipment):

@@ -218,9 +218,9 @@ class AdaptiveNetwork(nn.Module):
 
 class AIEngine:
     def __init__(self):
-        # 입력 Feature Dimension 정의 (총 13개 Feature 사용)
-        # Raw(7) + Equip(1) + Derived(5) = 13
-        self.input_dim = 13 
+        # 입력 Feature Dimension 정의 (총 14개 Feature 사용)
+        # Raw(7) + Equip(2) + Derived(5) = 14
+        self.input_dim = 14 
         self.model = AdaptiveNetwork(self.input_dim)
         
         # [개선] 학습률(Learning Rate)을 0.01로 높여 피드백 반영 속도를 높임
@@ -293,6 +293,9 @@ class AIEngine:
         # (순환 참조 방지를 위해 FormulaEngine 인스턴스를 새로 만들지 않고 로직만 간단히 참조하거나, 
         #  여기서는 복잡도를 줄이기 위해 생략하고 위 파생 변수들로 충분하다고 판단함)
         
+        # [New] 유산소 여부 (Cardio Flag)
+        is_cardio = 1.0 if equipment.equip_type == 'CARDIO' else 0.0
+
         features = [
             # Raw Data
             ib.score, ib.fat_rate, ib.muscle_mass, ib.height, bmi,
@@ -300,6 +303,7 @@ class AIEngine:
             
             # Equipment Info
             equipment.main_part, # 0:Upper, 1:Lower
+            is_cardio,           # [New] 유산소 여부 (0 or 1)
             
             # [New] Derived Features (PDF Logic) - AI의 '통찰력'을 높여주는 핵심 힌트
             x1,               # 숙련도
@@ -345,7 +349,9 @@ class AIEngine:
             d_user = User(0, "dummy", random.choice([0,1]), random.choice([0,1]), d_inbody)
             # [수정] 가상 기구 생성 시 랜덤한 기본 시간(10~30분) 부여하여 다양성 학습
             # [Fix] base_time 제거 (Equipment 클래스 변경 반영)
-            d_equip = Equipment(0, "dummy_eq", random.choice([0,1]), "General")
+            # [Update] 유산소/무산소 랜덤 생성
+            e_type = random.choice(['MACHINE', 'CARDIO'])
+            d_equip = Equipment(0, "dummy_eq", random.choice([0,1]), "General", equip_type=e_type)
             
             # 수학 공식 엔진을 통해 정답(Label) 생성
             # Hybrid 방식이므로 AI의 목표값은 0 (공식 그대로 사용)

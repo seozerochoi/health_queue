@@ -202,7 +202,7 @@ class TimePredictionView(BaseAIView):
         ai_equip = AIEquipment(
             equip_id=db_equip.id,
             name=db_equip.name,
-            main_part=0 if db_equip.body_part == 'UPPER' else 1, # 예시 로직
+            main_part=1 if db_equip.body_part == 'LOWER' else 0, # Serializer와 동일 로직
             sub_part=db_equip.subcategory,
             equip_type=db_equip.type # 기구 유형 전달 (CARDIO, MACHINE 등)
         )
@@ -271,11 +271,12 @@ class FeedbackView(BaseAIView):
                 # DB 객체 가져오기 & AI 객체 변환
                 db_eq = get_object_or_404(Equipment, pk=equip_id)
                 ai_eq = AIEquipment(
-                    db_eq.id, 
-                    db_eq.name, 
-                    0, 
-                    db_eq.subcategory
-                ) # 간소화
+                    equip_id=db_eq.id, 
+                    name=db_eq.name, 
+                    main_part=1 if db_eq.body_part == 'LOWER' else 0, 
+                    sub_part=db_eq.subcategory,
+                    equip_type=db_eq.type
+                )
 
                 target, loss = time_engine.update_with_feedback(ai_user, ai_eq, base_time, score)
                 
@@ -337,7 +338,7 @@ class AllTimePredictionView(BaseAIView):
                 ai_equip = AIEquipment(
                     equip_id=db_equip.id,
                     name=db_equip.name,
-                    main_part=0 if db_equip.body_part == 'UPPER' else 1,
+                    main_part=1 if db_equip.body_part == 'LOWER' else 0,
                     sub_part=db_equip.subcategory or "General",
                     equip_type=db_equip.type
                 )
