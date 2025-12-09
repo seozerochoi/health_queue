@@ -38,11 +38,11 @@ class PreferenceNetwork(nn.Module):
 # 2. 메인 엔진: Routine AI Engine
 # ==============================================================================
 class RoutineAIEngine:
-    def __init__(self, db_equipments):
+    def __init__(self, db_equipments, time_ai_engine=None):
         """
         Args:
             db_equipments: DB에서 가져온 Equipment 객체 리스트.
-                           객체는 DB 컬럼명과 동일한 속성(type, body_part, subcategory, difficulty)을 가져야 함.
+            time_ai_engine: (Optional) 이미 학습된 TimeAI 엔진 인스턴스
         """
         self.equipments = db_equipments
         
@@ -54,10 +54,13 @@ class RoutineAIEngine:
         self.criterion = nn.BCELoss() # 이진 분류 손실함수 (좋다/싫다 유사)
         
         # 시간 예측 AI 엔진 연결 (소요 시간 계산용)
-        self.time_ai = AIEngine()
-        # 주의: 실제 서버에서는 이미 학습된 전역 time_ai 객체를 주입받는 것이 권장됨
-        if not self.time_ai.is_trained:
-            self.time_ai.pretrain_with_formula()
+        if time_ai_engine:
+            self.time_ai = time_ai_engine
+        else:
+            self.time_ai = AIEngine()
+            # 주의: 실제 서버에서는 이미 학습된 전역 time_ai 객체를 주입받는 것이 권장됨
+            if not self.time_ai.is_trained:
+                self.time_ai.pretrain_with_formula()
 
         # Experience Replay Buffer (학습 데이터 기억 저장소)
         self.memory = deque(maxlen=2000)
@@ -75,6 +78,11 @@ class RoutineAIEngine:
             print(f"📂 루틴 모델 불러오기 성공: {filepath}")
         except FileNotFoundError:
             print("⚠️ 저장된 루틴 모델이 없습니다. 새로 시작합니다.")
+        except RuntimeError as e:
+            print(f"⚠️ 루틴 모델 구조 불일치로 로드 실패 (새로 시작): {e}")
+            # 구조가 바뀌었으므로 기존 체크포인트는 무시하고 새로 학습해야 함
+        except Exception as e:
+            print(f"⚠️ 루틴 모델 로드 중 알 수 없는 오류 발생: {e}")
 
     def update_equipments_list(self, new_equipments_list):
         """운영자가 기구를 추가/수정했을 때 리스트 갱신"""
@@ -94,10 +102,11 @@ class RoutineAIEngine:
             ai_eq = self._to_ai_equipment(db_eq)
             full_features = self.time_ai._extract_features(user, ai_eq)
             
-        # [Update] time_ai._extract_features가 14차원(User 12 + Equip 2)을 반환하므로
-        # User Feature(0~6, 9~13)만 추출하여 12차원으로 구성
-        # Indices: 0-6(Raw User), 7-8(Equip), 9-13(Derived User)
-        user_features = torch.cat((full_features[:7], full_features[9:]))
+        # [Update] time_ai._extract_features가 13차원(User 12 + Equip 1)을 반환하므로
+        # User Feature(0~6, 8~12)만 추출하여 12차원으로 구성
+        # Indices: 0-6(Raw User), 7(Equip), 8-12(Derived User)
+        # [Fix] Index 8(x1)도 User Feature이므로 포함해야 함 (기존 9: 에서 8: 로 수정)
+        user_features = torch.cat((full_features[:7], full_features[8:]))
         return user_features
 
     def _get_equip_tensor(self, equipment):

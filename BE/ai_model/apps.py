@@ -35,7 +35,7 @@ class AiModelConfig(AppConfig):
         # DB에서 최신 기구 목록 가져오기
         try:
             db_equipments = list(Equipment.objects.all())
-            self.routine_ai_engine = RoutineAIEngine(db_equipments)
+            self.routine_ai_engine = RoutineAIEngine(db_equipments, time_ai_engine=self.time_ai_engine)
             self.routine_ai_engine.load_checkpoint("routine_ai_checkpoint.pth")
             print(f"✅ [AI System] 준비 완료! (기구 {len(db_equipments)}개 로드됨)")
         except Exception as e:

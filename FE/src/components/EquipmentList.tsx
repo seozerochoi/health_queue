@@ -220,10 +220,54 @@ export function EquipmentList({
   const [localError, setLocalError] = useState<string | null>(null);
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
+  // [FIX] AI 추천 시간 별도 관리
+  const [aiTimes, setAiTimes] = useState<Record<string, number>>({});
+
   // App에서 전달받은 데이터가 있으면 사용, 없으면 로컬 상태 사용
-  const equipment = equipmentFromApp ?? localEquipment;
+  const rawEquipment = equipmentFromApp ?? localEquipment;
+
+  // AI 시간 병합
+  const equipment = useMemo(() => {
+    return rawEquipment.map((eq) => {
+      const aiTime = aiTimes[eq.id];
+      return aiTime !== undefined ? { ...eq, allocatedTime: aiTime } : eq;
+    });
+  }, [rawEquipment, aiTimes]);
+
   const loading = loadingFromApp ?? localLoading;
   const error = errorFromApp ?? localError;
+
+  // AI 시간 가져오기 (항상 실행)
+  useEffect(() => {
+    const fetchAiTimes = async () => {
+      const token = localStorage.getItem("access_token");
+      if (!token) return;
+
+      const base = (() => {
+        try {
+          const vite = (import.meta as any)?.env?.VITE_API_BASE;
+          if (vite) return vite;
+        } catch (e) {}
+        return "https://43.201.88.27";
+      })();
+
+      try {
+        const res = await fetch(`${base}/api/ai/times/`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.times) {
+            console.log("🤖 [EquipmentList] AI Times Fetched:", data.times);
+            setAiTimes(data.times);
+          }
+        }
+      } catch (e) {
+        console.warn("AI times fetch failed", e);
+      }
+    };
+    fetchAiTimes();
+  }, []);
 
   // 디버깅: gymName 확인
   // console.log("EquipmentList gymName:", gymName);

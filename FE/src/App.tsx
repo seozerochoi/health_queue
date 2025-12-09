@@ -1413,7 +1413,7 @@ export default function App() {
           ? "waiting"
           : "available",
       image: imageUrl,
-      allocatedTime: 30,
+      allocatedTime: 15, // 기본값 15분 (AI 로딩 전)
       waitingCount: eq.waiting_count ?? 0,
       currentUser: eq.current_user ?? undefined,
       timeRemaining: eq.time_remaining ?? undefined,

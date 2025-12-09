@@ -41,7 +41,7 @@ class BaseAIView(APIView):
 
                 if routine_engine is None:
                     db_equipments = list(Equipment.objects.all())
-                    routine_engine = RoutineAIEngine(db_equipments)
+                    routine_engine = RoutineAIEngine(db_equipments, time_ai_engine=time_engine)
                     try:
                         routine_engine.load_checkpoint("routine_ai_checkpoint.pth")
                     except Exception:
@@ -137,7 +137,12 @@ class RoutineGenerateView(BaseAIView):
         # 3. 현재 헬스장 기구 점유 상태 가져오기 (실시간성)
         # Equipment 모델에는 is_occupied 필드가 없고 status/operational_state로 표현됩니다.
         # 점유로 간주: status가 IN_USE 또는 WAITING이거나, 운영 상태가 정상(NORMAL)이 아닌 경우.
-        all_eq = Equipment.objects.all()
+        all_eq = list(Equipment.objects.all())
+        
+        # [Fix] AI 엔진의 기구 리스트를 최신 DB 상태로 동기화
+        # (서버 실행 중 기구 정보가 변경되었을 수 있으므로 매 요청마다 갱신)
+        routine_engine.update_equipments_list(all_eq)
+
         def is_occupied(eq):
             try:
                 status_val = getattr(eq, 'status', 'AVAILABLE') or 'AVAILABLE'
@@ -306,3 +311,41 @@ class FeedbackView(BaseAIView):
             logging.exception(f"FeedbackView error: {e}")
             # 500 대신 200으로 반환하여 프론트엔드 오류 방지
             return Response({"msg": "피드백 수신 완료 (학습 중 오류 발생)", "error": str(e)}, status=status.HTTP_200_OK)
+
+# =========================================================
+# 4. 전체 기구 이용 시간 예측 API (목록 조회용)
+# URL: GET /api/ai/times/
+# =========================================================
+class AllTimePredictionView(BaseAIView):
+    def get(self, request):
+        time_engine, _ = self.get_ai_engines()
+        
+        # 엔진이 없거나 유저 프로필이 없으면 빈 딕셔너리 반환 (프론트엔드 기본값 사용)
+        if time_engine is None:
+            return Response({"times": {}})
+            
+        ai_user = self.convert_to_ai_user(request.user)
+        if not ai_user:
+            return Response({"times": {}})
+
+        all_eq = Equipment.objects.all()
+        times = {}
+        
+        for db_equip in all_eq:
+            try:
+                # DB 기구 -> AI 기구 객체 변환
+                ai_equip = AIEquipment(
+                    equip_id=db_equip.id,
+                    name=db_equip.name,
+                    main_part=0 if db_equip.body_part == 'UPPER' else 1,
+                    sub_part=db_equip.subcategory or "General",
+                    equip_type=db_equip.type
+                )
+                
+                # 예측 실행
+                pred_time = time_engine.predict_time(ai_user, ai_equip)
+                times[db_equip.id] = round(pred_time, 1)
+            except Exception:
+                times[db_equip.id] = 15.0 # 개별 실패 시 기본값
+                
+        return Response({"times": times})
