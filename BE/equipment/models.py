@@ -66,8 +66,13 @@ class Equipment(models.Model):
         ('LEG_PRESS_MAIN', '하체 프레스/스쿼트'),
         ('LEG_EXTENSION', '다리 익스텐션'),
         ('LEG_CURL', '다리 컬'),
+        ('HIP_ADDUCTOR', '힙 어브덕션/어덕션'),
+        ('CALF_RAISE', '카프 레이즈'),
         ('SHOULDER_PRESS', '어깨 프레스'),
         ('SHOULDER_SIDE', '어깨 사이드'),
+        ('ARM_CURL', '이두 컬'),
+        ('ARM_EXTENSION', '삼두 익스텐션'),
+        ('ABS_MAIN', '복근 메인'),
     ]
     subcategory = models.CharField(
         max_length=30,
@@ -93,12 +98,14 @@ class Equipment(models.Model):
         'UPPER': {
             'CHEST_PRESS_MAIN', 'CHEST_PRESS_UPPER', 'CHEST_FLY',
             'BACK_PULL_VERTICAL', 'BACK_ROW_HORIZONTAL',
-            'SHOULDER_PRESS', 'SHOULDER_SIDE'
+            'SHOULDER_PRESS', 'SHOULDER_SIDE',
+            'ARM_CURL', 'ARM_EXTENSION'
         },
         'LOWER': {
-            'LEG_PRESS_MAIN', 'LEG_EXTENSION', 'LEG_CURL'
+            'LEG_PRESS_MAIN', 'LEG_EXTENSION', 'LEG_CURL',
+            'HIP_ADDUCTOR', 'CALF_RAISE'
         },
-        'CORE': set(),
+        'CORE': {'ABS_MAIN'},
         'CARDIO': set(),
         'ETC': set(),
     }
