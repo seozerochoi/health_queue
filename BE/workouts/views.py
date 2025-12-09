@@ -717,7 +717,8 @@ class UserActivityLogView(APIView):
         activity_dates = set()
         
         for session in sessions:
-            session_date = session.start_time.astimezone(timezone.utc).date()
+            # Django timezone-aware datetime을 현지 시간으로 변환
+            session_date = session.start_time.date()
             activity_dates.add(str(session_date))
             
             if str(session_date) not in activity_dict:

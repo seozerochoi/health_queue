@@ -170,6 +170,11 @@ export function MyPage({
         return;
       }
       const data = await res.json();
+      // 메시지를 첫 문장만 추출하여 한 줄로 표시
+      if (data.message) {
+        const firstSentence = data.message.split(/[.!?]/)[0];
+        data.message = firstSentence + (firstSentence ? '.' : '');
+      }
       setMotivation(data);
     } catch (e) {
       console.error("Failed to load motivation:", e);
@@ -191,6 +196,7 @@ export function MyPage({
         return;
       }
       const data = await res.json();
+      console.log("Activity log data:", data);
       setActivityLog(data.activity || {});
     } catch (e) {
       console.error("Failed to load activity log:", e);
@@ -669,21 +675,21 @@ export function MyPage({
         {/* AI 트레이너 응원 메시지 */}
         {motivation && motivation.message && (
           <Card className="bg-gradient-to-r from-blue-900/40 to-purple-900/40 border-blue-700/50">
-            <CardContent className="p-6">
-              <div className="space-y-3">
+            <CardContent className="p-4">
+              <div className="space-y-2">
                 <div className="flex items-start gap-3">
-                  <div className="text-2xl">💪</div>
-                  <div className="flex-1">
-                    <p className="text-foreground font-medium text-lg">
+                  <div className="text-2xl flex-shrink-0">💪</div>
+                  <div className="flex-1 min-h-0">
+                    <p className="text-foreground font-medium text-sm line-clamp-2">
                       {motivation.message}
                     </p>
                   </div>
                 </div>
                 {motivation.analysis && (
-                  <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-muted-foreground">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-muted-foreground">
                     {motivation.analysis.weight_change && (
                       <div className="bg-black/20 p-2 rounded">
-                        <div className="font-semibold">체중</div>
+                        <div className="font-semibold text-xs">체중</div>
                         <div className={motivation.analysis.weight_change.change < 0 ? "text-green-400" : "text-orange-400"}>
                           {motivation.analysis.weight_change.change > 0 ? "+" : ""}{motivation.analysis.weight_change.change}kg
                         </div>
@@ -691,7 +697,7 @@ export function MyPage({
                     )}
                     {motivation.analysis.muscle_change && (
                       <div className="bg-black/20 p-2 rounded">
-                        <div className="font-semibold">근육량</div>
+                        <div className="font-semibold text-xs">근육량</div>
                         <div className={motivation.analysis.muscle_change.change > 0 ? "text-green-400" : "text-orange-400"}>
                           {motivation.analysis.muscle_change.change > 0 ? "+" : ""}{motivation.analysis.muscle_change.change}kg
                         </div>
@@ -699,7 +705,7 @@ export function MyPage({
                     )}
                     {motivation.analysis.fat_change && (
                       <div className="bg-black/20 p-2 rounded">
-                        <div className="font-semibold">체지방</div>
+                        <div className="font-semibold text-xs">체지방</div>
                         <div className={motivation.analysis.fat_change.change < 0 ? "text-green-400" : "text-orange-400"}>
                           {motivation.analysis.fat_change.change > 0 ? "+" : ""}{motivation.analysis.fat_change.change}kg
                         </div>
@@ -707,7 +713,7 @@ export function MyPage({
                     )}
                     {motivation.analysis.fat_percent_change && (
                       <div className="bg-black/20 p-2 rounded">
-                        <div className="font-semibold">체지방률</div>
+                        <div className="font-semibold text-xs">체지방률</div>
                         <div className={motivation.analysis.fat_percent_change.change < 0 ? "text-green-400" : "text-orange-400"}>
                           {motivation.analysis.fat_percent_change.change > 0 ? "+" : ""}{motivation.analysis.fat_percent_change.change}%
                         </div>
@@ -1532,24 +1538,28 @@ export function MyPage({
               ) : (
                 <div className="space-y-6">
                   {/* 활동 강도 범례 */}
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-muted-foreground">활동 강도:</span>
+                  <div className="flex items-center gap-2 text-xs mb-4">
+                    <span className="text-muted-foreground font-semibold">운동 시간:</span>
                     <div className="flex gap-2">
                       <div className="flex items-center gap-1">
-                        <div className="w-3 h-3 bg-gray-700 rounded"></div>
-                        <span className="text-muted-foreground">0</span>
+                        <div className="w-4 h-4 bg-gray-700 rounded"></div>
+                        <span className="text-muted-foreground text-xs">0분</span>
                       </div>
                       <div className="flex items-center gap-1">
-                        <div className="w-3 h-3 bg-blue-900 rounded"></div>
-                        <span className="text-muted-foreground">약함</span>
+                        <div className="w-4 h-4 rounded border border-blue-300" style={{backgroundColor: '#caf0f8'}}></div>
+                        <span className="text-muted-foreground text-xs">1-30분</span>
                       </div>
                       <div className="flex items-center gap-1">
-                        <div className="w-3 h-3 bg-blue-600 rounded"></div>
-                        <span className="text-muted-foreground">보통</span>
+                        <div className="w-4 h-4 bg-blue-400 rounded"></div>
+                        <span className="text-muted-foreground text-xs">30분-1시간</span>
                       </div>
                       <div className="flex items-center gap-1">
-                        <div className="w-3 h-3 bg-blue-400 rounded"></div>
-                        <span className="text-muted-foreground">강함</span>
+                        <div className="w-4 h-4 bg-blue-600 rounded"></div>
+                        <span className="text-muted-foreground text-xs">1-2시간</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-4 h-4 bg-blue-900 rounded"></div>
+                        <span className="text-muted-foreground text-xs">2시간 이상</span>
                       </div>
                     </div>
                   </div>
@@ -1594,30 +1604,46 @@ export function MyPage({
                       for (let day = 1; day <= endDate.getDate(); day++) {
                         const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
                         const activity = activityLog[dateStr];
-                        const intensity = activity
-                          ? Math.min(3, Math.ceil((activity.total_sessions || 0) / 2))
-                          : 0;
+                        const totalMinutes = activity?.total_minutes || 0;
                         
-                        const bgColor =
-                          intensity === 0
-                            ? "bg-gray-700"
-                            : intensity === 1
-                            ? "bg-blue-900"
-                            : intensity === 2
-                            ? "bg-blue-600"
-                            : "bg-blue-400";
+                        // 운동 시간에 따른 색상 결정
+                        let bgColor = "bg-gray-700"; // 0분
+                        let bgStyle = {};
+                        let textColor = "text-gray-600";
+                        let tooltip = "0분";
+                        
+                        if (totalMinutes > 0 && totalMinutes < 30) {
+                          // 1-30분: 하늘색 (가벼운 파랑, 테두리)
+                          bgColor = "border border-blue-300";
+                          bgStyle = {backgroundColor: '#caf0f8'};
+                          textColor = "text-blue-300";
+                          tooltip = `${Math.round(totalMinutes)}분`;
+                        } else if (totalMinutes >= 30 && totalMinutes < 60) {
+                          // 30분-1시간: 밝은 파랑
+                          bgColor = "bg-blue-400";
+                          textColor = "text-white";
+                          tooltip = `${Math.round(totalMinutes)}분`;
+                        } else if (totalMinutes >= 60 && totalMinutes < 120) {
+                          // 1-2시간: 중간 파랑
+                          bgColor = "bg-blue-600";
+                          textColor = "text-white";
+                          tooltip = `${Math.round(totalMinutes)}분`;
+                        } else if (totalMinutes >= 120) {
+                          // 2시간 이상: 진파랑
+                          bgColor = "bg-blue-900";
+                          textColor = "text-white";
+                          tooltip = `${Math.round(totalMinutes)}분`;
+                        }
                         
                         cells.push(
                           <button
                             key={dateStr}
                             onClick={() => setSelectedActivityDate(dateStr)}
-                            className={`aspect-square rounded text-xs font-semibold transition-opacity ${
-                              activity 
-                                ? `${bgColor} text-white hover:opacity-80` 
-                                : "bg-gray-800 text-gray-600 hover:opacity-60"
-                            } ${
-                              selectedActivityDate === dateStr ? "ring-2 ring-blue-500" : ""
+                            title={tooltip}
+                            className={`aspect-square rounded text-xs font-semibold transition-all hover:scale-110 ${bgColor} ${activity ? textColor : "text-gray-600"} ${
+                              selectedActivityDate === dateStr ? "ring-2 ring-blue-400" : ""
                             }`}
+                            style={bgStyle}
                           >
                             {day}
                           </button>
