@@ -364,7 +364,7 @@ export function EquipmentList({
         type: (eq.type || "cardio").toLowerCase(),
         status,
         image: imageUrl,
-        allocatedTime: eq.base_session_time_minutes || eq.allocatedTime || 30,
+        allocatedTime: eq.allocatedTime || 30,
         waitingCount:
           eq.waiting_count ?? eq.waitingCount ?? eq.queue_length ?? undefined,
         currentUser: eq.current_user ?? eq.currentUser ?? undefined,
@@ -781,7 +781,7 @@ export function EquipmentList({
                 ? "waiting"
                 : "available",
             image: imageUrl,
-            allocatedTime: eq.base_session_time_minutes || 30,
+            allocatedTime: 30,
             waitingCount: eq.waiting_count ?? 0,
             currentUser: eq.current_user ?? undefined,
             timeRemaining: eq.time_remaining ?? undefined,
