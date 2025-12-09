@@ -1,7 +1,7 @@
 
 import logging
 from django.apps import apps
-from .time_ai import AIEquipment
+from .time_ai import Equipment as AIEquipment
 
 logger = logging.getLogger(__name__)
 
