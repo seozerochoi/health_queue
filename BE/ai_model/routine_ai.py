@@ -289,7 +289,8 @@ class RoutineAIEngine:
                 
                 # [Exploration] 점수에 약간의 무작위성 추가 (다양성 확보)
                 # 학습 초기나 점수가 비슷할 때 매번 다른 결과가 나오도록 유도
-                score += random.uniform(-0.05, 0.05)
+                # [Update] 재생성 시 변화를 주기 위해 노이즈 범위 확대 (-0.05~0.05 -> -0.1~0.1)
+                score += random.uniform(-0.1, 0.1)
 
                 # [Advanced Logic] 사용자 수준별 맞춤형 가산점 로직 (Rule-based Boosting)
                 eq_type = str(getattr(eq, 'type', 'MACHINE')).upper()
@@ -587,9 +588,10 @@ class RoutineAIEngine:
         target_val = 0.5 # Default neutral
         if star_rating >= 4.5: target_val = 1.0   # 매우 만족
         elif star_rating >= 4.0: target_val = 0.8 # 만족
+        elif star_rating >= 3.0: target_val = 0.5 # 보통 (학습 데이터로 활용)
         elif star_rating <= 1.0: target_val = 0.0 # 매우 불만족
         elif star_rating <= 2.0: target_val = 0.2 # 불만족
-        else: return # 3점대(보통)는 학습 데이터로 쓰기 애매하므로 Skip
+        else: target_val = 0.5 # 그 외 (안전장치)
         
         self.model.train()
         total_loss = 0

@@ -190,6 +190,12 @@ class TimePredictionView(BaseAIView):
         if time_engine is None:
             return Response({"error": "Time AI engine is not available on server. Check logs."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
+        # [Sync] 최신 학습 가중치 로드
+        try:
+            time_engine.load_checkpoint("time_ai_checkpoint.pth")
+        except Exception:
+            pass
+        
         equip_id = request.data.get('equipment_id')
         db_equip = get_object_or_404(Equipment, pk=equip_id)
 
@@ -281,7 +287,7 @@ class FeedbackView(BaseAIView):
                 target, loss = time_engine.update_with_feedback(ai_user, ai_eq, base_time, score)
                 
                 # (옵션) 체크포인트 저장
-                time_engine.save_checkpoint("time_ai.pth")
+                time_engine.save_checkpoint("time_ai_checkpoint.pth")
                 
                 return Response({"msg": "시간 AI 학습 완료", "loss": loss})
 
@@ -324,6 +330,12 @@ class AllTimePredictionView(BaseAIView):
         # 엔진이 없거나 유저 프로필이 없으면 빈 딕셔너리 반환 (프론트엔드 기본값 사용)
         if time_engine is None:
             return Response({"times": {}})
+
+        # [Sync] 최신 학습 가중치 로드
+        try:
+            time_engine.load_checkpoint("time_ai_checkpoint.pth")
+        except Exception:
+            pass
             
         ai_user = self.convert_to_ai_user(request.user)
         if not ai_user:
