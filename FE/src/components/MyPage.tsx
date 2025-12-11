@@ -1109,11 +1109,10 @@ export function MyPage({
               </Select>
             </div>
 
-            {/* 인바디 사진 촬영 CTA */}
+            {/* 인바디 사진 업로드 CTA */}
             <input
               type="file"
               accept="image/*"
-              capture="environment"
               ref={fileInputRef}
               onChange={onSelectFile}
               style={{ display: "none" }}
@@ -1128,7 +1127,9 @@ export function MyPage({
               <div className="h-full w-full flex items-center justify-center">
                 <div className="flex items-center gap-3 text-gray-300">
                   <Camera className="h-6 w-6" />
-                  <span className="text-lg font-medium">인바디 사진 촬영</span>
+                  <span className="text-lg font-medium">
+                    인바디 사진 업로드
+                  </span>
                 </div>
               </div>
             </button>
