@@ -1006,9 +1006,13 @@ export function AdminDashboard({
           <Card
             className="border-gray-600 bg-card cursor-pointer hover:bg-gray-800/60 transition-colors"
             onClick={() => {
-              setShowUsersPanel((v) => !v);
+              // 토글 방식: 현재 이용자 패널을 열면 이용률 패널 닫기
               if (!showUsersPanel) {
+                setShowUsersPanel(true);
+                setShowUsagePanel(false);
                 fetchAllUsers();
+              } else {
+                setShowUsersPanel(false);
               }
             }}
           >
@@ -1029,10 +1033,13 @@ export function AdminDashboard({
             <CardContent
               className="p-4 cursor-pointer hover:bg-gray-800/60 transition-colors"
               onClick={() => {
-                setShowUsagePanel((v) => !v);
-                // 패널을 열 때만 API 호출
+                // 토글 방식: 이용률 패널을 열면 현재 이용자 패널 닫기
                 if (!showUsagePanel) {
+                  setShowUsagePanel(true);
+                  setShowUsersPanel(false);
                   fetchHourlyUtilization();
+                } else {
+                  setShowUsagePanel(false);
                 }
               }}
             >

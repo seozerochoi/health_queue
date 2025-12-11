@@ -91,17 +91,19 @@ export function MyPage({
 
   // 폼 상태
   const [exerciseGoal, setExerciseGoal] = useState<string>("");
-  
+
   // AI 트레이너 응원 메시지
   const [motivation, setMotivation] = useState<AIMotivation | null>(null);
   const [motivationLoading, setMotivationLoading] = useState(false);
-  
+
   // 운동 로그 달력
   const [activityLog, setActivityLog] = useState<ActivityLogData>({});
   const [activityLoading, setActivityLoading] = useState(false);
-  const [selectedActivityDate, setSelectedActivityDate] = useState<string | null>(null);
+  const [selectedActivityDate, setSelectedActivityDate] = useState<
+    string | null
+  >(null);
   const [showActivityModal, setShowActivityModal] = useState(false);
-  
+
   // 신체 데이터 편집
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileData, setProfileData] = useState<any>(null);
@@ -173,7 +175,7 @@ export function MyPage({
       // 메시지를 첫 문장만 추출하여 한 줄로 표시
       if (data.message) {
         const firstSentence = data.message.split(/[.!?]/)[0];
-        data.message = firstSentence + (firstSentence ? '.' : '');
+        data.message = firstSentence + (firstSentence ? "." : "");
       }
       setMotivation(data);
     } catch (e) {
@@ -495,6 +497,33 @@ export function MyPage({
         return;
       }
       alert("분석 결과가 프로필에 저장되었습니다.");
+
+      // 저장 후 프로필 다시 로드하여 UI 업데이트
+      try {
+        const profileRes = await fetchWithAuth(
+          "https://43.201.88.27/api/users/profile/",
+          { method: "GET" }
+        );
+        if (profileRes.ok) {
+          const data = await profileRes.json();
+          setExerciseGoal(data.exercise_goal || "");
+          setProfileData(data);
+          console.log("✅ 프로필 데이터 새로고침 완료:", data);
+
+          // 인바디 분석 결과 UI 초기화 (나의 신체 프로필 카드 표시)
+          setParsedResult(null);
+          setPreviewSrc(null);
+          setImageSrc(null);
+          setShowCrop(false);
+          setLastBlob(null);
+          setServerImageUrl(null);
+          setRecordMeta(null);
+          setAnalyzeError(null);
+          setRawLines([]);
+        }
+      } catch (e) {
+        console.warn("프로필 새로고침 실패:", e);
+      }
     } finally {
       setSaving(false);
     }
@@ -522,7 +551,7 @@ export function MyPage({
     loadMotivation();
     // 모달이 열릴 때만 로드하도록 변경
   }, []);
-  
+
   const loadLatestInbody = async () => {
     try {
       const res = await fetchWithAuth(
@@ -589,6 +618,22 @@ export function MyPage({
         return;
       }
       alert("분석 결과가 프로필에 저장되었습니다.");
+
+      // 저장 후 프로필 다시 로드하여 UI 업데이트
+      try {
+        const profileRes = await fetchWithAuth(
+          "https://43.201.88.27/api/users/profile/",
+          { method: "GET" }
+        );
+        if (profileRes.ok) {
+          const data = await profileRes.json();
+          setExerciseGoal(data.exercise_goal || "");
+          setProfileData(data);
+          console.log("✅ 프로필 데이터 새로고침 완료:", data);
+        }
+      } catch (e) {
+        console.warn("프로필 새로고침 실패:", e);
+      }
     } finally {
       setSaving(false);
     }
@@ -690,32 +735,66 @@ export function MyPage({
                     {motivation.analysis.weight_change && (
                       <div className="bg-black/20 p-2 rounded">
                         <div className="font-semibold text-xs">체중</div>
-                        <div className={motivation.analysis.weight_change.change < 0 ? "text-green-400" : "text-orange-400"}>
-                          {motivation.analysis.weight_change.change > 0 ? "+" : ""}{motivation.analysis.weight_change.change}kg
+                        <div
+                          className={
+                            motivation.analysis.weight_change.change < 0
+                              ? "text-green-400"
+                              : "text-orange-400"
+                          }
+                        >
+                          {motivation.analysis.weight_change.change > 0
+                            ? "+"
+                            : ""}
+                          {motivation.analysis.weight_change.change}kg
                         </div>
                       </div>
                     )}
                     {motivation.analysis.muscle_change && (
                       <div className="bg-black/20 p-2 rounded">
                         <div className="font-semibold text-xs">근육량</div>
-                        <div className={motivation.analysis.muscle_change.change > 0 ? "text-green-400" : "text-orange-400"}>
-                          {motivation.analysis.muscle_change.change > 0 ? "+" : ""}{motivation.analysis.muscle_change.change}kg
+                        <div
+                          className={
+                            motivation.analysis.muscle_change.change > 0
+                              ? "text-green-400"
+                              : "text-orange-400"
+                          }
+                        >
+                          {motivation.analysis.muscle_change.change > 0
+                            ? "+"
+                            : ""}
+                          {motivation.analysis.muscle_change.change}kg
                         </div>
                       </div>
                     )}
                     {motivation.analysis.fat_change && (
                       <div className="bg-black/20 p-2 rounded">
                         <div className="font-semibold text-xs">체지방</div>
-                        <div className={motivation.analysis.fat_change.change < 0 ? "text-green-400" : "text-orange-400"}>
-                          {motivation.analysis.fat_change.change > 0 ? "+" : ""}{motivation.analysis.fat_change.change}kg
+                        <div
+                          className={
+                            motivation.analysis.fat_change.change < 0
+                              ? "text-green-400"
+                              : "text-orange-400"
+                          }
+                        >
+                          {motivation.analysis.fat_change.change > 0 ? "+" : ""}
+                          {motivation.analysis.fat_change.change}kg
                         </div>
                       </div>
                     )}
                     {motivation.analysis.fat_percent_change && (
                       <div className="bg-black/20 p-2 rounded">
                         <div className="font-semibold text-xs">체지방률</div>
-                        <div className={motivation.analysis.fat_percent_change.change < 0 ? "text-green-400" : "text-orange-400"}>
-                          {motivation.analysis.fat_percent_change.change > 0 ? "+" : ""}{motivation.analysis.fat_percent_change.change}%
+                        <div
+                          className={
+                            motivation.analysis.fat_percent_change.change < 0
+                              ? "text-green-400"
+                              : "text-orange-400"
+                          }
+                        >
+                          {motivation.analysis.fat_percent_change.change > 0
+                            ? "+"
+                            : ""}
+                          {motivation.analysis.fat_percent_change.change}%
                         </div>
                       </div>
                     )}
@@ -828,8 +907,10 @@ export function MyPage({
             {/* 신체 데이터 수정 모드 */}
             {isEditingProfile && profileData && (
               <div className="space-y-4">
-                <Label className="text-foreground font-semibold">신체 데이터 수정</Label>
-                
+                <Label className="text-foreground font-semibold">
+                  신체 데이터 수정
+                </Label>
+
                 <div className="flex items-center gap-3">
                   <label className="text-sm text-foreground w-24">성별</label>
                   <Select
@@ -852,7 +933,9 @@ export function MyPage({
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <label className="text-sm text-foreground w-24">나이(세)</label>
+                  <label className="text-sm text-foreground w-24">
+                    나이(세)
+                  </label>
                   <Input
                     type="number"
                     value={profileData?.age ?? ""}
@@ -875,7 +958,9 @@ export function MyPage({
                     onChange={(e) => {
                       setProfileData({
                         ...profileData,
-                        height_cm: e.target.value ? Number(e.target.value) : null,
+                        height_cm: e.target.value
+                          ? Number(e.target.value)
+                          : null,
                       });
                     }}
                     className="flex-1"
@@ -883,7 +968,9 @@ export function MyPage({
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <label className="text-sm text-foreground w-24">체중(kg)</label>
+                  <label className="text-sm text-foreground w-24">
+                    체중(kg)
+                  </label>
                   <Input
                     type="number"
                     step="0.1"
@@ -891,7 +978,9 @@ export function MyPage({
                     onChange={(e) => {
                       setProfileData({
                         ...profileData,
-                        weight_kg: e.target.value ? Number(e.target.value) : null,
+                        weight_kg: e.target.value
+                          ? Number(e.target.value)
+                          : null,
                       });
                     }}
                     className="flex-1"
@@ -899,7 +988,9 @@ export function MyPage({
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <label className="text-sm text-foreground w-24">InBody 점수</label>
+                  <label className="text-sm text-foreground w-24">
+                    InBody 점수
+                  </label>
                   <Input
                     type="number"
                     step="0.1"
@@ -907,7 +998,9 @@ export function MyPage({
                     onChange={(e) => {
                       setProfileData({
                         ...profileData,
-                        inbody_score: e.target.value ? Number(e.target.value) : null,
+                        inbody_score: e.target.value
+                          ? Number(e.target.value)
+                          : null,
                       });
                     }}
                     className="flex-1"
@@ -931,7 +1024,9 @@ export function MyPage({
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <label className="text-sm text-foreground w-24">골격근량(kg)</label>
+                  <label className="text-sm text-foreground w-24">
+                    골격근량(kg)
+                  </label>
                   <Input
                     type="number"
                     step="0.1"
@@ -939,7 +1034,9 @@ export function MyPage({
                     onChange={(e) => {
                       setProfileData({
                         ...profileData,
-                        skeletal_muscle_mass_kg: e.target.value ? Number(e.target.value) : null,
+                        skeletal_muscle_mass_kg: e.target.value
+                          ? Number(e.target.value)
+                          : null,
                       });
                     }}
                     className="flex-1"
@@ -947,7 +1044,9 @@ export function MyPage({
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <label className="text-sm text-foreground w-24">체지방량(kg)</label>
+                  <label className="text-sm text-foreground w-24">
+                    체지방량(kg)
+                  </label>
                   <Input
                     type="number"
                     step="0.1"
@@ -955,7 +1054,9 @@ export function MyPage({
                     onChange={(e) => {
                       setProfileData({
                         ...profileData,
-                        body_fat_mass_kg: e.target.value ? Number(e.target.value) : null,
+                        body_fat_mass_kg: e.target.value
+                          ? Number(e.target.value)
+                          : null,
                       });
                     }}
                     className="flex-1"
@@ -963,7 +1064,9 @@ export function MyPage({
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <label className="text-sm text-foreground w-24">체지방률(%)</label>
+                  <label className="text-sm text-foreground w-24">
+                    체지방률(%)
+                  </label>
                   <Input
                     type="number"
                     step="0.1"
@@ -971,7 +1074,9 @@ export function MyPage({
                     onChange={(e) => {
                       setProfileData({
                         ...profileData,
-                        body_fat_percentage: e.target.value ? Number(e.target.value) : null,
+                        body_fat_percentage: e.target.value
+                          ? Number(e.target.value)
+                          : null,
                       });
                     }}
                     className="flex-1"
@@ -985,10 +1090,7 @@ export function MyPage({
                   >
                     취소
                   </Button>
-                  <Button
-                    onClick={saveProfileData}
-                    disabled={saving}
-                  >
+                  <Button onClick={saveProfileData} disabled={saving}>
                     {saving ? "저장 중..." : "저장"}
                   </Button>
                 </div>
@@ -1491,103 +1593,160 @@ export function MyPage({
                 <div className="space-y-6">
                   {/* 활동 강도 범례 */}
                   <div className="flex items-center gap-2 text-xs mb-4">
-                    <span className="text-muted-foreground font-semibold">운동 시간:</span>
+                    <span className="text-muted-foreground font-semibold">
+                      운동 시간:
+                    </span>
                     <div className="flex gap-2">
                       <div className="flex items-center gap-1">
                         <div className="w-4 h-4 bg-gray-700 rounded"></div>
-                        <span className="text-muted-foreground text-xs">0분</span>
+                        <span className="text-muted-foreground text-xs">
+                          0분
+                        </span>
                       </div>
                       <div className="flex items-center gap-1">
-                        <div className="w-4 h-4 rounded border border-blue-300" style={{backgroundColor: '#caf0f8'}}></div>
-                        <span className="text-muted-foreground text-xs">1-30분</span>
+                        <div
+                          className="w-4 h-4 rounded border border-blue-300"
+                          style={{ backgroundColor: "#caf0f8" }}
+                        ></div>
+                        <span className="text-muted-foreground text-xs">
+                          1-30분
+                        </span>
                       </div>
                       <div className="flex items-center gap-1">
                         <div className="w-4 h-4 bg-blue-400 rounded"></div>
-                        <span className="text-muted-foreground text-xs">30분-1시간</span>
+                        <span className="text-muted-foreground text-xs">
+                          30분-1시간
+                        </span>
                       </div>
                       <div className="flex items-center gap-1">
                         <div className="w-4 h-4 bg-blue-600 rounded"></div>
-                        <span className="text-muted-foreground text-xs">1-2시간</span>
+                        <span className="text-muted-foreground text-xs">
+                          1-2시간
+                        </span>
                       </div>
                       <div className="flex items-center gap-1">
                         <div className="w-4 h-4 bg-blue-900 rounded"></div>
-                        <span className="text-muted-foreground text-xs">2시간 이상</span>
+                        <span className="text-muted-foreground text-xs">
+                          2시간 이상
+                        </span>
                       </div>
                     </div>
                   </div>
 
                   {/* 활동 날짜 그리드 */}
-                  <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div
+                    style={{
+                      width: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "4px",
+                    }}
+                  >
                     {/* 요일 헤더 - 1행 */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 40px)', gap: '4px', justifyContent: 'center' }}>
-                      {["일", "월", "화", "수", "목", "금", "토"].map((day, idx) => (
-                        <div
-                          key={day}
-                          style={{
-                            textAlign: 'center',
-                            fontSize: '12px',
-                            fontWeight: 'bold',
-                            height: '24px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: idx === 0 ? '#f87171' : idx === 6 ? '#60a5fa' : '#9ca3af'
-                          }}
-                        >
-                          {day}
-                        </div>
-                      ))}
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(7, 40px)",
+                        gap: "4px",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {["일", "월", "화", "수", "목", "금", "토"].map(
+                        (day, idx) => (
+                          <div
+                            key={day}
+                            style={{
+                              textAlign: "center",
+                              fontSize: "12px",
+                              fontWeight: "bold",
+                              height: "24px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color:
+                                idx === 0
+                                  ? "#f87171"
+                                  : idx === 6
+                                  ? "#60a5fa"
+                                  : "#9ca3af",
+                            }}
+                          >
+                            {day}
+                          </div>
+                        )
+                      )}
                     </div>
 
                     {/* 달력 날짜 그리드 - 2행부터 6행까지 */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 40px)', gap: '4px', justifyContent: 'center' }}>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(7, 40px)",
+                        gap: "4px",
+                        justifyContent: "center",
+                      }}
+                    >
                       {(() => {
                         // 현재 날짜 기준 (2025년 12월)
                         const now = new Date();
                         const year = now.getFullYear();
                         const month = now.getMonth(); // 0-11 (12월 = 11)
-                        
+
                         // 이번 달 1일이 무슨 요일인지 (0=일요일, 6=토요일)
                         const firstDay = new Date(year, month, 1).getDay();
-                        
+
                         // 이번 달 마지막 날짜
                         const lastDate = new Date(year, month + 1, 0).getDate();
-                        
+
                         const calendar = [];
-                        
+
                         // 6주 × 7일 = 42칸 생성
                         for (let i = 0; i < 42; i++) {
                           const dayNumber = i - firstDay + 1;
-                          
+
                           if (dayNumber < 1 || dayNumber > lastDate) {
                             // 빈 칸 (이전달/다음달)
                             calendar.push(
-                              <div key={`empty-${i}`} style={{ width: '40px', height: '40px' }}></div>
+                              <div
+                                key={`empty-${i}`}
+                                style={{ width: "40px", height: "40px" }}
+                              ></div>
                             );
                           } else {
                             // 실제 날짜 칸
-                            const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(dayNumber).padStart(2, "0")}`;
+                            const dateStr = `${year}-${String(
+                              month + 1
+                            ).padStart(2, "0")}-${String(dayNumber).padStart(
+                              2,
+                              "0"
+                            )}`;
                             const activity = activityLog[dateStr];
                             const totalMinutes = activity?.total_minutes || 0;
-                            
+
                             // 운동 시간에 따른 색상 결정
                             let bgColor = "#1f2937"; // gray-800
                             let textColor = "#6b7280"; // gray-500
-                            
+
                             if (totalMinutes > 0 && totalMinutes < 30) {
                               bgColor = "#bfdbfe"; // blue-200
                               textColor = "#111827"; // gray-900
-                            } else if (totalMinutes >= 30 && totalMinutes < 60) {
+                            } else if (
+                              totalMinutes >= 30 &&
+                              totalMinutes < 60
+                            ) {
                               bgColor = "#60a5fa"; // blue-400
                               textColor = "#ffffff";
-                            } else if (totalMinutes >= 60 && totalMinutes < 120) {
+                            } else if (
+                              totalMinutes >= 60 &&
+                              totalMinutes < 120
+                            ) {
                               bgColor = "#2563eb"; // blue-600
                               textColor = "#ffffff";
                             } else if (totalMinutes >= 120) {
                               bgColor = "#1e3a8a"; // blue-900
                               textColor = "#ffffff";
                             }
-                            
+
                             calendar.push(
                               <button
                                 key={dateStr}
@@ -1601,88 +1760,132 @@ export function MyPage({
                                   }
                                 }}
                                 style={{
-                                  width: '40px',
-                                  height: '40px',
-                                  borderRadius: '4px',
+                                  width: "40px",
+                                  height: "40px",
+                                  borderRadius: "4px",
                                   backgroundColor: bgColor,
                                   color: textColor,
-                                  fontSize: '12px',
-                                  fontWeight: '600',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  cursor: activity ? 'pointer' : 'default',
-                                  border: selectedActivityDate === dateStr ? '2px solid #facc15' : 'none',
-                                  transition: 'opacity 0.2s'
+                                  fontSize: "12px",
+                                  fontWeight: "600",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  cursor: activity ? "pointer" : "default",
+                                  border:
+                                    selectedActivityDate === dateStr
+                                      ? "2px solid #facc15"
+                                      : "none",
+                                  transition: "opacity 0.2s",
                                 }}
-                                onMouseEnter={(e) => activity && (e.currentTarget.style.opacity = '0.8')}
-                                onMouseLeave={(e) => activity && (e.currentTarget.style.opacity = '1')}
-                                title={activity ? `${dayNumber}일: ${Math.round(totalMinutes)}분 운동` : `${dayNumber}일`}
+                                onMouseEnter={(e) =>
+                                  activity &&
+                                  (e.currentTarget.style.opacity = "0.8")
+                                }
+                                onMouseLeave={(e) =>
+                                  activity &&
+                                  (e.currentTarget.style.opacity = "1")
+                                }
+                                title={
+                                  activity
+                                    ? `${dayNumber}일: ${Math.round(
+                                        totalMinutes
+                                      )}분 운동`
+                                    : `${dayNumber}일`
+                                }
                               >
                                 {dayNumber}
                               </button>
                             );
                           }
                         }
-                        
+
                         return calendar;
                       })()}
                     </div>
                   </div>
 
                   {/* 선택된 날짜의 상세 운동 기록 */}
-                  {selectedActivityDate && activityLog[selectedActivityDate] && (() => {
-                    const selectedLog = activityLog[selectedActivityDate];
-                    const allSessions: Array<{ equipmentName: string; session: any }> = [];
+                  {selectedActivityDate &&
+                    activityLog[selectedActivityDate] &&
+                    (() => {
+                      const selectedLog = activityLog[selectedActivityDate];
+                      const allSessions: Array<{
+                        equipmentName: string;
+                        session: any;
+                      }> = [];
 
-                    selectedLog.equipment.forEach((equip) => {
-                      equip.sessions.forEach((session) => {
-                        allSessions.push({ equipmentName: equip.name, session });
+                      selectedLog.equipment.forEach((equip) => {
+                        equip.sessions.forEach((session) => {
+                          allSessions.push({
+                            equipmentName: equip.name,
+                            session,
+                          });
+                        });
                       });
-                    });
 
-                    allSessions.sort(
-                      (a, b) =>
-                        new Date(a.session.start_time).getTime() - new Date(b.session.start_time).getTime()
-                    );
+                      allSessions.sort(
+                        (a, b) =>
+                          new Date(a.session.start_time).getTime() -
+                          new Date(b.session.start_time).getTime()
+                      );
 
-                    const needsScroll = allSessions.length >= 5;
+                      const needsScroll = allSessions.length >= 5;
 
-                    return (
-                      <div className="border-t border-gray-700 pt-2 space-y-2">
-                        <h3 className="text-sm font-semibold text-foreground">
-                          {selectedActivityDate} 운동 기록
-                        </h3>
-                        {/* 5개 이상일 때만 스크롤, 최대 높이 200px */}
-                        <div 
-                          className="pr-2"
-                          style={{
-                            maxHeight: needsScroll ? '200px' : 'none',
-                            overflowY: needsScroll ? 'auto' : 'visible',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '4px'
-                          }}
-                        >
-                          {allSessions.map((item, idx) => (
-                            <div key={idx} className="bg-gray-900/50 rounded px-2 py-1.5">
-                              <div className="text-[10px] font-semibold text-blue-400">
-                                {item.equipmentName}
-                              </div>
-                              <div className="text-[9px] text-muted-foreground ml-1 space-y-0.5">
-                                <div>
-                                  {new Date(item.session.start_time).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })} ~ {new Date(item.session.end_time).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })} ({Math.round(item.session.duration_minutes)}분)
+                      return (
+                        <div className="border-t border-gray-700 pt-2 space-y-2">
+                          <h3 className="text-sm font-semibold text-foreground">
+                            {selectedActivityDate} 운동 기록
+                          </h3>
+                          {/* 5개 이상일 때만 스크롤, 최대 높이 200px */}
+                          <div
+                            className="pr-2"
+                            style={{
+                              maxHeight: needsScroll ? "200px" : "none",
+                              overflowY: needsScroll ? "auto" : "visible",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "4px",
+                            }}
+                          >
+                            {allSessions.map((item, idx) => (
+                              <div
+                                key={idx}
+                                className="bg-gray-900/50 rounded px-2 py-1.5"
+                              >
+                                <div className="text-[10px] font-semibold text-blue-400">
+                                  {item.equipmentName}
+                                </div>
+                                <div className="text-[9px] text-muted-foreground ml-1 space-y-0.5">
+                                  <div>
+                                    {new Date(
+                                      item.session.start_time
+                                    ).toLocaleTimeString("ko-KR", {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                      hour12: false,
+                                    })}{" "}
+                                    ~{" "}
+                                    {new Date(
+                                      item.session.end_time
+                                    ).toLocaleTimeString("ko-KR", {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                      hour12: false,
+                                    })}{" "}
+                                    ({Math.round(item.session.duration_minutes)}
+                                    분)
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
+                          <div className="text-xs text-foreground font-semibold bg-blue-900/20 rounded px-2 py-1">
+                            총 {selectedLog.total_sessions}개 운동,{" "}
+                            {Math.round(selectedLog.total_minutes)}분
+                          </div>
                         </div>
-                        <div className="text-xs text-foreground font-semibold bg-blue-900/20 rounded px-2 py-1">
-                          총 {selectedLog.total_sessions}개 운동, {Math.round(selectedLog.total_minutes)}분
-                        </div>
-                      </div>
-                    );
-                  })()}
+                      );
+                    })()}
                 </div>
               )}
             </div>
