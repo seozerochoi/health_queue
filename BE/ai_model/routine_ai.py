@@ -366,7 +366,74 @@ class RoutineAIEngine:
         MIN_ITEMS = 3
         MAX_ITEMS = 8
         
+        # [Fix] 타겟 부위별 최소 1개 보장 (Quota System)
+        # 사용자가 선택한 부위(target_parts)가 골고루 포함되도록 강제
+        # 예: ['등', '가슴', '유산소'] -> 등 1개, 가슴 1개, 유산소 1개는 무조건 확보 시도
+        
+        # 1. 후보군을 부위별로 분류
+        candidates_by_part = {part: [] for part in target_parts}
+        
         for item in scored_candidates:
+            eq = item['equip']
+            # 이 기구가 어떤 타겟 부위에 해당하는지 확인
+            for part in target_parts:
+                if self._is_target_match(eq, [part]):
+                    candidates_by_part[part].append(item)
+                    # 한 기구가 여러 부위에 해당될 수 있으나, 여기서는 중복 허용하여 각 리스트에 넣음
+        
+        # 2. 각 부위별로 점수가 가장 높은 1개씩 우선 선발
+        priority_selection = []
+        priority_ids = set()
+        
+        for part in target_parts:
+            part_candidates = candidates_by_part.get(part, [])
+            if not part_candidates: continue
+            
+            # 이미 선발된 기구인지 확인하며 순회
+            for item in part_candidates:
+                eq = item['equip']
+                eq_id = getattr(eq, 'id', 0)
+                if eq_id not in priority_ids:
+                    priority_selection.append(item)
+                    priority_ids.add(eq_id)
+                    break # 부위당 1개만 우선 선발
+        
+        # 3. 우선 선발된 기구들을 final_selection에 추가 (비용/용량 체크)
+        for item in priority_selection:
+            candidate = item['equip']
+            equip_cost = get_equipment_cost(candidate)
+            
+            # 우선 선발은 용량을 조금 초과하더라도 필수 포함 시도
+            # 단, MAX_ITEMS는 지킴
+            if len(final_selection) >= MAX_ITEMS: break
+            
+            group_code = getattr(candidate, 'subcategory', '')
+            if not group_code: group_code = candidate.name
+            
+            # 점유 상태 확인
+            occ_key = getattr(candidate, 'equip_id', getattr(candidate, 'id', None))
+            is_occupied = current_occupancy.get(occ_key, False)
+            
+            if not is_occupied:
+                final_selection.append(candidate)
+                used_groups.add(group_code)
+                current_cost += equip_cost
+            elif availability_mode == 'AVAILABLE_ONLY':
+                substitute = self._find_substitute(group_code, current_occupancy, self.equipments)
+                if substitute:
+                    print(f"💡 [Smart AI] '{candidate.name}' 대기 중 -> '{substitute.name}' 대체 추천")
+                    final_selection.append(substitute)
+                    used_groups.add(group_code)
+                    current_cost += equip_cost
+
+        # 4. 나머지 용량을 점수 높은 순으로 채우기 (기존 로직)
+        for item in scored_candidates:
+            candidate = item['equip']
+            eq_id = getattr(candidate, 'id', 0)
+            
+            # 이미 우선 선발된 기구는 패스
+            if eq_id in priority_ids: continue
+
             # 용량 초과 체크 (단, 최소 개수는 보장)
             if current_cost >= total_capacity and len(final_selection) >= MIN_ITEMS:
                 break
@@ -374,7 +441,6 @@ class RoutineAIEngine:
             if len(final_selection) >= MAX_ITEMS:
                 break
                 
-            candidate = item['equip']
             equip_cost = get_equipment_cost(candidate)
             
             # 남은 용량이 기구 비용보다 현저히 적으면 스킵 (단, 아직 최소 개수 못 채웠으면 무시)
@@ -599,7 +665,7 @@ class RoutineAIEngine:
         user_tensor = self._get_user_tensor(user)
         
         # 1. 현재 루틴의 모든 기구에 대해 [집중 학습] 수행 (Oversampling Effect)
-        # 피드백을 즉시 반영하기 위해 동일 데이터를 5회 반복 학습
+        # 피드백을 즉시 반영하기 위해 동일 데이터를 10회 반복 학습 (기존 5회 -> 10회 강화)
         current_batch = []
         for eq in routine_list:
             eq_tensor = self._get_equip_tensor(eq)
@@ -610,8 +676,8 @@ class RoutineAIEngine:
             # 메모리 저장 (Experience Replay용)
             self.memory.append((input_vec.detach(), target))
 
-        # 집중 학습 (5 Epochs)
-        for _ in range(5):
+        # 집중 학습 (10 Epochs)
+        for _ in range(10):
             for input_vec, target in current_batch:
                 self.optimizer.zero_grad()
                 pred = self.model(input_vec)
