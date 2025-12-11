@@ -90,6 +90,7 @@ export function AdminDashboard({
   const [newEquipment, setNewEquipment] = useState({
     name: "",
     type: "",
+    body_part: "ETC",
     subcategory: "",
     difficulty: "MID",
   });
@@ -589,10 +590,21 @@ export function AdminDashboard({
     if (
       !newEquipment.name ||
       !newEquipment.type ||
-      !newEquipment.subcategory ||
+      !newEquipment.body_part ||
       !newEquipment.difficulty
     ) {
       alert("모든 필수 항목을 입력해주세요.");
+      return;
+    }
+
+    // body_part가 CORE가 아닌데 subcategory가 없으면 에러
+    if (
+      newEquipment.body_part !== "CORE" &&
+      newEquipment.body_part !== "CARDIO" &&
+      newEquipment.body_part !== "ETC" &&
+      !newEquipment.subcategory
+    ) {
+      alert("세부 카테고리를 선택해주세요.");
       return;
     }
 
@@ -612,7 +624,8 @@ export function AdminDashboard({
       const requestBody = {
         name: newEquipment.name,
         type: newEquipment.type,
-        subcategory: newEquipment.subcategory,
+        body_part: newEquipment.body_part,
+        subcategory: newEquipment.subcategory || undefined,
         difficulty: newEquipment.difficulty,
         status: "AVAILABLE",
         operational_state: "NORMAL",
@@ -646,6 +659,7 @@ export function AdminDashboard({
       setNewEquipment({
         name: "",
         type: "",
+        body_part: "ETC",
         subcategory: "",
         difficulty: "MID",
       });
@@ -1815,65 +1829,190 @@ export function AdminDashboard({
                 </Select>
               </div>
 
+              {/* 신체 부위 */}
+              <div className="space-y-2">
+                <Label htmlFor="equipment-body-part" className="text-gray-300">
+                  신체 부위 <span className="text-red-400">*</span>
+                </Label>
+                <Select
+                  value={newEquipment.body_part}
+                  onValueChange={(value) => {
+                    // 신체 부위 변경 시 로직
+                    if (value === "CORE") {
+                      // CORE 선택 시 자동으로 ABS_MAIN 설정
+                      setNewEquipment({
+                        ...newEquipment,
+                        body_part: value,
+                        subcategory: "ABS_MAIN",
+                      });
+                    } else if (value === "CARDIO" || value === "ETC") {
+                      // CARDIO, ETC 선택 시 subcategory 비우기
+                      setNewEquipment({
+                        ...newEquipment,
+                        body_part: value,
+                        subcategory: "",
+                      });
+                    } else {
+                      // UPPER, LOWER 선택 시 subcategory 초기화
+                      setNewEquipment({
+                        ...newEquipment,
+                        body_part: value,
+                        subcategory: "",
+                      });
+                    }
+                  }}
+                >
+                  <SelectTrigger className="bg-gray-800 border-gray-600 text-white">
+                    <SelectValue placeholder="신체 부위 선택" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-800 border-gray-600">
+                    <SelectItem value="UPPER" className="text-white">
+                      상체
+                    </SelectItem>
+                    <SelectItem value="LOWER" className="text-white">
+                      하체
+                    </SelectItem>
+                    <SelectItem value="CORE" className="text-white">
+                      코어
+                    </SelectItem>
+                    <SelectItem value="CARDIO" className="text-white">
+                      유산소
+                    </SelectItem>
+                    <SelectItem value="ETC" className="text-white">
+                      기타
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               {/* 세부 카테고리 */}
               <div className="space-y-2">
                 <Label
                   htmlFor="equipment-subcategory"
                   className="text-gray-300"
                 >
-                  세부 카테고리 <span className="text-red-400">*</span>
+                  세부 카테고리{" "}
+                  {newEquipment.body_part !== "CARDIO" &&
+                    newEquipment.body_part !== "ETC" && (
+                      <span className="text-red-400">*</span>
+                    )}
                 </Label>
                 <Select
                   value={newEquipment.subcategory}
                   onValueChange={(value) =>
                     setNewEquipment({ ...newEquipment, subcategory: value })
                   }
+                  disabled={
+                    newEquipment.body_part === "CORE" ||
+                    newEquipment.body_part === "CARDIO" ||
+                    newEquipment.body_part === "ETC"
+                  }
                 >
                   <SelectTrigger className="bg-gray-800 border-gray-600 text-white">
-                    <SelectValue placeholder="세부 카테고리 선택" />
+                    <SelectValue
+                      placeholder={
+                        newEquipment.body_part === "CORE"
+                          ? "ABS_MAIN (자동)"
+                          : newEquipment.body_part === "CARDIO" ||
+                            newEquipment.body_part === "ETC"
+                          ? "선택 불가"
+                          : "세부 카테고리 선택"
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent className="bg-gray-800 border-gray-600">
-                    <SelectItem value="CHEST_PRESS_MAIN" className="text-white">
-                      가슴 프레스 메인
-                    </SelectItem>
-                    <SelectItem
-                      value="CHEST_PRESS_UPPER"
-                      className="text-white"
-                    >
-                      가슴 프레스 상부
-                    </SelectItem>
-                    <SelectItem value="CHEST_FLY" className="text-white">
-                      가슴 플라이
-                    </SelectItem>
-                    <SelectItem
-                      value="BACK_PULL_VERTICAL"
-                      className="text-white"
-                    >
-                      등 풀다운/풀업
-                    </SelectItem>
-                    <SelectItem
-                      value="BACK_ROW_HORIZONTAL"
-                      className="text-white"
-                    >
-                      등 로우
-                    </SelectItem>
-                    <SelectItem value="LEG_PRESS_MAIN" className="text-white">
-                      하체 프레스/스쿼트
-                    </SelectItem>
-                    <SelectItem value="LEG_EXTENSION" className="text-white">
-                      다리 익스텐션
-                    </SelectItem>
-                    <SelectItem value="LEG_CURL" className="text-white">
-                      다리 컬
-                    </SelectItem>
-                    <SelectItem value="SHOULDER_PRESS" className="text-white">
-                      어깨 프레스
-                    </SelectItem>
-                    <SelectItem value="SHOULDER_SIDE" className="text-white">
-                      어깨 사이드
-                    </SelectItem>
+                    {/* UPPER (상체) 옵션 */}
+                    {newEquipment.body_part === "UPPER" && (
+                      <>
+                        <SelectItem
+                          value="CHEST_PRESS_MAIN"
+                          className="text-white"
+                        >
+                          가슴 프레스 메인
+                        </SelectItem>
+                        <SelectItem
+                          value="CHEST_PRESS_UPPER"
+                          className="text-white"
+                        >
+                          가슴 프레스 상부
+                        </SelectItem>
+                        <SelectItem value="CHEST_FLY" className="text-white">
+                          가슴 플라이
+                        </SelectItem>
+                        <SelectItem
+                          value="BACK_PULL_VERTICAL"
+                          className="text-white"
+                        >
+                          등 풀다운/풀업
+                        </SelectItem>
+                        <SelectItem
+                          value="BACK_ROW_HORIZONTAL"
+                          className="text-white"
+                        >
+                          등 로우
+                        </SelectItem>
+                        <SelectItem
+                          value="SHOULDER_PRESS"
+                          className="text-white"
+                        >
+                          어깨 프레스
+                        </SelectItem>
+                        <SelectItem
+                          value="SHOULDER_SIDE"
+                          className="text-white"
+                        >
+                          어깨 사이드
+                        </SelectItem>
+                        <SelectItem value="ARM_CURL" className="text-white">
+                          팔 컬 (이두)
+                        </SelectItem>
+                        <SelectItem
+                          value="ARM_EXTENSION"
+                          className="text-white"
+                        >
+                          팔 익스텐션 (삼두)
+                        </SelectItem>
+                      </>
+                    )}
+                    {/* LOWER (하체) 옵션 */}
+                    {newEquipment.body_part === "LOWER" && (
+                      <>
+                        <SelectItem
+                          value="LEG_PRESS_MAIN"
+                          className="text-white"
+                        >
+                          하체 프레스/스쿼트
+                        </SelectItem>
+                        <SelectItem
+                          value="LEG_EXTENSION"
+                          className="text-white"
+                        >
+                          다리 익스텐션
+                        </SelectItem>
+                        <SelectItem value="LEG_CURL" className="text-white">
+                          다리 컬
+                        </SelectItem>
+                        <SelectItem value="HIP_ADDUCTOR" className="text-white">
+                          힙 어덕터
+                        </SelectItem>
+                        <SelectItem value="CALF_RAISE" className="text-white">
+                          종아리
+                        </SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
+                {newEquipment.body_part === "CORE" && (
+                  <p className="text-xs text-gray-400">
+                    코어는 ABS_MAIN으로 자동 설정됩니다.
+                  </p>
+                )}
+                {(newEquipment.body_part === "CARDIO" ||
+                  newEquipment.body_part === "ETC") && (
+                  <p className="text-xs text-gray-400">
+                    유산소/기타는 세부 카테고리가 필요하지 않습니다.
+                  </p>
+                )}
               </div>
 
               {/* 난이도 */}

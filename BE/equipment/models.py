@@ -110,7 +110,7 @@ class Equipment(models.Model):
         'ETC': set(),
     }
     ai_model_id = models.IntegerField(
-        default=0, 
+        default=1, 
         help_text="AI 모델이 인식하는 기구 ID (training_script.py와 일치해야 함, 예: 0=벤치)"
     )
 
