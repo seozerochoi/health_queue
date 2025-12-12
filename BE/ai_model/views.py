@@ -219,7 +219,13 @@ class TimePredictionView(BaseAIView):
                 print(f"🤖 [TimeAI] User={request.user.username}, Equip={db_equip.name}, Type={db_equip.type}, Rec={recommended_time}")
             except Exception as e:
                 print(f"⚠️ [TimeAI] Prediction failed: {e}")
-                recommended_time = 15.0
+                # AI 예측 실패 시, 공식(Formula) 엔진으로 백업 계산 시도
+                try:
+                    recommended_time = time_engine.formula_engine.calculate_time(ai_user, ai_equip)
+                    print(f"🔄 [TimeAI] Fallback to Formula: {recommended_time}")
+                except Exception as e2:
+                    print(f"⚠️ [TimeAI] Formula fallback failed: {e2}")
+                    recommended_time = 15.0
         else:
             print(f"⚠️ [TimeAI] No AI User (Profile missing?), using base time.")
             recommended_time = 15.0
@@ -360,6 +366,11 @@ class AllTimePredictionView(BaseAIView):
                 times[db_equip.id] = round(pred_time, 1)
             except Exception as e:
                 print(f"⚠️ [AllTimePrediction] Failed for {db_equip.name}: {e}")
-                times[db_equip.id] = 15.0 # 개별 실패 시 기본값
+                # AI 실패 시 공식으로 백업
+                try:
+                    fallback_time = time_engine.formula_engine.calculate_time(ai_user, ai_equip)
+                    times[db_equip.id] = round(fallback_time, 1)
+                except:
+                    times[db_equip.id] = 15.0 # 최후의 수단
                 
         return Response({"times": times})
