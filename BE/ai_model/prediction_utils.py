@@ -27,6 +27,12 @@ def get_ai_recommendation(user_profile, ai_model_id, ratios):
             logger.error("TimeAI engine is not initialized.")
             return 15.0 # 기본값
 
+        # [Sync] 최신 학습 가중치 로드
+        try:
+            time_engine.load_checkpoint("time_ai_checkpoint.pth")
+        except Exception:
+            pass
+
         # Equipment DB 객체 가져오기 (순환 참조 방지를 위해 안에서 import)
         from equipment.models import Equipment
         try:

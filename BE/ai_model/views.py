@@ -129,6 +129,11 @@ class RoutineGenerateView(BaseAIView):
         except Exception:
             pass
 
+        try:
+            time_engine.load_checkpoint("time_ai_checkpoint.pth")
+        except Exception:
+            pass
+
         # 2. 유저 변환
         ai_user = self.convert_to_ai_user(request.user)
         if not ai_user:
