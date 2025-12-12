@@ -269,52 +269,67 @@ class StartSessionView(APIView):
         allocated_time = 15.0
         session_type = 'BASE'
 
-        try:
-            from ai_model.prediction_utils import get_ai_recommendation
-
-            user_profile = UserProfile.objects.get(user=user)
-
-            now = timezone.now()
-            recent_sessions = UsageSession.objects.filter(
-                user=user,
-                start_time__gte=now - datetime.timedelta(hours=24),
-                end_time__isnull=False,
-            )
-
-            total_duration_minutes = 0
-            upper_duration_minutes = 0
-            lower_duration_minutes = 0
-
-            for session in recent_sessions:
-                duration = (session.end_time - session.start_time).total_seconds() / 60
-                total_duration_minutes += duration
-                if session.equipment.body_part == 'UPPER':
-                    upper_duration_minutes += duration
-                elif session.equipment.body_part == 'LOWER':
-                    lower_duration_minutes += duration
-
-            upper_ratio = (upper_duration_minutes / total_duration_minutes) if total_duration_minutes > 0 else 0
-            lower_ratio = (lower_duration_minutes / total_duration_minutes) if total_duration_minutes > 0 else 0
-
-            ratios = {'upper_ratio': upper_ratio, 'lower_ratio': lower_ratio}
-
-            allocated_time = get_ai_recommendation(
-                user_profile,
-                equipment.id,
-                ratios,
-            )
+        # [AI Routine] 예약에 저장된 시간이 있거나, 요청에 포함된 시간이 있으면 우선 사용
+        req_allocated_duration = request.data.get('allocated_duration')
+        if req_allocated_duration:
+            try:
+                allocated_time = float(req_allocated_duration)
+                session_type = 'AI_RECOMMENDED'
+                logger.info(f"🤖 [StartSession] Using requested duration: {allocated_time}")
+            except:
+                pass
+        elif reservation and reservation.allocated_duration_minutes:
+            allocated_time = reservation.allocated_duration_minutes
             session_type = 'AI_RECOMMENDED'
-        except UserProfile.DoesNotExist:
-            logger.warning(
-                "UserProfile missing for %s, falling back to base time",
-                user.username,
-            )
-        except Exception as e:
-            logger.exception(
-                "AI recommendation failed for user %s equipment %s",
-                user.username,
-                equipment.pk,
-            )
+            logger.info(f"🤖 [StartSession] Using reservation duration: {allocated_time}")
+        else:
+            # 저장된 시간이 없으면 AI 예측 수행
+            try:
+                from ai_model.prediction_utils import get_ai_recommendation
+
+                user_profile = UserProfile.objects.get(user=user)
+
+                now = timezone.now()
+                recent_sessions = UsageSession.objects.filter(
+                    user=user,
+                    start_time__gte=now - datetime.timedelta(hours=24),
+                    end_time__isnull=False,
+                )
+
+                total_duration_minutes = 0
+                upper_duration_minutes = 0
+                lower_duration_minutes = 0
+
+                for session in recent_sessions:
+                    duration = (session.end_time - session.start_time).total_seconds() / 60
+                    total_duration_minutes += duration
+                    if session.equipment.body_part == 'UPPER':
+                        upper_duration_minutes += duration
+                    elif session.equipment.body_part == 'LOWER':
+                        lower_duration_minutes += duration
+
+                upper_ratio = (upper_duration_minutes / total_duration_minutes) if total_duration_minutes > 0 else 0
+                lower_ratio = (lower_duration_minutes / total_duration_minutes) if total_duration_minutes > 0 else 0
+
+                ratios = {'upper_ratio': upper_ratio, 'lower_ratio': lower_ratio}
+
+                allocated_time = get_ai_recommendation(
+                    user_profile,
+                    equipment.id,
+                    ratios,
+                )
+                session_type = 'AI_RECOMMENDED'
+            except UserProfile.DoesNotExist:
+                logger.warning(
+                    "UserProfile missing for %s, falling back to base time",
+                    user.username,
+                )
+            except Exception as e:
+                logger.exception(
+                    "AI recommendation failed for user %s equipment %s",
+                    user.username,
+                    equipment.pk,
+                )
 
         # 2. 예약 처리
         if reservation:
@@ -474,6 +489,14 @@ class JoinQueueView(APIView):
         except Equipment.DoesNotExist:
             return Response({'error': '해당 기구가 존재하지 않습니다.'}, status=status.HTTP_404_NOT_FOUND)
 
+        # [AI Routine] AI가 추천한 시간(allocated_duration)이 있으면 저장
+        allocated_duration = request.data.get('allocated_duration')
+        if allocated_duration:
+            try:
+                allocated_duration = float(allocated_duration)
+            except (ValueError, TypeError):
+                allocated_duration = None
+
         with transaction.atomic():
             equipment = Equipment.objects.select_for_update().get(pk=equipment.pk)
 
@@ -507,7 +530,12 @@ class JoinQueueView(APIView):
                     status=status.HTTP_200_OK,
                 )
 
-            reservation = Reservation.objects.create(user=user, equipment=equipment, status='WAITING')
+            reservation = Reservation.objects.create(
+                user=user, 
+                equipment=equipment, 
+                status='WAITING',
+                allocated_duration_minutes=allocated_duration # 저장
+            )
             waiting_count = Reservation.objects.filter(
                 equipment=equipment,
                 status__in=['WAITING', 'NOTIFIED'],

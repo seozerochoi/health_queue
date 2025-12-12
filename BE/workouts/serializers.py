@@ -68,7 +68,8 @@ class ReservationSerializer(serializers.ModelSerializer):
         model = Reservation
         fields = (
             'id', 'user', 'equipment', 'equipment_id', 'equipment_image',
-            'created_at', 'status', 'notified_at', 'waiting_position', 'waiting_count'
+            'created_at', 'status', 'notified_at', 'waiting_position', 'waiting_count',
+            'allocated_duration_minutes'
         )
 
     def to_representation(self, instance):

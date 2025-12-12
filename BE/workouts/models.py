@@ -35,6 +35,7 @@ class Reservation(models.Model):
     ]
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='WAITING', db_index=True)
     notified_at = models.DateTimeField(null=True, blank=True)
+    allocated_duration_minutes = models.FloatField(null=True, blank=True)
 
     class Meta:
         # Composite index for fast equipment waiting count queries

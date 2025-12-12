@@ -981,6 +981,14 @@ export default function App() {
     const equipment = equipmentList.find((eq) => Number(eq.id) === equipmentId);
     if (!equipment) return;
 
+    // [AI Routine] 해당 기구에 대한 AI 추천 예약(로컬)을 찾아서 추천 시간을 가져옴
+    const aiReservation = reservations.find(
+      (r) =>
+        r.isAiRecommended &&
+        String(r.equipment_id ?? r.equipmentId) === String(equipmentId)
+    );
+    const allocatedDuration = aiReservation?.duration;
+
     try {
       const token = localStorage.getItem("access_token");
       if (!token) {
@@ -1013,7 +1021,10 @@ export default function App() {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ equipment_id: parseInt(String(equipment.id)) }),
+        body: JSON.stringify({ 
+          equipment_id: parseInt(String(equipment.id)),
+          allocated_duration: allocatedDuration // AI 추천 시간 전달
+        }),
       });
 
       if (!response.ok) {
@@ -1080,6 +1091,14 @@ export default function App() {
 
   // AI 탭에서 '바로 이용가능' 기구 즉시 시작
   const handleAiStartImmediate = async (equipmentId: number) => {
+    // [AI Routine] 해당 기구에 대한 AI 추천 예약(로컬)을 찾아서 추천 시간을 가져옴
+    const aiReservation = reservations.find(
+      (r) =>
+        r.isAiRecommended &&
+        String(r.equipment_id ?? r.equipmentId) === String(equipmentId)
+    );
+    const allocatedDuration = aiReservation?.duration;
+
     try {
       const token = localStorage.getItem("access_token");
       if (!token) {
@@ -1093,7 +1112,10 @@ export default function App() {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ equipment_id: equipmentId }),
+        body: JSON.stringify({ 
+          equipment_id: equipmentId,
+          allocated_duration: allocatedDuration // AI 추천 시간 전달
+        }),
       });
       if (!res.ok) {
         const errorText = await res.text().catch(() => "");
