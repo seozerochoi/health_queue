@@ -225,6 +225,8 @@ export function MyPage({
       }
       alert("신체 데이터가 저장되었습니다.");
       setIsEditingProfile(false);
+      // 수동 수정 후에도 동기부여 메시지(체중 변화 등) 갱신
+      await loadMotivation();
     } finally {
       setSaving(false);
     }
@@ -520,6 +522,9 @@ export function MyPage({
           setRecordMeta(null);
           setAnalyzeError(null);
           setRawLines([]);
+
+          // AI 트레이너 응원 메시지(체중 변화 등) 갱신
+          await loadMotivation();
         }
       } catch (e) {
         console.warn("프로필 새로고침 실패:", e);
@@ -630,6 +635,9 @@ export function MyPage({
           setExerciseGoal(data.exercise_goal || "");
           setProfileData(data);
           console.log("✅ 프로필 데이터 새로고침 완료:", data);
+
+          // AI 트레이너 응원 메시지(체중 변화 등) 갱신
+          await loadMotivation();
         }
       } catch (e) {
         console.warn("프로필 새로고침 실패:", e);
