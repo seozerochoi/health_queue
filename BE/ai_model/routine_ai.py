@@ -64,23 +64,45 @@ class RoutineAIEngine:
 
         # Experience Replay Buffer (학습 데이터 기억 저장소)
         self.memory = deque(maxlen=2000)
+        
+        # 학습 횟수 추적 (노이즈 Decay용)
+        self.training_count = 0
 
     def save_checkpoint(self, filepath="routine_ai_checkpoint.pth"):
-        """학습된 모델 가중치를 파일로 저장"""
-        torch.save(self.model.state_dict(), filepath)
-        print(f"💾 루틴 모델 저장 완료: {filepath}")
+        """학습된 모델 가중치 및 메타데이터를 파일로 저장"""
+        torch.save({
+            'model_state': self.model.state_dict(),
+            'input_dim': self.input_dim,
+            'memory_size': len(self.memory),
+            'training_count': self.training_count,
+            'version': '2.0'
+        }, filepath)
+        print(f"💾 루틴 모델 저장 완료: {filepath} (v2.0, trained={self.training_count})")
 
     def load_checkpoint(self, filepath="routine_ai_checkpoint.pth"):
-        """저장된 모델 불러오기"""
+        """저장된 모델 불러오기 (버전 호환성 처리)"""
         try:
-            self.model.load_state_dict(torch.load(filepath))
+            checkpoint = torch.load(filepath, weights_only=False)
+            
+            # 새 형식 (v2.0+) vs 구 형식 분기
+            if isinstance(checkpoint, dict) and 'model_state' in checkpoint:
+                # 새 형식
+                if checkpoint.get('input_dim') != self.input_dim:
+                    print(f"⚠️ input_dim 불일치 ({checkpoint.get('input_dim')} vs {self.input_dim}), 새로 시작")
+                    return
+                self.model.load_state_dict(checkpoint['model_state'])
+                self.training_count = checkpoint.get('training_count', 0)
+                print(f"📂 루틴 모델 불러오기 성공: {filepath} (v{checkpoint.get('version', '?')}, trained={self.training_count})")
+            else:
+                # 구 형식 (state_dict만 저장된 경우)
+                self.model.load_state_dict(checkpoint)
+                print(f"📂 루틴 모델 불러오기 성공 (레거시 형식): {filepath}")
+            
             self.model.eval()
-            print(f"📂 루틴 모델 불러오기 성공: {filepath}")
         except FileNotFoundError:
             print("⚠️ 저장된 루틴 모델이 없습니다. 새로 시작합니다.")
         except RuntimeError as e:
             print(f"⚠️ 루틴 모델 구조 불일치로 로드 실패 (새로 시작): {e}")
-            # 구조가 바뀌었으므로 기존 체크포인트는 무시하고 새로 학습해야 함
         except Exception as e:
             print(f"⚠️ 루틴 모델 로드 중 알 수 없는 오류 발생: {e}")
 
@@ -91,22 +113,39 @@ class RoutineAIEngine:
 
     def _get_user_tensor(self, user):
         """time_ai의 로직을 재사용하여 User Feature 추출 (12차원)"""
-        # time_ai의 feature 추출은 equipment.main_part 등을 요구하므로
-        # DB Equipment가 없거나 호환 객체가 아니면 안전한 더미를 사용
-        if not self.equipments:
-            dummy = Equipment(0, "DUMMY", 0, "GENERAL")
-            full_features = self.time_ai._extract_features(user, dummy)
-        else:
-            # DB Equipment를 time_ai.Equipment로 변환해 사용
-            db_eq = self.equipments[0]
-            ai_eq = self._to_ai_equipment(db_eq)
-            full_features = self.time_ai._extract_features(user, ai_eq)
+        try:
+            # user.inbody가 None이거나 속성이 없는 경우 예외 처리
+            if not hasattr(user, 'inbody') or user.inbody is None:
+                # 기본값으로 더미 유저 생성
+                user.inbody = InBodyData(
+                    score=70, weight=70, muscle_mass=30, fat_mass=15,
+                    height=170, fat_rate=20, r_arm=100, l_arm=100,
+                    trunk=100, r_leg=100, l_leg=100
+                )
             
-        # [Update] time_ai._extract_features가 14차원(User 12 + Equip 2)을 반환하므로
-        # User Feature(0~6, 9~13)만 추출하여 12차원으로 구성
-        # Indices: 0-6(Raw User), 7(Equip Main), 8(Equip Cardio), 9-13(Derived User)
-        user_features = torch.cat((full_features[:7], full_features[9:]))
-        return user_features
+            # time_ai의 feature 추출은 equipment.main_part 등을 요구하므로
+            # DB Equipment가 없거나 호환 객체가 아니면 안전한 더미를 사용
+            if not self.equipments:
+                dummy = Equipment(0, "DUMMY", 0, "GENERAL")
+                full_features = self.time_ai._extract_features(user, dummy)
+            else:
+                # DB Equipment를 time_ai.Equipment로 변환해 사용
+                db_eq = self.equipments[0]
+                ai_eq = self._to_ai_equipment(db_eq)
+                full_features = self.time_ai._extract_features(user, ai_eq)
+            
+            # _extract_features는 Python list를 반환하므로 tensor로 변환
+            full_features = torch.FloatTensor(full_features)
+                
+            # [Update] time_ai._extract_features가 14차원(User 12 + Equip 2)을 반환하므로
+            # User Feature(0~6, 9~13)만 추출하여 12차원으로 구성
+            # Indices: 0-6(Raw User), 7(Equip Main), 8(Equip Cardio), 9-13(Derived User)
+            user_features = torch.cat((full_features[:7], full_features[9:]))
+            return user_features
+        except Exception as e:
+            print(f"⚠️ User tensor 추출 실패: {e}, 기본값 반환")
+            # 안전한 기본값 (12차원 제로 벡터)
+            return torch.zeros(12)
 
     def _get_equip_tensor(self, equipment):
         """
@@ -288,41 +327,42 @@ class RoutineAIEngine:
                 score = self.model(input_vec).item()
                 
                 # [Exploration] 점수에 약간의 무작위성 추가 (다양성 확보)
-                # 학습 초기나 점수가 비슷할 때 매번 다른 결과가 나오도록 유도
-                # [Update] 재생성 시 변화를 주기 위해 노이즈 범위 확대 (-0.05~0.05 -> -0.1~0.1)
-                score += random.uniform(-0.1, 0.1)
+                # 학습이 진행될수록 노이즈를 줄여 학습된 선호도 반영
+                noise_scale = 0.1 * (1.0 / (1 + self.training_count / 100))
+                score += random.uniform(-noise_scale, noise_scale)
 
                 # [Advanced Logic] 사용자 수준별 맞춤형 가산점 로직 (Rule-based Boosting)
                 eq_type = str(getattr(eq, 'type', 'MACHINE')).upper()
                 eq_diff = getattr(eq, 'difficulty', 'MID')
                 eq_sub = str(getattr(eq, 'subcategory', '')).upper()
                 
+                # [Rule-based Boosting] AI 학습과 균형을 위해 가산점 축소 (0.25->0.12)
                 if is_beginner:
                     # [초보자 전략] 안전 제일 + 머신 위주 + 쉬운 프리웨이트 입문
                     if eq_type == 'MACHINE':
-                        score += 0.25 # 머신 강력 추천
+                        score += 0.12 # 머신 추천 (축소)
                         # 대근육 머신은 더 추천 (성장 효율)
                         if getattr(eq, 'body_part', '') in ['UPPER', 'LOWER']:
-                            score += 0.1
+                            score += 0.05
                     elif eq_type == 'FREE_WEIGHT':
                         if eq_diff == 'HIGH':
-                            score -= 0.3 # 3대 운동 등 고난이도는 감점 (부상 방지)
+                            score -= 0.15 # 3대 운동 등 고난이도는 감점 (부상 방지, 축소)
                         elif eq_diff == 'LOW':
-                            score += 0.15 # 덤벨 컬 등 쉬운 프리웨이트는 권장
+                            score += 0.08 # 덤벨 컬 등 쉬운 프리웨이트는 권장
                 
                 else:
                     # [숙련자 전략] 고중량 프리웨이트 + 타겟 고립 + 다양성
                     if eq_type == 'FREE_WEIGHT':
                         if eq_diff == 'HIGH':
-                            score += 0.3 # 3대 운동 강력 추천
+                            score += 0.15 # 3대 운동 추천 (축소)
                         else:
-                            score += 0.1
+                            score += 0.05
                     elif eq_type == 'CABLE':
-                        score += 0.15 # 케이블 운동 선호 (자극 위주)
+                        score += 0.08 # 케이블 운동 선호 (자극 위주)
                     
                     # 메인 운동(프레스, 스쿼트 등)에 가산점
                     if 'MAIN' in eq_sub or 'PRESS' in eq_sub or 'SQUAT' in eq_sub:
-                        score += 0.1
+                        score += 0.05
 
                 scored_candidates.append({'score': score, 'equip': eq})
         
@@ -496,7 +536,21 @@ class RoutineAIEngine:
 
             occ_key = getattr(eq, 'equip_id', getattr(eq, 'id', None))
             is_active = current_occupancy.get(occ_key, False)
-            wait_time = random.randint(5, 15) if is_active else 0
+            
+            # [개선] wait_time을 예측 시간 기반으로 계산 (기존: 랜덤)
+            # 사용 중이면 해당 기구의 평균 사용 시간 기반 대기 예측
+            if is_active:
+                # 기구 타입에 따른 평균 대기 시간 추정
+                eq_type = str(getattr(eq, 'type', 'MACHINE')).upper()
+                if eq_type == 'CARDIO':
+                    wait_time = int(rec_time * 0.7)  # 유산소는 오래 사용
+                elif eq_type == 'FREE_WEIGHT':
+                    wait_time = int(rec_time * 0.5)  # 프리웨이트는 세트 사이 휴식
+                else:
+                    wait_time = int(rec_time * 0.4)  # 머신은 빠른 회전
+                wait_time = max(3, min(wait_time, 20))  # 3~20분 범위
+            else:
+                wait_time = 0
             
             routine_result.append({
                 'equipment': eq,
@@ -651,21 +705,25 @@ class RoutineAIEngine:
             star_rating: 사용자 별점 (Float, 0.0 ~ 5.0)
         """
         # 별점을 학습 목표값(Target)으로 변환 (0.0 ~ 1.0)
-        target_val = 0.5 # Default neutral
+        # [개선] 극단값(1~2, 4~5)만 학습하여 노이즈 감소
+        target_val = None  # None이면 학습 스킵
         if star_rating >= 4.5: target_val = 1.0   # 매우 만족
-        elif star_rating >= 4.0: target_val = 0.8 # 만족
-        elif star_rating >= 3.0: target_val = 0.5 # 보통 (학습 데이터로 활용)
-        elif star_rating <= 1.0: target_val = 0.0 # 매우 불만족
-        elif star_rating <= 2.0: target_val = 0.2 # 불만족
-        else: target_val = 0.5 # 그 외 (안전장치)
+        elif star_rating >= 4.0: target_val = 0.85 # 만족
+        elif star_rating <= 1.5: target_val = 0.0 # 매우 불만족
+        elif star_rating <= 2.0: target_val = 0.15 # 불만족
+        # 2.5~3.5는 학습하지 않음 (중립 = 노이즈)
+        
+        if target_val is None:
+            print(f"🧠 [Routine AI] 피드백 스킵 (중립 점수: {star_rating})")
+            return 0
         
         self.model.train()
         total_loss = 0
         
         user_tensor = self._get_user_tensor(user)
         
-        # 1. 현재 루틴의 모든 기구에 대해 [집중 학습] 수행 (Oversampling Effect)
-        # 피드백을 즉시 반영하기 위해 동일 데이터를 10회 반복 학습 (기존 5회 -> 10회 강화)
+        # 1. 현재 루틴의 모든 기구에 대해 [집중 학습] 수행
+        # [개선] 반복 횟수 축소 (10회 -> 5회) 및 조기 종료
         current_batch = []
         for eq in routine_list:
             eq_tensor = self._get_equip_tensor(eq)
@@ -673,18 +731,26 @@ class RoutineAIEngine:
             target = torch.FloatTensor([target_val])
             current_batch.append((input_vec, target))
             
-            # 메모리 저장 (Experience Replay용)
-            self.memory.append((input_vec.detach(), target))
+            # 메모리 저장 (Experience Replay용) - CPU로 저장하여 메모리 누수 방지
+            self.memory.append((input_vec.detach().cpu(), target.cpu()))
 
-        # 집중 학습 (10 Epochs)
-        for _ in range(10):
+        # 집중 학습 (5 Epochs, 조기 종료 적용)
+        prev_loss = float('inf')
+        for epoch in range(5):
+            epoch_loss = 0
             for input_vec, target in current_batch:
                 self.optimizer.zero_grad()
                 pred = self.model(input_vec)
                 loss = self.criterion(pred, target)
                 loss.backward()
                 self.optimizer.step()
+                epoch_loss += loss.item()
                 total_loss += loss.item()
+            
+            # 조기 종료: loss 개선이 미미하면 중단
+            if prev_loss - epoch_loss < 0.001:
+                break
+            prev_loss = epoch_loss
             
         # 2. Replay Learning (과거 기억 복습 - 배치 학습)
         # 과거 데이터와 현재 데이터를 섞어서 학습 (Catastrophic Forgetting 방지)
@@ -701,5 +767,75 @@ class RoutineAIEngine:
                 batch_loss += loss.item()
             
             print(f"🧠 [Routine AI] 피드백 학습 완료 (Rating: {star_rating} -> Loss: {batch_loss/32:.4f})")
+        
+        # 학습 횟수 증가
+        self.training_count += 1
                 
         return total_loss
+
+    def learn_from_individual_feedback(self, user, equipment_ratings):
+        """
+        개별 기구별 피드백을 학습합니다.
+        
+        Args:
+            user: User 객체
+            equipment_ratings: {equipment_id: star_rating} 딕셔너리
+        
+        Returns:
+            학습된 기구 수
+        """
+        if not equipment_ratings:
+            return 0
+        
+        learned_count = 0
+        user_tensor = self._get_user_tensor(user)
+        self.model.train()
+        
+        for eq_id, rating in equipment_ratings.items():
+            # 극단값만 학습 (2점 이하, 4점 이상)
+            if 2.0 < rating < 4.0:
+                continue
+            
+            # 기구 찾기
+            eq = None
+            for e in self.equipments:
+                if getattr(e, 'id', None) == eq_id or getattr(e, 'equip_id', None) == eq_id:
+                    eq = e
+                    break
+            
+            if eq is None:
+                continue
+            
+            # Target 변환
+            if rating >= 4.5:
+                target_val = 1.0
+            elif rating >= 4.0:
+                target_val = 0.85
+            elif rating <= 1.5:
+                target_val = 0.0
+            else:  # rating <= 2.0
+                target_val = 0.15
+            
+            # 학습
+            eq_tensor = self._get_equip_tensor(eq)
+            input_vec = torch.cat([user_tensor, eq_tensor], dim=0)
+            target = torch.FloatTensor([target_val])
+            
+            # 3회 반복 학습 (개별 피드백은 가볍게)
+            for _ in range(3):
+                self.optimizer.zero_grad()
+                pred = self.model(input_vec)
+                loss = self.criterion(pred, target)
+                loss.backward()
+                self.optimizer.step()
+            
+            # 메모리 저장
+            self.memory.append((input_vec.detach().cpu(), target.cpu()))
+            learned_count += 1
+            
+            print(f"🎯 [Routine AI] 개별 피드백: {eq.name} = {rating}점 -> target={target_val}")
+        
+        if learned_count > 0:
+            self.training_count += 1
+        
+        return learned_count

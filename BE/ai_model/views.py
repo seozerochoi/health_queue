@@ -221,9 +221,18 @@ class TimePredictionView(BaseAIView):
         if ai_user:
             try:
                 recommended_time = time_engine.predict_time(ai_user, ai_equip)
-                print(f"🤖 [TimeAI] User={request.user.username}, Equip={db_equip.name}, Type={db_equip.type}, Rec={recommended_time}")
+                
+                # 예측 정보 가져오기 (유사 사용자 정보 포함)
+                pred_info = getattr(time_engine, 'last_prediction_info', {})
+                had_similar_users = pred_info.get('had_similar_users', False)
+                formula_time = pred_info.get('formula_time', recommended_time)
+                
+                print(f"🤖 [TimeAI] User={request.user.username}, Equip={db_equip.name}, Type={db_equip.type}")
+                print(f"   └─ Formula={formula_time:.1f}분, Final={recommended_time:.1f}분, SimilarUsers={had_similar_users}")
             except Exception as e:
                 print(f"⚠️ [TimeAI] Prediction failed: {e}")
+                import traceback
+                traceback.print_exc()
                 # AI 예측 실패 시, 공식(Formula) 엔진으로 백업 계산 시도
                 try:
                     recommended_time = time_engine.formula_engine.calculate_time(ai_user, ai_equip)
@@ -305,7 +314,32 @@ class FeedbackView(BaseAIView):
             elif fb_type == 'ROUTINE':
                 # 루틴 AI 학습
                 routine_ids = request.data.get('routine_ids', []) # 기구 ID 리스트
+                equipment_ratings = request.data.get('equipment_ratings', {}) # {eq_id: rating}
                 
+                learned_count = 0
+                
+                # [신규] 개별 기구별 피드백이 있으면 개별 학습
+                if equipment_ratings:
+                    # 키를 정수로 변환 (JSON은 문자열 키만 지원하므로)
+                    ratings_int = {int(k): float(v) for k, v in equipment_ratings.items()}
+                    
+                    # AI 엔진에 기구 리스트 갱신
+                    all_eq = list(Equipment.objects.all())
+                    routine_engine.update_equipments_list(all_eq)
+                    
+                    # 개별 피드백 학습
+                    learned_count = routine_engine.learn_from_individual_feedback(ai_user, ratings_int)
+                    
+                    # 체크포인트 저장
+                    if learned_count > 0:
+                        routine_engine.save_checkpoint("routine_ai_checkpoint.pth")
+                    
+                    return Response({
+                        "msg": f"개별 피드백 학습 완료 ({learned_count}개 기구)",
+                        "learned_count": learned_count
+                    })
+                
+                # [기존] 평균 점수 기반 학습 (하위 호환)
                 if not routine_ids:
                     return Response({"msg": "피드백 수신 완료 (routine_ids 없음 - 학습 생략)"}, status=status.HTTP_200_OK)
                 
