@@ -531,8 +531,8 @@ class RoutineAIEngine:
             base_rec_time = self.time_ai.predict_time(user, ai_eq)
             rec_time = base_rec_time * time_multiplier
             
-            # 너무 짧거나 길지 않게 안전 범위 재조정 (최소 3분 ~ 최대 90분)
-            rec_time = max(3.0, min(90.0, rec_time))
+            # 너무 짧거나 길지 않게 안전 범위 재조정 (최소 3.0분 ~ 최대 120.0분)
+            rec_time = max(3.0, min(120.0, rec_time))
 
             occ_key = getattr(eq, 'equip_id', getattr(eq, 'id', None))
             is_active = current_occupancy.get(occ_key, False)

@@ -134,8 +134,8 @@ class FormulaEngine:
                 
             final_minutes = base_minutes * proficiency_factor * goal_factor
             
-            # 안전 범위 (10분 ~ 60분)
-            return max(10.0, min(60.0, final_minutes))
+            # 안전 범위 (3.0분 ~ 120.0분)
+            return max(3.0, min(120.0, final_minutes))
         
         # --- [Step 2] 기본 운동 시간 (Base Time) 설정 ---
         # 미국스포츠의학회(ACSM) 기준
@@ -204,8 +204,8 @@ class FormulaEngine:
         print(f"   └─ situation_coeff={situation_coeff:.3f}, sarcopenia_coeff={sarcopenia_coeff:.3f}, balance_coeff={balance_coeff:.3f}")
         print(f"   └─ final_seconds={final_seconds:.1f} -> final_minutes={final_minutes:.1f}분")
         
-        # 안전 범위 클램핑 (최소 3분 ~ 최대 60분)
-        return max(3.0, min(60.0, final_minutes))
+        # 안전 범위 클램핑 (최소 3.0분 ~ 최대 120.0분)
+        return max(3.0, min(120.0, final_minutes))
 
 
 # ==============================================================================
@@ -578,14 +578,14 @@ class AIEngine:
             'formula_time': formula_time,
             'base_time': base_time,
             'adjustment': adjustment,
-            'final_time': max(5.0, min(90.0, final_time)),
+            'final_time': max(3.0, min(120.0, final_time)),
             'had_similar_users': len(similar_records) > 0
         }
         
-        final_clamped = max(8.0, min(90.0, final_time))
+        final_clamped = max(3.0, min(120.0, final_time))
         print(f"✅ [최종] base_time({base_time:.1f}) + 조정({adjustment:+.1f}) = {final_clamped:.1f}분")
 
-        # 안전 범위 적용 (최소 8분)
+        # 안전 범위 적용 (최소 3.0분)
         return final_clamped
 
     def update_with_feedback(self, user, equipment, recommended_time, feedback_score):
@@ -630,7 +630,7 @@ class AIEngine:
         
         # 이상적인 최종 시간 = 현재 추천 시간 + 피드백 델타
         ideal_final_time = final_time + delta
-        ideal_final_time = max(5.0, min(90.0, ideal_final_time))  # 범위 제한
+        ideal_final_time = max(3.0, min(120.0, ideal_final_time))  # 범위 제한
         
         # 목표 조정값 = 이상적인 최종 시간 - 공식 시간
         # 이렇게 하면 "매우 부족" 선택 시 조정값이 양수가 됨
