@@ -112,6 +112,8 @@ def get_ai_recommendation(user_profile, ai_model_id, ratios):
         # 예측 실행
         recommended_time = time_engine.predict_time(ai_user, ai_equip)
         logger.info(f"🤖 AI Prediction: User={ai_user.name}, Equip={ai_equip.name} -> {recommended_time:.1f} min")
+        logger.info(f"   └─ InBody: score={score}, fat_rate={fat_rate}, muscle={muscle}")
+        logger.info(f"   └─ Goal: {goal} ({'Bulk-up' if goal==1 else 'Diet'}), Gender: {gender}")
         return recommended_time
 
     except Exception as e:

@@ -198,6 +198,12 @@ class FormulaEngine:
         final_seconds = base_seconds * situation_coeff * sarcopenia_coeff * balance_coeff
         final_minutes = final_seconds / 60.0
         
+        # 디버깅 출력
+        print(f"📊 [FormulaEngine] Debug:")
+        print(f"   └─ base_seconds={base_seconds}, x1={x1:.3f}, rel_obesity={rel_obesity:.3f}")
+        print(f"   └─ situation_coeff={situation_coeff:.3f}, sarcopenia_coeff={sarcopenia_coeff:.3f}, balance_coeff={balance_coeff:.3f}")
+        print(f"   └─ final_seconds={final_seconds:.1f} -> final_minutes={final_minutes:.1f}분")
+        
         # 안전 범위 클램핑 (최소 3분 ~ 최대 60분)
         return max(3.0, min(60.0, final_minutes))
 
@@ -421,24 +427,78 @@ class AIEngine:
         ]
         return features
 
-    def pretrain_with_formula(self, sample_size=1000):
+    def pretrain_with_formula(self, sample_size=500):
         """
-        [Cold Start] 초기에는 공식이 정답이라고 가정하고 학습합니다.
-        즉, '유지(0.0)' 행동이 가장 높은 보상을 받도록 Q-Network를 초기화합니다.
+        [Cold Start] 공식 기반 시간을 정답으로 삼아 모델을 사전 학습합니다.
+        조정값 0.0(공식 그대로)이 최적이라고 가정하고 학습합니다.
         """
-        print("⚡ [System] RL 모델 선행 학습(Pre-training) 시작...")
+        print("⚡ [System] 공식 기반 선행 학습(Pre-training) 시작...")
         
-        for _ in range(sample_size):
-            # 가상 데이터 생성 (생략 - 기존 로직과 유사하게 랜덤 생성)
-            # 편의상 간단한 랜덤 텐서로 대체하여 구조만 잡음 (실제 구현 시엔 InBodyData 생성 필요)
-            # 여기서는 기존 코드의 복잡성을 줄이기 위해 개념적으로 설명:
-            # "공식대로 하는 것이 좋다" -> Action Index 2 (0.0분)의 Q값이 높아야 함.
-            pass 
+        # 다양한 가상 사용자/기구 데이터 생성하여 '조정값 0'으로 학습
+        for i in range(sample_size):
+            # 다양한 InBody 데이터 생성
+            inbody = InBodyData(
+                score=random.uniform(55, 95),
+                weight=random.uniform(50, 100),
+                muscle_mass=random.uniform(18, 45),
+                fat_mass=random.uniform(8, 35),
+                height=random.uniform(150, 190),
+                fat_rate=random.uniform(8, 40),
+                r_arm=random.uniform(75, 125),
+                l_arm=random.uniform(75, 125),
+                trunk=random.uniform(75, 125),
+                r_leg=random.uniform(75, 125),
+                l_leg=random.uniform(75, 125)
+            )
             
-        # 실제 구현에서는 위 루프에서 memory에 (state, 2, 10.0, state) 등을 넣고 학습시킴
-        # 여기서는 생략하고 is_trained만 True로 설정
+            user = User(
+                user_id=i,
+                name=f'PretrainUser{i}',
+                gender=random.randint(0, 1),
+                goal=random.randint(0, 1),
+                inbody_data=inbody
+            )
+            
+            equip_types = ['MACHINE', 'FREE_WEIGHT', 'CARDIO', 'CABLE']
+            equip = Equipment(
+                equip_id=random.randint(1, 30),
+                name=f'PretrainEquip{i}',
+                main_part=random.randint(0, 1),
+                sub_part='GENERAL',
+                equip_type=random.choice(equip_types)
+            )
+            
+            # Feature 추출
+            base_features = self._extract_features(user, equip)
+            
+            # 공식 기반 시간 계산
+            formula_time = self.formula_engine.calculate_time(user, equip)
+            
+            # 유사 사용자 Feature (사전학습이므로 없다고 가정)
+            extended_features = base_features + [0.0, formula_time, 0.0]  # similar_exists=0, avg_time, avg_adj=0
+            state = torch.FloatTensor(extended_features)
+            
+            # 목표: 조정값 0 (공식이 정답)
+            # 약간의 랜덤성 추가하여 다양한 상황 학습
+            target_adjustment = random.uniform(-1.0, 1.0)  # 공식 근처값
+            weight = 1.0
+            
+            self.memory.append((state, target_adjustment, weight))
+        
+        # 배치 학습 수행 (여러 번 반복)
+        print(f"   └─ 메모리 크기: {len(self.memory)}, 배치 학습 시작...")
+        total_loss = 0.0
+        num_batches = min(50, len(self.memory) // self.batch_size)
+        
+        for _ in range(num_batches):
+            loss = self._regression_train()
+            total_loss += loss
+        
+        avg_loss = total_loss / max(1, num_batches)
+        
         self.is_trained = True
-        print("✅ [System] 선행 학습 완료 (Skipped for brevity).")
+        self.save_checkpoint()
+        print(f"✅ [System] 선행 학습 완료! (평균 Loss: {avg_loss:.4f})")
 
     def predict_time(self, user, equipment):
         """
@@ -484,11 +544,10 @@ class AIEngine:
             # 신경망이 직접 조정값(-10 ~ +10)을 출력
             adjustment = self.model(state).item()
         
-        # 학습 초기에는 약간의 노이즈 추가 (탐험)
+        # 학습 초기에는 조정값을 0으로 고정 (학습되지 않은 모델의 불안정한 출력 방지)
         if not self.is_trained:
-            noise = random.gauss(0, 1.0)  # 표준편차 1분
-            adjustment = adjustment + noise
-            adjustment = max(ADJUSTMENT_RANGE[0], min(ADJUSTMENT_RANGE[1], adjustment))
+            print(f"⚠️ [AI] 모델 미학습 상태 - 조정값 0으로 설정 (원래 예측: {adjustment:+.1f})")
+            adjustment = 0.0
         
         # 6. 최종 시간 산출
         final_time = base_time + adjustment
@@ -508,8 +567,8 @@ class AIEngine:
         
         print(f"🤖 [AI] 조정값: {adjustment:+.1f}분 → 최종: {max(5.0, min(90.0, final_time)):.1f}분")
 
-        # 안전 범위 적용
-        return max(5.0, min(90.0, final_time))
+        # 안전 범위 적용 (최소 5분은 너무 짧음, 8분으로 상향)
+        return max(8.0, min(90.0, final_time))
 
     def update_with_feedback(self, user, equipment, recommended_time, feedback_score):
         """
