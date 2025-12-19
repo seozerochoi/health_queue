@@ -575,12 +575,10 @@ class AIEngine:
         [Continuous Learning + DB 저장]
         사용자 피드백을 기반으로 "이상적인 조정값"을 계산하고 모델을 학습시킵니다.
         
-        피드백 기반 조정값 계산:
-        - 매우부족(1): 현재 조정값에서 +5분 더 필요
-        - 부족(2): 현재 조정값에서 +2분 더 필요
-        - 적절(3): 현재 조정값이 정답 (그대로 학습)
-        - 과도(4): 현재 조정값에서 -2분 줄여야 함
-        - 매우과도(5): 현재 조정값에서 -5분 줄여야 함
+        핵심 원리:
+        - 피드백은 "최종 추천 시간"이 적절했는지를 나타냄
+        - 조정값 = (이상적인 최종 시간) - (공식 시간)
+        - "매우 부족" = 추천 시간이 너무 짧았다 = 더 긴 시간 필요
         
         Args:
             feedback_score (int): 1(매우부족) ~ 3(적절) ~ 5(매우과도)
@@ -592,26 +590,33 @@ class AIEngine:
         base_features = self._extract_features(user, equipment)
         equipment_id = equipment.equip_id if hasattr(equipment, 'equip_id') else equipment.id
         
-        # 이전 조정값 가져오기
+        # 이전 예측 정보 가져오기
         if pred_info and pred_info.get('equipment_id') == equipment_id:
-            prev_adjustment = pred_info.get('adjustment', 0.0)
             formula_time = pred_info.get('formula_time', recommended_time)
+            final_time = pred_info.get('final_time', recommended_time)
         else:
-            prev_adjustment = 0.0
             formula_time = self.formula_engine.calculate_time(user, equipment)
+            final_time = recommended_time
         
-        # 피드백에 따른 조정값 수정량 계산
-        # 부족하다 = 시간을 더 늘려야 한다 = 조정값을 더 +해야 한다
+        # 피드백에 따른 "이상적인 최종 시간" 계산
+        # 핵심: 현재 추천 시간(final_time)을 기준으로 더하거나 빼야 함
         feedback_delta = {
-            1: +5.0,   # 매우 부족 → 5분 더 늘려야 함
-            2: +2.0,   # 부족 → 2분 더 늘려야 함
-            3: 0.0,    # 적절 → 조정 불필요
-            4: -2.0,   # 과도 → 2분 줄여야 함
-            5: -5.0    # 매우 과도 → 5분 줄여야 함
+            1: +5.0,   # 매우 부족 → 최종 시간에서 5분 더 필요
+            2: +2.0,   # 부족 → 최종 시간에서 2분 더 필요
+            3: 0.0,    # 적절 → 현재 시간이 정답
+            4: -2.0,   # 과도 → 최종 시간에서 2분 줄여야 함
+            5: -5.0    # 매우 과도 → 최종 시간에서 5분 줄여야 함
         }
         
         delta = feedback_delta.get(int(feedback_score), 0.0)
-        target_adjustment = prev_adjustment + delta
+        
+        # 이상적인 최종 시간 = 현재 추천 시간 + 피드백 델타
+        ideal_final_time = final_time + delta
+        ideal_final_time = max(5.0, min(90.0, ideal_final_time))  # 범위 제한
+        
+        # 목표 조정값 = 이상적인 최종 시간 - 공식 시간
+        # 이렇게 하면 "매우 부족" 선택 시 조정값이 양수가 됨
+        target_adjustment = ideal_final_time - formula_time
         
         # 조정값 범위 제한
         target_adjustment = max(ADJUSTMENT_RANGE[0], min(ADJUSTMENT_RANGE[1], target_adjustment))
@@ -641,17 +646,19 @@ class AIEngine:
         # 4. 학습 (Regression Training)
         loss = self._regression_train()
 
-        print(f"🤖 [AI-Learning] 피드백: {feedback_score}점")
-        print(f"   └─ 이전 조정: {prev_adjustment:+.1f}분 → 목표 조정: {target_adjustment:+.1f}분 (delta: {delta:+.1f})")
+        print(f"🤖 [AI-Learning] 피드백: {feedback_score}점 (delta: {delta:+.1f}분)")
+        print(f"   └─ 추천시간: {final_time:.1f}분 → 이상적 시간: {ideal_final_time:.1f}분")
+        print(f"   └─ 공식시간: {formula_time:.1f}분, 목표 조정값: {target_adjustment:+.1f}분")
         
         # 5. DB에 기록 저장 (향후 유사 사용자 검색용)
+        # recommended_time은 이상적인 최종 시간으로 저장 (다음 유사 사용자가 참조)
         self._save_record_to_db(
             user=user,
             equipment_id=equipment_id,
             base_features=base_features,
             formula_time=formula_time,
             adjustment=target_adjustment,  # 학습된 최적 조정값 저장
-            recommended_time=recommended_time,
+            recommended_time=ideal_final_time,  # 이상적인 최종 시간 저장
             feedback_score=feedback_score
         )
         
