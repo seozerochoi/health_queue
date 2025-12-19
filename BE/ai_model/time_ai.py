@@ -525,15 +525,21 @@ class AIEngine:
             # 유사 사용자들의 최적 시간 가중 평균
             total_weight = sum(sim for sim, _ in similar_records)
             similar_avg_time = sum(sim * rec.recommended_time for sim, rec in similar_records) / total_weight
+            similar_avg_adjustment = sum(sim * rec.adjustment for sim, rec in similar_records) / total_weight
             
             # 공식 시간과 유사 사용자 시간을 블렌딩 (유사도가 높을수록 유사 사용자 가중치 ↑)
             avg_similarity = total_weight / len(similar_records)
             blend_weight = min(0.7, avg_similarity)  # 최대 70%까지 유사 사용자 반영
             
             base_time = (1 - blend_weight) * formula_time + blend_weight * similar_avg_time
+            # 유사 사용자의 조정값도 블렌딩하여 사용
+            blended_adjustment = blend_weight * similar_avg_adjustment
+            
             print(f"🔀 [Blend] 공식({formula_time:.1f}분) + 유사사용자({similar_avg_time:.1f}분) → {base_time:.1f}분")
+            print(f"   └─ 유사사용자 평균 조정: {similar_avg_adjustment:+.1f}분, 블렌딩 조정: {blended_adjustment:+.1f}분")
         else:
             base_time = formula_time
+            blended_adjustment = 0.0
             print(f"📐 [Formula] 유사 사용자 없음, 공식 사용: {base_time:.1f}분")
 
         # 5. 신경망이 조정값 예측 (연속값)
@@ -542,14 +548,25 @@ class AIEngine:
         self.model.eval()
         with torch.no_grad():
             # 신경망이 직접 조정값(-10 ~ +10)을 출력
-            adjustment = self.model(state).item()
+            nn_adjustment = self.model(state).item()
         
-        # 학습 초기에는 조정값을 0으로 고정 (학습되지 않은 모델의 불안정한 출력 방지)
-        if not self.is_trained:
-            print(f"⚠️ [AI] 모델 미학습 상태 - 조정값 0으로 설정 (원래 예측: {adjustment:+.1f})")
-            adjustment = 0.0
+        # 유사 사용자가 있으면: 유사 사용자 조정값 우선 사용 (신경망은 보조)
+        # 유사 사용자가 없으면: 신경망 조정값 사용
+        if len(similar_records) > 0:
+            # 유사 사용자의 조정값을 주로 사용 (신경망은 20%만 반영)
+            adjustment = blended_adjustment * 0.8 + nn_adjustment * 0.2
+            print(f"🤖 [AI] 유사사용자({blended_adjustment:+.1f}) + 신경망({nn_adjustment:+.1f})*0.2 → 최종 조정: {adjustment:+.1f}분")
+        else:
+            adjustment = nn_adjustment
+            # 학습 초기에는 조정값을 0으로 고정 (학습되지 않은 모델의 불안정한 출력 방지)
+            if not self.is_trained:
+                print(f"⚠️ [AI] 모델 미학습 상태 - 조정값 0으로 설정 (원래 예측: {adjustment:+.1f})")
+                adjustment = 0.0
+            else:
+                print(f"🤖 [AI] 신경망 조정값: {adjustment:+.1f}분")
         
-        # 6. 최종 시간 산출
+        # 6. 최종 시간 산출 (base_time은 이미 유사 사용자 반영됨)
+        # adjustment는 추가 미세 조정용
         final_time = base_time + adjustment
         
         # 예측 정보 저장 (피드백 시 사용)
@@ -565,10 +582,11 @@ class AIEngine:
             'had_similar_users': len(similar_records) > 0
         }
         
-        print(f"🤖 [AI] 조정값: {adjustment:+.1f}분 → 최종: {max(5.0, min(90.0, final_time)):.1f}분")
+        final_clamped = max(8.0, min(90.0, final_time))
+        print(f"✅ [최종] base_time({base_time:.1f}) + 조정({adjustment:+.1f}) = {final_clamped:.1f}분")
 
-        # 안전 범위 적용 (최소 5분은 너무 짧음, 8분으로 상향)
-        return max(8.0, min(90.0, final_time))
+        # 안전 범위 적용 (최소 8분)
+        return final_clamped
 
     def update_with_feedback(self, user, equipment, recommended_time, feedback_score):
         """
