@@ -101,12 +101,19 @@ def get_ai_recommendation(user_profile, ai_model_id, ratios):
         # DB body_part: UPPER, LOWER, CORE, CARDIO, ETC
         main_part = 1 if db_equip.body_part == 'LOWER' else 0
         
+        # equip_type 결정: body_part가 CARDIO이면 type도 CARDIO로 설정
+        # (DB에서 type이 MACHINE으로 잘못 등록된 경우 대응)
+        if db_equip.body_part == 'CARDIO' or db_equip.type == 'CARDIO':
+            equip_type = 'CARDIO'
+        else:
+            equip_type = db_equip.type
+        
         ai_equip = AIEquipment(
             equip_id=db_equip.id,
             name=db_equip.name,
             main_part=main_part,
             sub_part=db_equip.subcategory or "General",
-            equip_type=db_equip.type
+            equip_type=equip_type
         )
         
         # 예측 실행
