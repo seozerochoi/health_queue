@@ -68,8 +68,9 @@ export function AIRoutineRecommendation({
   const [recommendedRoutine, setRecommendedRoutine] = useState<RoutineStep[]>(
     []
   );
+  // [Fix] 별점을 index 기반 -> equipment ID 기반으로 변경
   const [equipmentRatings, setEquipmentRatings] = useState<{
-    [key: number]: number;
+    [equipmentId: number]: number;
   }>({});
   const [equipmentStatuses, setEquipmentStatuses] = useState<{
     [key: number]: { status: string; waitingCount: number };
@@ -138,6 +139,13 @@ export function AIRoutineRecommendation({
       setRecommendedRoutine(data.routine || []);
       setTotalTime(data.summary?.total_time || 0);
       setRoutineCount(data.summary?.count || 0);
+      
+      // [Fix] 기구별 기본 별점 3점으로 초기화 (equipment ID 기반)
+      const initialRatings: { [equipmentId: number]: number } = {};
+      (data.routine || []).forEach((step: RoutineStep) => {
+        initialRatings[step.id] = 3;  // 기본 3점
+      });
+      setEquipmentRatings(initialRatings);
       
       // 각 기구의 실시간 상태 조회
       await fetchEquipmentStatuses(data.routine || []);
@@ -273,14 +281,15 @@ export function AIRoutineRecommendation({
       const token = localStorage.getItem("access_token");
       if (!token) return;
 
-      const routineIds = recommendedRoutine.map((step) => step.id);
+      // [Fix] 개별 기구별 피드백 전송 (equipment_ratings 사용)
+      // 평균 점수도 함께 전송 (하위 호환성)
       const ratings = Object.values(equipmentRatings);
       const avgScore =
         ratings.length > 0
           ? ratings.reduce((a, b) => a + b, 0) / ratings.length
           : 3;
 
-      await fetch(`${API_BASE_URL}/api/ai/feedback/`, {
+      const response = await fetch(`${API_BASE_URL}/api/ai/feedback/`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -288,12 +297,16 @@ export function AIRoutineRecommendation({
         },
         body: JSON.stringify({
           type: "ROUTINE",
-          routine_ids: routineIds,
-          score: avgScore,
+          routine_ids: recommendedRoutine.map((step) => step.id),
+          equipment_ratings: equipmentRatings, // 개별 기구별 별점 {eq_id: rating}
+          score: avgScore, // 하위 호환성
         }),
       });
 
-      console.log("피드백 전송 완료");
+      if (response.ok) {
+        const data = await response.json();
+        console.log("피드백 전송 완료:", data);
+      }
     } catch (err) {
       console.error("피드백 전송 오류:", err);
     }
@@ -391,7 +404,7 @@ export function AIRoutineRecommendation({
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
-                        {/* 별점 평가 */}
+                        {/* 별점 평가 - [Fix] equipment ID 기반으로 변경 */}
                         <div className="flex gap-1">
                           {[1, 2, 3, 4, 5].map((rating) => (
                             <button
@@ -399,14 +412,14 @@ export function AIRoutineRecommendation({
                               onClick={() => {
                                 setEquipmentRatings((prev) => ({
                                   ...prev,
-                                  [index]: rating,
+                                  [step.id]: rating, // index 대신 equipment ID 사용
                                 }));
                               }}
                               className="transition-transform hover:scale-110"
                             >
                               <Star
                                 className={`h-5 w-5 ${
-                                  (equipmentRatings[index] || 0) >= rating
+                                  (equipmentRatings[step.id] || 0) >= rating
                                     ? "fill-yellow-400 text-yellow-400"
                                     : "text-gray-500"
                                 }`}

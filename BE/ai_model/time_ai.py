@@ -7,6 +7,12 @@ import copy
 from collections import deque  # [핵심] 기억 저장을 위한 큐(Queue) 자료구조
 
 # ==============================================================================
+# 설정 상수 (Configuration)
+# ==============================================================================
+SIMILARITY_THRESHOLD = 0.85  # 유사 사용자로 판단하는 코사인 유사도 임계값
+SIMILAR_USER_K = 5           # 참조할 유사 사용자 최대 수
+
+# ==============================================================================
 # 1. 데이터 모델 정의 (Data Models)
 # 시스템에서 사용되는 핵심 데이터 구조(인바디 정보, 사용자, 기구)를 정의합니다.
 # ==============================================================================
@@ -192,51 +198,79 @@ class FormulaEngine:
         final_seconds = base_seconds * situation_coeff * sarcopenia_coeff * balance_coeff
         final_minutes = final_seconds / 60.0
         
+        # 디버깅 출력
+        print(f"📊 [FormulaEngine] Debug:")
+        print(f"   └─ base_seconds={base_seconds}, x1={x1:.3f}, rel_obesity={rel_obesity:.3f}")
+        print(f"   └─ situation_coeff={situation_coeff:.3f}, sarcopenia_coeff={sarcopenia_coeff:.3f}, balance_coeff={balance_coeff:.3f}")
+        print(f"   └─ final_seconds={final_seconds:.1f} -> final_minutes={final_minutes:.1f}분")
+        
         # 안전 범위 클램핑 (최소 3분 ~ 최대 60분)
         return max(3.0, min(60.0, final_minutes))
 
 
 # ==============================================================================
-# 3. AI 신경망 모델 (Adaptive AI Model) - [The Student]
-# 사용자 피드백을 학습하여 개인화된 최적 시간을 예측하는 딥러닝 모델입니다.
-# **심화 개선: Experience Replay & Safety Clamping 적용**
+# 3. AI 신경망 모델 (Continuous Regression Network)
+# 사용자 피드백을 기반으로 최적의 시간 조정값을 학습합니다.
+# 연속적인 값(-10분 ~ +10분)을 직접 출력합니다.
 # ==============================================================================
 
-class AdaptiveNetwork(nn.Module):
+# 조정 가능한 범위 (분 단위)
+ADJUSTMENT_RANGE = (-10.0, 10.0)  # 최소 -10분, 최대 +10분
+
+class TimeAdjustmentNetwork(nn.Module):
+    """
+    시간 조정값을 연속적으로 출력하는 회귀 신경망
+    Input: State (User InBody + Equipment Features) - 17차원
+    Output: 조정 시간 (분 단위, 연속값) - 1차원
+    """
     def __init__(self, input_dim):
-        super(AdaptiveNetwork, self).__init__()
+        super(TimeAdjustmentNetwork, self).__init__()
         self.layers = nn.Sequential(
-            nn.Linear(input_dim, 64),
+            nn.Linear(input_dim, 128),
             nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Dropout(0.2),
             nn.Linear(64, 32),
             nn.ReLU(),
-            nn.Linear(32, 1)      # Output: 예측 시간 (분)
+            nn.Linear(32, 1),  # 연속적인 조정값 1개 출력
+            nn.Tanh()  # -1 ~ +1 범위로 제한
         )
+        self.scale = (ADJUSTMENT_RANGE[1] - ADJUSTMENT_RANGE[0]) / 2  # 10
+        self.bias = (ADJUSTMENT_RANGE[1] + ADJUSTMENT_RANGE[0]) / 2   # 0
         
     def forward(self, x):
-        return self.layers(x)
+        # Tanh 출력 (-1 ~ +1)을 조정 범위 (-10 ~ +10)로 스케일링
+        raw_output = self.layers(x)
+        scaled_output = raw_output * self.scale + self.bias
+        return scaled_output.squeeze(-1)
 
 class AIEngine:
     def __init__(self):
-        # 입력 Feature Dimension 정의 (총 14개 Feature 사용)
-        # Raw(7) + Equip(2) + Derived(5) = 14
-        self.input_dim = 14 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = AdaptiveNetwork(self.input_dim).to(self.device)
+        # 입력 Feature Dimension 정의 (총 17개 Feature 사용)
+        # 기존 14개 + 유사 사용자 정보 3개
+        self.base_feature_dim = 14
+        self.input_dim = 17  # 14 + 3 (similar_exists, similar_avg_time, similar_avg_adjustment)
         
-        # [개선] 학습률(Learning Rate)을 0.01로 높여 피드백 반영 속도를 높임
-        self.optimizer = optim.Adam(self.model.parameters(), lr=0.01)
-        self.criterion = nn.MSELoss()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = TimeAdjustmentNetwork(self.input_dim).to(self.device)
+        
+        # 학습 설정
+        self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
+        self.criterion = nn.MSELoss()  # 회귀 손실 함수
+        
         self.formula_engine = FormulaEngine()
         self.is_trained = False
 
-        # [핵심 추가 1] Replay Buffer (기억 저장소)
-        # 최신 데이터 2,000개만 유지하며 파국적 망각(Catastrophic Forgetting) 방지
+        # Replay Buffer (기억 저장소)
+        # (State, Target_Adjustment) 튜플 저장 - 연속 학습용
         self.memory = deque(maxlen=2000)
-        
-        # [핵심 추가 2] Mini-batch Size
-        # 피드백 반영 시 32개의 데이터를 묶어서 학습
         self.batch_size = 32
+        
+        # 마지막 예측 정보 저장 (피드백 시 사용)
+        self.last_prediction_info = {}
+
     def save_checkpoint(self, filepath="time_ai_checkpoint.pth"):
         """학습된 모델 가중치를 파일로 저장"""
         torch.save(self.model.state_dict(), filepath)
@@ -245,283 +279,451 @@ class AIEngine:
     def load_checkpoint(self, filepath="time_ai_checkpoint.pth"):
         """저장된 모델 불러오기"""
         try:
-            self.model.load_state_dict(torch.load(filepath))
+            self.model.load_state_dict(torch.load(filepath, weights_only=False))
             self.model.eval()
             self.is_trained = True
             print(f"📂 모델 불러오기 성공: {filepath}")
         except FileNotFoundError:
-            print("⚠️ 저장된 모델이 없습니다. 새로 시작합니다.")
-        except RuntimeError as e:
-            print(f"⚠️ 모델 구조 불일치로 로드 실패 (새로 시작): {e}")
-            # 구조가 바뀌었으므로 기존 체크포인트는 무시하고 새로 학습해야 함
+            print(f"⚠️ 모델 파일 없음 (새로 시작): {filepath}")
             self.is_trained = False
         except Exception as e:
-            print(f"⚠️ 모델 로드 중 알 수 없는 오류 발생: {e}")
+            print(f"⚠️ 모델 로드 실패 (새로 시작): {e}")
             self.is_trained = False
+
+    # ==========================================================================
+    # 유사도 계산 및 검색 메서드 (Similarity Search)
+    # ==========================================================================
+    
+    def _calculate_cosine_similarity(self, features1, features2):
+        """
+        두 Feature 벡터 간의 코사인 유사도를 계산합니다.
+        Returns:
+            float: 유사도 (0.0 ~ 1.0)
+        """
+        vec1 = np.array(features1)
+        vec2 = np.array(features2)
+        
+        dot_product = np.dot(vec1, vec2)
+        norm1 = np.linalg.norm(vec1)
+        norm2 = np.linalg.norm(vec2)
+        
+        if norm1 == 0 or norm2 == 0:
+            return 0.0
+        
+        return float(dot_product / (norm1 * norm2))
+    
+    def find_similar_records(self, features, equipment_id, k=SIMILAR_USER_K, threshold=SIMILARITY_THRESHOLD):
+        """
+        DB에서 비슷한 사용자의 기록을 검색합니다.
+        
+        Args:
+            features: 현재 사용자의 기본 Feature 벡터 (14개)
+            equipment_id: 기구 ID
+            k: 반환할 최대 기록 수
+            threshold: 유사도 임계값
+            
+        Returns:
+            list: [(similarity, record), ...] - 유사도 높은 순으로 정렬
+        """
+        try:
+            from .models import UserTimeRecord
+            
+            # 해당 기구에 대한 피드백이 있는 기록만 조회
+            # ForeignKey 필드이므로 equipment_id 사용
+            records = UserTimeRecord.objects.filter(
+                equipment_id=equipment_id,
+                feedback_score__isnull=False
+            ).order_by('-created_at')[:200]  # 최근 200개만 검색 (성능)
+            
+            if not records.exists():
+                return []
+            
+            similar_records = []
+            current_features = np.array(features[:self.base_feature_dim])  # 기본 14개만 사용
+            
+            for record in records:
+                try:
+                    stored_features = np.array(record.features[:self.base_feature_dim])
+                    similarity = self._calculate_cosine_similarity(current_features, stored_features)
+                    
+                    if similarity >= threshold:
+                        similar_records.append((similarity, record))
+                except Exception as e:
+                    continue
+            
+            # 유사도 높은 순 정렬
+            similar_records.sort(key=lambda x: -x[0])
+            
+            print(f"🔍 [SimilaritySearch] 기구 {equipment_id}: {len(similar_records)}명의 유사 사용자 발견 (threshold={threshold})")
+            
+            return similar_records[:k]
+            
+        except Exception as e:
+            print(f"⚠️ [SimilaritySearch] DB 검색 실패: {e}")
+            return []
+    
+    def _get_similar_user_features(self, base_features, equipment_id):
+        """
+        유사 사용자 정보를 Feature에 추가합니다.
+        
+        Returns:
+            tuple: (extended_features, similar_records)
+        """
+        similar_records = self.find_similar_records(base_features, equipment_id)
+        
+        if len(similar_records) == 0:
+            # 유사 사용자 없음 - 기본값 사용
+            similar_exists = 0.0
+            similar_avg_time = 0.0
+            similar_avg_adjustment = 0.0
+        else:
+            similar_exists = 1.0
+            
+            # 가중 평균 계산 (유사도를 가중치로 사용)
+            total_weight = sum(sim for sim, _ in similar_records)
+            similar_avg_time = sum(sim * rec.recommended_time for sim, rec in similar_records) / total_weight
+            similar_avg_adjustment = sum(sim * rec.adjustment for sim, rec in similar_records) / total_weight
+            
+            print(f"📊 [SimilarUsers] 유사 사용자 평균 시간: {similar_avg_time:.1f}분, 평균 조정: {similar_avg_adjustment:.1f}분")
+        
+        # 기존 14개 Feature + 유사 사용자 정보 3개
+        extended_features = list(base_features) + [similar_exists, similar_avg_time, similar_avg_adjustment]
+        
+        return extended_features, similar_records
 
     def _extract_features(self, user, equipment):
         """
-        User 및 Equipment 객체 정보를 AI 모델 입력용 텐서(Tensor)로 변환합니다.
-        [Update] PDF 공식에서 사용된 핵심 파생 변수들을 Feature로 추가하여
-        AI가 '비슷한 유형의 사람'을 더 잘 식별하도록 개선했습니다.
+        User 및 Equipment 객체 정보를 AI 모델 입력용 Feature 리스트로 변환합니다.
+        이 벡터가 '비슷한 사람'을 판단하는 기준(State)이 됩니다.
+        
+        Returns:
+            list: 14개의 기본 Feature 리스트
         """
         ib = user.inbody
         height_m = ib.height / 100
         bmi = ib.weight / (height_m**2) if height_m > 0 else 0
         
-        # 1. PDF 핵심 지표 계산
-        # 숙련도 지수 (x1)
+        # PDF 핵심 지표 계산
         x1 = 1 / (1 + np.exp(-0.1 * (ib.score - 80)))
-        
-        # 상대적 비만도
         std_fat = 25.0 if user.gender == 0 else 30.0
-        rel_obesity = ib.fat_rate / std_fat
-        
-        # 근지방 비율
+        rel_obesity = ib.fat_rate / std_fat if std_fat > 0 else 0
         muscle_fat_ratio = ib.muscle_mass / (ib.fat_mass if ib.fat_mass > 0 else 1)
-        
-        # 근감소증 위험도 (x4)
         smi = ib.muscle_mass / (height_m ** 2) if height_m > 0 else 0
         x4 = max(0, (7.0 - smi) / 7.0)
         
-        # 상하체 불균형 지수
         mus = ib.segmental_muscle
         upper_avg = (mus['ra'] + mus['la'] + mus['trunk']) / 3
         lower_avg = (mus['rl'] + mus['ll']) / 2
         imbalance = upper_avg / lower_avg if lower_avg > 0 else 1.0
         
-        # 공식 계산 시간 (Formula Time) - AI가 기준점을 알 수 있도록 제공
-        # (순환 참조 방지를 위해 FormulaEngine 인스턴스를 새로 만들지 않고 로직만 간단히 참조하거나, 
-        #  여기서는 복잡도를 줄이기 위해 생략하고 위 파생 변수들로 충분하다고 판단함)
-        
-        # [New] 유산소 여부 (Cardio Flag)
         is_cardio = 1.0 if equipment.equip_type == 'CARDIO' else 0.0
 
+        # 기본 14개 Feature (유사도 계산용)
         features = [
-            # Raw Data
             ib.score, ib.fat_rate, ib.muscle_mass, ib.height, bmi,
             user.gender, user.goal,
-            
-            # Equipment Info
-            equipment.main_part, # 0:Upper, 1:Lower
-            is_cardio,           # [New] 유산소 여부 (0 or 1)
-            
-            # [New] Derived Features (PDF Logic) - AI의 '통찰력'을 높여주는 핵심 힌트
-            x1,               # 숙련도
-            rel_obesity,      # 상대적 비만도
-            muscle_fat_ratio, # 근지방 비율
-            x4,               # 근감소증 위험도
-            imbalance         # 상하체 불균형
+            equipment.main_part, is_cardio,
+            x1, rel_obesity, muscle_fat_ratio, x4, imbalance
         ]
-        return torch.FloatTensor(features)
+        return features
 
-    def pretrain_with_formula(self, sample_size=1000):
+    def pretrain_with_formula(self, sample_size=500):
         """
-        [Cold Start 문제 해결]
-        초기 학습 데이터가 없을 때, 가상 유저 데이터를 생성하여 규칙 기반(Formula) 값으로 
-        모델을 선행 학습시킵니다.
-        
-        [Hybrid AI Update]
-        이제 AI는 '공식 값'과 '실제 값'의 차이(Residual)를 학습합니다.
-        초기 상태에서는 공식이 완벽하다고 가정하므로, AI가 0(보정 없음)을 출력하도록 학습합니다.
+        [Cold Start] 공식 기반 시간을 정답으로 삼아 모델을 사전 학습합니다.
+        조정값 0.0(공식 그대로)이 최적이라고 가정하고 학습합니다.
         """
-        print("⚡ [System] AI 모델 선행 학습(Pre-training) 시작... (Residual Learning: Target=0)")
+        print("⚡ [System] 공식 기반 선행 학습(Pre-training) 시작...")
         
-        for _ in range(sample_size):
-            # 랜덤 가상 유저 데이터 생성
-            # [수정] 실제 데이터(kg)와 유사한 스케일로 랜덤 값 생성
-            w = random.uniform(50, 100) # 체중
-            m = random.uniform(20, 40)  # 골격근량
-            
-            # 부위별 근육량 (%) - 표준 체중 대비 백분율 (보통 80~130% 범위)
-            # [수정] kg 단위가 아닌 % 단위로 생성
-            r_a = random.uniform(80, 120)
-            l_a = random.uniform(80, 120)
-            trunk = random.uniform(90, 110)
-            r_l = random.uniform(80, 120)
-            l_l = random.uniform(80, 120)
-
-            d_inbody = InBodyData(
-                score=random.uniform(60, 90), weight=w,
-                muscle_mass=m, fat_mass=random.uniform(10, 30),
-                height=random.uniform(150, 190), fat_rate=random.uniform(10, 40),
-                r_arm=r_a, l_arm=l_a, trunk=trunk, r_leg=r_l, l_leg=l_l
+        # 다양한 가상 사용자/기구 데이터 생성하여 '조정값 0'으로 학습
+        for i in range(sample_size):
+            # 다양한 InBody 데이터 생성
+            inbody = InBodyData(
+                score=random.uniform(55, 95),
+                weight=random.uniform(50, 100),
+                muscle_mass=random.uniform(18, 45),
+                fat_mass=random.uniform(8, 35),
+                height=random.uniform(150, 190),
+                fat_rate=random.uniform(8, 40),
+                r_arm=random.uniform(75, 125),
+                l_arm=random.uniform(75, 125),
+                trunk=random.uniform(75, 125),
+                r_leg=random.uniform(75, 125),
+                l_leg=random.uniform(75, 125)
             )
-            d_user = User(0, "dummy", random.choice([0,1]), random.choice([0,1]), d_inbody)
-            # [수정] 가상 기구 생성 시 랜덤한 기본 시간(10~30분) 부여하여 다양성 학습
-            # [Fix] base_time 제거 (Equipment 클래스 변경 반영)
-            # [Update] 유산소/무산소 랜덤 생성
-            e_type = random.choice(['MACHINE', 'CARDIO'])
-            d_equip = Equipment(0, "dummy_eq", random.choice([0,1]), "General", equip_type=e_type)
             
-            # 수학 공식 엔진을 통해 정답(Label) 생성
-            # Hybrid 방식이므로 AI의 목표값은 0 (공식 그대로 사용)
-            target_residual = 0.0
-            features = self._extract_features(d_user, d_equip)
+            user = User(
+                user_id=i,
+                name=f'PretrainUser{i}',
+                gender=random.randint(0, 1),
+                goal=random.randint(0, 1),
+                inbody_data=inbody
+            )
             
-            # [중요] 가상 데이터도 메모리에 추가하여 초기 지식으로 활용
-            self.memory.append((features, target_residual))
-
-        # 초기 메모리에 있는 데이터로 1차 학습 (Batch Training)
-        self._replay_train(epochs=50)
+            equip_types = ['MACHINE', 'FREE_WEIGHT', 'CARDIO', 'CABLE']
+            equip = Equipment(
+                equip_id=random.randint(1, 30),
+                name=f'PretrainEquip{i}',
+                main_part=random.randint(0, 1),
+                sub_part='GENERAL',
+                equip_type=random.choice(equip_types)
+            )
+            
+            # Feature 추출
+            base_features = self._extract_features(user, equip)
+            
+            # 공식 기반 시간 계산
+            formula_time = self.formula_engine.calculate_time(user, equip)
+            
+            # 유사 사용자 Feature (사전학습이므로 없다고 가정)
+            extended_features = base_features + [0.0, formula_time, 0.0]  # similar_exists=0, avg_time, avg_adj=0
+            state = torch.FloatTensor(extended_features)
+            
+            # 목표: 조정값 0 (공식이 정답)
+            # 약간의 랜덤성 추가하여 다양한 상황 학습
+            target_adjustment = random.uniform(-1.0, 1.0)  # 공식 근처값
+            weight = 1.0
+            
+            self.memory.append((state, target_adjustment, weight))
+        
+        # 배치 학습 수행 (여러 번 반복)
+        print(f"   └─ 메모리 크기: {len(self.memory)}, 배치 학습 시작...")
+        total_loss = 0.0
+        num_batches = min(50, len(self.memory) // self.batch_size)
+        
+        for _ in range(num_batches):
+            loss = self._regression_train()
+            total_loss += loss
+        
+        avg_loss = total_loss / max(1, num_batches)
         
         self.is_trained = True
-        print("✅ [System] 선행 학습 및 메모리 초기화 완료. 초기 추론 준비됨.")
+        self.save_checkpoint()
+        print(f"✅ [System] 선행 학습 완료! (평균 Loss: {avg_loss:.4f})")
 
     def predict_time(self, user, equipment):
         """
-        현재 학습된 모델을 사용하여 추천 운동 시간을 예측합니다.
-        [Hybrid AI Logic]
-        최종 시간 = (공식 계산 시간) + (AI 보정 시간)
+        [RL + Similarity-Based Inference]
+        1. 기본 Feature 추출
+        2. DB에서 비슷한 사용자 검색
+        3. 비슷한 사용자 있으면: 그들의 경험을 참조하여 DQN 입력에 반영
+        4. 비슷한 사용자 없으면: 수학 공식 기반으로 계산
+        5. DQN 모델이 최적의 Action(조정 시간)을 선택
+        6. 최종 시간 = Base + Action
         """
-        # 1. 공식 기반 계산 (Base Logic) - 즉시 적용됨
-        base_time = self.formula_engine.calculate_time(user, equipment)
+        # 1. 기본 Feature 추출 (14개)
+        base_features = self._extract_features(user, equipment)
+        
+        # 2. 공식 기반 계산 (Base Time)
+        formula_time = self.formula_engine.calculate_time(user, equipment)
+        
+        # 3. 유사 사용자 검색 및 Feature 확장 (17개)
+        equipment_id = equipment.equip_id if hasattr(equipment, 'equip_id') else equipment.id
+        extended_features, similar_records = self._get_similar_user_features(base_features, equipment_id)
+        
+        # 4. Base Time 결정 (유사 사용자가 있으면 그들의 경험 반영)
+        if len(similar_records) > 0:
+            # 유사 사용자들의 최적 시간 가중 평균
+            total_weight = sum(sim for sim, _ in similar_records)
+            similar_avg_time = sum(sim * rec.recommended_time for sim, rec in similar_records) / total_weight
+            
+            # 공식 시간과 유사 사용자 시간을 블렌딩 (유사도가 높을수록 유사 사용자 가중치 ↑)
+            avg_similarity = total_weight / len(similar_records)
+            blend_weight = min(0.7, avg_similarity)  # 최대 70%까지 유사 사용자 반영
+            
+            base_time = (1 - blend_weight) * formula_time + blend_weight * similar_avg_time
+            print(f"🔀 [Blend] 공식({formula_time:.1f}분) + 유사사용자({similar_avg_time:.1f}분) → {base_time:.1f}분")
+        else:
+            base_time = formula_time
+            print(f"📐 [Formula] 유사 사용자 없음, 공식 사용: {base_time:.1f}분")
 
-        # 2. AI 보정값 예측 (Residual Learning)
+        # 5. 신경망이 조정값 예측 (연속값)
+        state = torch.FloatTensor(extended_features).to(self.device)
+        
         self.model.eval()
         with torch.no_grad():
-            inputs = self._extract_features(user, equipment).unsqueeze(0).to(self.device)
-            adjustment = self.model(inputs).item()
+            # 신경망이 직접 조정값(-10 ~ +10)을 출력
+            adjustment = self.model(state).item()
         
-        # 3. 최종 시간 산출
+        # 학습 초기에는 조정값을 0으로 고정 (학습되지 않은 모델의 불안정한 출력 방지)
+        if not self.is_trained:
+            print(f"⚠️ [AI] 모델 미학습 상태 - 조정값 0으로 설정 (원래 예측: {adjustment:+.1f})")
+            adjustment = 0.0
+        
+        # 6. 최종 시간 산출
         final_time = base_time + adjustment
+        
+        # 예측 정보 저장 (피드백 시 사용)
+        self.last_prediction_info = {
+            'user_id': user.user_id,
+            'equipment_id': equipment_id,
+            'base_features': base_features,
+            'extended_features': extended_features,
+            'formula_time': formula_time,
+            'base_time': base_time,
+            'adjustment': adjustment,
+            'final_time': max(5.0, min(90.0, final_time)),
+            'had_similar_users': len(similar_records) > 0
+        }
+        
+        print(f"🤖 [AI] 조정값: {adjustment:+.1f}분 → 최종: {max(5.0, min(90.0, final_time)):.1f}분")
 
-        # 안전 범위 적용 (5분 ~ 90분)
-        return max(5.0, min(90.0, final_time))
+        # 안전 범위 적용 (최소 5분은 너무 짧음, 8분으로 상향)
+        return max(8.0, min(90.0, final_time))
 
     def update_with_feedback(self, user, equipment, recommended_time, feedback_score):
         """
-        [Core Learning Logic] 
-        사용자의 피드백을 기반으로 모델을 학습시킵니다.
-        **개선된 로직: 단순 비율(%)이 아닌 운동 생리학적 '세트(Set)' 단위 보정 적용**
+        [Continuous Learning + DB 저장]
+        사용자 피드백을 기반으로 "이상적인 조정값"을 계산하고 모델을 학습시킵니다.
+        
+        핵심 원리:
+        - 피드백은 "최종 추천 시간"이 적절했는지를 나타냄
+        - 조정값 = (이상적인 최종 시간) - (공식 시간)
+        - "매우 부족" = 추천 시간이 너무 짧았다 = 더 긴 시간 필요
         
         Args:
             feedback_score (int): 1(매우부족) ~ 3(적절) ~ 5(매우과도)
         """
-        # 1. 기구 타입에 따른 '단위 시간(Unit Time)' 설정
-        # - 웨이트: 1세트(수행+휴식) ≈ 3.0분
-        # - 유산소: 1블록 ≈ 5.0분
-        if equipment.equip_type == 'CARDIO':
-            unit_time = 5.0
+        # 1. 피드백에 따른 "이상적인 조정값" 계산
+        pred_info = self.last_prediction_info
+        
+        # 기본 Feature 추출
+        base_features = self._extract_features(user, equipment)
+        equipment_id = equipment.equip_id if hasattr(equipment, 'equip_id') else equipment.id
+        
+        # 이전 예측 정보 가져오기
+        if pred_info and pred_info.get('equipment_id') == equipment_id:
+            formula_time = pred_info.get('formula_time', recommended_time)
+            final_time = pred_info.get('final_time', recommended_time)
         else:
-            unit_time = 3.0
-
-        # 2. 피드백 점수에 따른 시간 보정 (Delta Calculation)
-        if feedback_score == 3:   # 적절함
-            delta = 0.0
-        elif feedback_score == 4: # 약간 과도 -> 1단위 감소
-            delta = -unit_time * 1.0
-        elif feedback_score == 5: # 매우 과도 -> 2단위 감소
-            delta = -unit_time * 2.0
-        elif feedback_score == 2: # 약간 부족 -> 1단위 증가
-            delta = unit_time * 1.0
-        elif feedback_score == 1: # 매우 부족 -> 2단위 증가 (유산소는 3단위)
-            # 매우 부족할 때 유산소는 시간을 더 넉넉히 줌 (+15분)
-            scale = 3.0 if equipment.equip_type == 'CARDIO' else 2.0
-            delta = unit_time * scale
-        else:
-            delta = 0.0
-
-        # 3. 숙련도에 따른 가중치 적용 (Proficiency Weighting)
-        # 숙련자(InBody 점수 높음)일수록 자신의 한계를 잘 알기에 피드백을 더 신뢰(증폭)함
-        proficiency_bonus = 1.0
-        if user.inbody.score >= 80:
-            proficiency_bonus = 1.2 # 숙련자는 변화폭을 20% 더 크게
+            formula_time = self.formula_engine.calculate_time(user, equipment)
+            final_time = recommended_time
         
-        final_delta = delta * proficiency_bonus
-        target_time = recommended_time + final_delta
-
-        print(f"🧠 [TimeAI] Feedback Analysis: Score={feedback_score}, Type={equipment.equip_type}")
-        print(f"   └─ Unit={unit_time}m, Delta={final_delta:.1f}m (Proficiency={proficiency_bonus})")
-        print(f"   └─ Rec={recommended_time:.1f}m -> Target={target_time:.1f}m")
-
-        # 4. [Safety Clamping] 안전 장치
-        # 피드백을 반영하되, 최소 3분 / 최대 120분, 그리고 기존 시간의 0.5~2.0배 범위 유지
-        min_limit = max(3.0, recommended_time * 0.5)
-        max_limit = min(120.0, recommended_time * 2.0)
-        target_time = max(min_limit, min(max_limit, target_time))
-
-        # [Hybrid AI Update]
-        # AI는 (목표 시간 - 공식 시간)의 차이를 학습해야 함
-        formula_time = self.formula_engine.calculate_time(user, equipment)
-        target_residual = target_time - formula_time
+        # 피드백에 따른 "이상적인 최종 시간" 계산
+        # 핵심: 현재 추천 시간(final_time)을 기준으로 더하거나 빼야 함
+        feedback_delta = {
+            1: +5.0,   # 매우 부족 → 최종 시간에서 5분 더 필요
+            2: +2.0,   # 부족 → 최종 시간에서 2분 더 필요
+            3: 0.0,    # 적절 → 현재 시간이 정답
+            4: -2.0,   # 과도 → 최종 시간에서 2분 줄여야 함
+            5: -5.0    # 매우 과도 → 최종 시간에서 5분 줄여야 함
+        }
         
-        print(f"🎯 [TimeAI] 학습 목표: Formula={formula_time:.1f}, UserTarget={target_time:.1f} -> Residual={target_residual:.1f}")
-
-        # 3. [핵심 추가 4] 메모리에 저장 (Experience Replay)
-        features = self._extract_features(user, equipment)
-        recent_sample = (features, target_residual)
-        self.memory.append(recent_sample)
-
-        # [수정] 강력한 즉시 반영을 위한 2단계 학습
+        delta = feedback_delta.get(int(feedback_score), 0.0)
         
-        # Phase 1: 단기 집중 학습 (Short-term Intensive Training)
-        # 방금 들어온 데이터만 가지고 모델을 과적합(Overfitting) 시켜서 즉각적인 변화를 유도함
-        self.model.train()
-        recent_features = features.unsqueeze(0).to(self.device) # (1, InputDim)
-        recent_target = torch.FloatTensor([[target_residual]]).to(self.device) # (1, 1)
+        # 이상적인 최종 시간 = 현재 추천 시간 + 피드백 델타
+        ideal_final_time = final_time + delta
+        ideal_final_time = max(5.0, min(90.0, ideal_final_time))  # 범위 제한
         
-        print("🔥 [TimeAI] 단기 집중 학습 시작 (Instant Adaptation)...")
-        for _ in range(20): # 20번 반복 학습하여 강제로 주입
-            self.optimizer.zero_grad()
-            pred = self.model(recent_features)
-            loss = self.criterion(pred, recent_target)
-            loss.backward()
-            self.optimizer.step()
+        # 목표 조정값 = 이상적인 최종 시간 - 공식 시간
+        # 이렇게 하면 "매우 부족" 선택 시 조정값이 양수가 됨
+        target_adjustment = ideal_final_time - formula_time
+        
+        # 조정값 범위 제한
+        target_adjustment = max(ADJUSTMENT_RANGE[0], min(ADJUSTMENT_RANGE[1], target_adjustment))
+        
+        # 숙련자의 피드백은 더 정확하다고 가정 (가중치 부여)
+        weight = 1.5 if user.inbody.score >= 80 else 1.0
+        
+        # 2. Extended features 생성 (17개)
+        extended_features, _ = self._get_similar_user_features(base_features, equipment_id)
+        state = torch.FloatTensor(extended_features)
 
-        # Phase 2: 경험 재생 (Experience Replay)
-        # 과거 데이터와 섞어서 일반화 성능 유지 (Epochs 10 -> 5로 조정)
-        loss = self._replay_train(epochs=5, recent_sample=recent_sample)
+        # 3. 메모리에 저장 (State, Target_Adjustment, Weight)
+        self.memory.append((state, target_adjustment, weight))
+        
+        # 유사 사용자의 경험도 메모리에 로드 (Transfer Learning)
+        similar_records = self.find_similar_records(base_features, equipment_id, k=3)
+        for sim, record in similar_records:
+            if record.feedback_score is not None:
+                try:
+                    stored_features = record.features + [1.0, record.recommended_time, record.adjustment]
+                    stored_state = torch.FloatTensor(stored_features)
+                    # 유사 사용자의 경험에서 학습한 조정값
+                    self.memory.append((stored_state, record.adjustment, sim))
+                except:
+                    pass
 
-        # 5. [핵심 추가 6] 모델 자동 저장 (Auto-Save)
-        # 학습된 뇌(가중치)를 파일로 저장하여 서버 재시작 시에도 유지되도록 함
+        # 4. 학습 (Regression Training)
+        loss = self._regression_train()
+
+        print(f"🤖 [AI-Learning] 피드백: {feedback_score}점 (delta: {delta:+.1f}분)")
+        print(f"   └─ 추천시간: {final_time:.1f}분 → 이상적 시간: {ideal_final_time:.1f}분")
+        print(f"   └─ 공식시간: {formula_time:.1f}분, 목표 조정값: {target_adjustment:+.1f}분")
+        
+        # 5. DB에 기록 저장 (향후 유사 사용자 검색용)
+        # recommended_time은 이상적인 최종 시간으로 저장 (다음 유사 사용자가 참조)
+        self._save_record_to_db(
+            user=user,
+            equipment_id=equipment_id,
+            base_features=base_features,
+            formula_time=formula_time,
+            adjustment=target_adjustment,  # 학습된 최적 조정값 저장
+            recommended_time=ideal_final_time,  # 이상적인 최종 시간 저장
+            feedback_score=feedback_score
+        )
+        
+        # 6. 모델 저장
+        self.save_checkpoint()
+
+        return recommended_time, loss
+    
+    def _save_record_to_db(self, user, equipment_id, base_features, formula_time,
+                           adjustment, recommended_time, feedback_score):
+        """
+        운동 기록을 DB에 저장합니다.
+        """
         try:
-            self.save_checkpoint()
+            from .models import UserTimeRecord
+            from django.contrib.auth.models import User as DjangoUser
+            from equipment.models import Equipment as EquipmentModel
+            
+            django_user = DjangoUser.objects.get(id=user.user_id)
+            equipment_obj = EquipmentModel.objects.get(id=equipment_id)
+            
+            UserTimeRecord.objects.create(
+                user=django_user,
+                equipment=equipment_obj,  # ForeignKey이므로 객체 전달
+                features=base_features,
+                formula_time=formula_time,
+                action_idx=0,  # 레거시 호환 (연속값에서는 사용 안 함)
+                adjustment=adjustment,
+                recommended_time=recommended_time,
+                feedback_score=feedback_score,
+                reward=None  # 연속 학습에서는 사용 안 함
+            )
+            print(f"💾 [DB] 기록 저장 완료: User={user.user_id}, Equip={equipment_id}, Adj={adjustment:+.1f}분")
         except Exception as e:
-            print(f"⚠️ 모델 자동 저장 실패: {e}")
+            print(f"⚠️ [DB] 기록 저장 실패: {e}")
 
-        return target_time, loss
-
-    def _replay_train(self, epochs=1, recent_sample=None):
+    def _regression_train(self):
         """
-        [내부 함수] 메모리에서 배치를 꺼내 학습하는 함수
+        회귀 학습 (Supervised Learning)
+        - 입력: State (17차원)
+        - 출력: 조정값 (연속, -10 ~ +10분)
+        - 목표: 사용자 피드백을 통해 학습된 최적 조정값에 가까워지기
         """
-        # [개선] 최신 샘플이 있다면 메모리가 부족해도 학습 진행 (Cold Start 문제 해결)
-        if len(self.memory) < self.batch_size and recent_sample is None:
-            return 0.0 # 데이터가 너무 적으면 학습 스킵
+        if len(self.memory) < self.batch_size:
+            return 0.0
 
+        batch = random.sample(self.memory, self.batch_size)
+        
+        states = torch.stack([x[0] for x in batch]).to(self.device)
+        targets = torch.FloatTensor([x[1] for x in batch]).to(self.device)
+        weights = torch.FloatTensor([x[2] for x in batch]).to(self.device)
+
+        # 모델 예측
         self.model.train()
-        total_loss = 0
-
-        for _ in range(epochs):
-            # [개선] 최신 피드백 Oversampling (배치의 50% 할당)
-            if recent_sample:
-                n_recent = 16 # 32개 중 16개 (50%)
-                batch = [recent_sample] * n_recent
-                
-                n_needed = self.batch_size - n_recent
-                if len(self.memory) >= n_needed:
-                    batch += random.sample(self.memory, n_needed)
-                else:
-                    # 메모리가 부족하면 있는 것 다 넣고 나머지는 최신 샘플로 채움
-                    batch += list(self.memory)
-                    while len(batch) < self.batch_size:
-                        batch.append(recent_sample)
-            else:
-                # 메모리에서 랜덤하게 batch_size만큼 샘플링 (과거 데이터 복습)
-                batch = random.sample(self.memory, self.batch_size)
-            
-            # Tensor 변환
-            batch_features = torch.stack([item[0] for item in batch]).to(self.device)
-            batch_targets = torch.FloatTensor([[item[1]] for item in batch]).to(self.device)
-
-            # 역전파 학습 (Backpropagation)
-            self.optimizer.zero_grad()
-            predictions = self.model(batch_features)
-            loss = self.criterion(predictions, batch_targets)
-            loss.backward()
-            self.optimizer.step()
-            
-            total_loss += loss.item()
-
-        return total_loss / epochs
+        predictions = self.model(states)
+        
+        # 가중 MSE Loss
+        losses = (predictions - targets) ** 2
+        weighted_loss = (losses * weights).mean()
+        
+        # 역전파
+        self.optimizer.zero_grad()
+        weighted_loss.backward()
+        self.optimizer.step()
+        
+        self.is_trained = True
+        
+        return weighted_loss.item()
